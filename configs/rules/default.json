@@ -1,0 +1,65 @@
+{
+  "ruleChain": {
+    "id": "default",
+    "name": "Default Rule Flow",
+    "root": true
+  },
+  "metadata": {
+    "nodes": [
+      {
+        "id": "derive_tradeable",
+        "type": "brale/derive_tradeable",
+        "name": "derive tradeable"
+      },
+      {
+        "id": "state_switch",
+        "type": "jsSwitch",
+        "name": "state switch",
+        "configuration": {
+          "jsScript": "return msg.state === 'IN_POSITION' ? ['in_position'] : ['flat'];"
+        }
+      },
+      {
+        "id": "hard_guard",
+        "type": "brale/hard_guard",
+        "name": "hard guard"
+      },
+      {
+        "id": "monitor_fusion",
+        "type": "brale/monitor_fusion",
+        "name": "monitor fusion"
+      },
+      {
+        "id": "gate_decision",
+        "type": "brale/gate_decision",
+        "name": "gate decision"
+      },
+      {
+        "id": "plan_builder",
+        "type": "brale/plan_builder",
+        "name": "plan builder"
+      },
+      {
+        "id": "fsm_decision",
+        "type": "brale/fsm_decision",
+        "name": "fsm decision"
+      },
+      {
+        "id": "end",
+        "type": "end",
+        "name": "end"
+      }
+    ],
+    "connections": [
+      {"fromId": "root", "toId": "derive_tradeable", "type": "Success"},
+      {"fromId": "derive_tradeable", "toId": "state_switch", "type": "Success"},
+      {"fromId": "state_switch", "toId": "hard_guard", "type": "in_position"},
+      {"fromId": "hard_guard", "toId": "monitor_fusion", "type": "Success"},
+      {"fromId": "monitor_fusion", "toId": "fsm_decision", "type": "Success"},
+      {"fromId": "state_switch", "toId": "gate_decision", "type": "flat"},
+      {"fromId": "gate_decision", "toId": "plan_builder", "type": "Success"},
+      {"fromId": "plan_builder", "toId": "fsm_decision", "type": "Success"},
+      {"fromId": "fsm_decision", "toId": "end", "type": "Success"}
+    ]
+  }
+}

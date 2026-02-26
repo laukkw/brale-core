@@ -1,0 +1,8 @@
+# brale-core 币种清单（显式列出要跑的 symbol 与配置文件路径）
+# - symbol: 币种名（必须大写）
+# - config: 币种配置文件路径
+# - strategy: 币种策略文件路径
+[[symbols]]
+symbol = "ETHUSDT" # 币种名，例：ETHUSDT
+config = "symbols/ETHUSDT.toml" # 币种配置路径，例：symbols/ETHUSDT.toml
+strategy = "strategies/ETHUSDT.toml" # 策略配置路径，例：strategies/ETHUSDT.toml

@@ -1,0 +1,59 @@
+package ruleflow
+
+import (
+	"context"
+
+	"brale-core/internal/decision/agent"
+	"brale-core/internal/decision/features"
+	"brale-core/internal/decision/fsm"
+	"brale-core/internal/decision/fund"
+	"brale-core/internal/decision/provider"
+	"brale-core/internal/execution"
+	"brale-core/internal/strategy"
+)
+
+type Input struct {
+	Symbol             string
+	Providers          fund.ProviderBundle
+	AgentStructure     agent.StructureSummary
+	NewsOverlay        map[string]any
+	InPosition         InPositionOutputs
+	Position           HardGuardPosition
+	State              fsm.PositionState
+	PositionID         string
+	ExitConfirmCount   int
+	BuildPlan          bool
+	Compression        features.CompressionResult
+	Account            execution.AccountState
+	Risk               execution.RiskParams
+	Binding            strategy.StrategyBinding
+	StructureDirection string
+}
+
+type InPositionOutputs struct {
+	Indicator provider.InPositionIndicatorOut
+	Structure provider.InPositionStructureOut
+	Mechanics provider.InPositionMechanicsOut
+	Ready     bool
+}
+
+type HardGuardPosition struct {
+	Side        string
+	MarkPrice   float64
+	MarkPriceOK bool
+	StopLoss    float64
+	StopLossOK  bool
+}
+
+type Result struct {
+	Gate             fund.GateDecision
+	Plan             *execution.ExecutionPlan
+	FSMNext          fsm.PositionState
+	FSMActions       []fsm.Action
+	FSMRuleHit       fsm.RuleHit
+	ExitConfirmCount int
+}
+
+type Evaluator interface {
+	Evaluate(ctx context.Context, ruleChainPath string, input Input) (Result, error)
+}

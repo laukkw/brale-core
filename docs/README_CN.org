@@ -1,0 +1,62 @@
+* Brale (Break a leg) 🎭
+-  **AI 驱动的多 Agent 量化策略引擎**
+-  *既然是演戏（交易），那就祝你 "Break a leg"（大赚一笔）！*
+
+* 项目由来
+Brale Core的设计目标是把“主观交易判断”转为“可验证、可执行、可审计”的工程流程，减少情绪干预，提升策略执行一致性。
+项目在代码层体现为：
+- 以规则链与状态机驱动决策，而不是临场人工判断。
+- 将决策、执行、风控、对账拆成独立模块并通过运行时编排。
+- 优先“先生成计划，再触发执行”，并在持仓期持续监控。
+* 核心特点
+- 多路 Agent 协同：Indicator / Structure / Mechanics 分别从指标、结构与交易力学维度独立判断，再进行交叉校验，能够有效降低单一信号偏差带来的误判风险。
+- 三路共识决策：Indicator / Structure / Mechanics 三路分析后再进入 Gate 判定。
+- 规则流可解释：RuleFlow 输出 Gate/Plan/FSM 结果，可追溯每轮决策。
+- 结构化输出优势：决策结果以 Gate、Plan、FSM 等标准化结构输出，便于审计追踪、跨模块对接、自动化回放与二次分析。
+- 收紧风控机制可控：当系统进入 TIGHTEN 路径后，会在执行前叠加多重门槛（监控命中、波动阈值、评分阈值、去抖窗口、舆情门槛等）；仅在条件充分时执行收紧，避免因单一噪声触发过度操作。
+- 计划先行：开仓前生成 entry/stop/take-profits/position-size/leverage。
+- 执行下单层清晰：执行层将决策层与交易所接口解耦，通过统一适配器承接下单、查询与撤单动作，降低策略演进对执行侧的耦合影响。
+- 持仓风控闭环：价格 tick 下执行 risk monitor，支持 tighten/exit。
+- 对账与恢复：周期 reconcile + 启动恢复，降低状态漂移。
+- 工程化配置：system/symbol/strategy 分层配置 + 哈希绑定。
+  [[./flow.png]]
+* 架构概览
+本项目采用分层协同的运行架构，整体上可概括为“启动装配层、运行时组织层、决策层、执行与风控层、数据与接口层”五个部分。
+** 1) 启动装配层
+启动装配层负责完成系统初始化与依赖治理。应用由 `cmd/brale-core/main.go` 进入，随后通过 `bootstrap.Run(...)` 统一加载配置、构建核心依赖，并启动调度与服务接口。
+** 2) 运行时组织层
+运行时组织层以币种为单位构建独立运行单元，确保不同标的在相同框架下具备独立的决策与执行上下文。核心构建入口为 `runtime.BuildSymbolRuntime(...)`，并在内部完成 SnapshotFetcher、Compressor、Agent/Provider、Runner 与 Pipeline 的装配。
+** 3) 决策层
+决策层承担“信息转判断”的关键职责。系统在单轮决策中依次完成市场快照获取、特征压缩、Agent/Provider 评估以及 RuleFlow 推理，并生成 Gate、Plan、FSM 等结构化结果。
+** 4) 执行与风控层
+执行与风控层负责将决策结果转化为交易行为，并在持仓周期内持续控制风险。执行侧通过 Freqtrade 适配器下发交易指令；风控侧围绕 ExecutionPlan 与 RiskPlan 建立计划落地及动态监控机制。
+** 5) 数据与接口层
+数据与接口层承载系统状态存储与对外交互能力。底层采用 SQLite + GORM 持久化关键记录；上层通过 Runtime API、Webhook 与通知通道向外提供运行控制与状态反馈。
+[[./path.png]]
+* 数据源
+| 数据类别 | 主要来源/实现 |
+|---+---|
+| K线 (Klines) | Binance Futures 市场接口 |
+| 持仓量 OI | Binance Futures |
+| 资金费率 Funding | Binance Futures |
+| 多空比 LongShort | Binance Futures |
+| 恐慌贪婪 FearGreed | 独立 FearGreed 服务 |
+| 清算数据 Liquidations | Binance Futures（窗口聚合） |
+| 新闻 News Overlay | GDELT Doc API + LLM 评估 |
+| 标记价格 Mark Price | Binance MarkPriceStream |
+| 交易执行与账户 | Freqtrade API |
+补充：symbol 维度可通过配置决定是否强依赖 OI/Funding/LongShort/FearGreed/Liquidations（`internal/config/types.go` 的 `SymbolRequire`）。
+
+* 配置结构
+本项目的配置体系采用“系统级、索引级、策略级”三层组织方式，以实现全局行为与单币种策略的解耦管理。
+- 系统级配置位于 `configs/system.toml`，用于定义执行系统、Webhook、通知、News Overlay 以及 LLM 模型等全局能力。
+- 索引级配置位于 `configs/symbols-index.toml`，用于维护 symbol 与其配置文件、策略文件之间的映射关系。
+- 策略级配置位于 `configs/symbols/*.toml` 与 `configs/strategies/*.toml`，用于描述各交易标的的参数、风控与策略细节。
+整体配置结构与字段定义可参考 `internal/config/types.go`。
+
+* ## ⚠️ 风险免责声明
+- 本项目仅用于技术研究、系统开发与流程验证，不构成任何投资建议。
+- 数字资产交易具有高波动与高风险，可能导致部分或全部资金损失。
+- 使用者应自行评估策略、参数、风控与交易对手风险，并承担全部后果。
+- 任何历史表现、回测结果或示例配置均不代表未来收益。
+- 在生产环境启用前，请先在隔离环境完成充分测试、监控与应急预案。

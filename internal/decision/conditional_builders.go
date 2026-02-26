@@ -1,0 +1,45 @@
+// 本文件主要内容：条件化的特征构建器封装。
+package decision
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"brale-core/internal/decision/features"
+	"brale-core/internal/snapshot"
+)
+
+type ConditionalMechanicsBuilder struct {
+	Enabled        map[string]AgentEnabled
+	EnabledBuilder features.MechanicsBuilder
+}
+
+func (b ConditionalMechanicsBuilder) BuildMechanics(ctx context.Context, snap snapshot.MarketSnapshot, symbol string) (features.MechanicsSnapshot, error) {
+	if enabled, ok := lookupEnabled(b.Enabled, symbol); ok && !enabled.Mechanics {
+		return features.MechanicsSnapshot{Symbol: symbol}, nil
+	}
+	if b.EnabledBuilder == nil {
+		return features.MechanicsSnapshot{}, fmt.Errorf("mechanics builder is required")
+	}
+	return b.EnabledBuilder.BuildMechanics(ctx, snap, symbol)
+}
+
+func lookupEnabled(enabled map[string]AgentEnabled, symbol string) (AgentEnabled, bool) {
+	if enabled == nil {
+		return AgentEnabled{}, false
+	}
+	if v, ok := enabled[symbol]; ok {
+		return v, true
+	}
+	key := strings.ToUpper(strings.TrimSpace(symbol))
+	if v, ok := enabled[key]; ok {
+		return v, true
+	}
+	for k, v := range enabled {
+		if strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return AgentEnabled{}, false
+}

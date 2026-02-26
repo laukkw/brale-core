@@ -1,0 +1,58 @@
+package notify
+
+var labelMap = map[string]string{
+	"symbol":                "交易对",
+	"pair":                  "交易对",
+	"direction":             "方向",
+	"is_short":              "是否做空",
+	"qty":                   "数量",
+	"amount":                "数量",
+	"leverage":              "杠杆",
+	"position_id":           "仓位ID",
+	"trade_id":              "交易ID",
+	"entry":                 "入场价",
+	"open_rate":             "开仓价",
+	"stake_amount":          "投入金额",
+	"enter_tag":             "入场标签",
+	"open_ts":               "开仓时间戳",
+	"stop":                  "止损价",
+	"stop_prev":             "原止损",
+	"stop_new":              "新止损",
+	"take_profits":          "止盈价",
+	"risk_pct":              "风险百分比",
+	"trigger_price":         "触发价",
+	"mark_price":            "标记价",
+	"atr":                   "ATR",
+	"volatility":            "波动率",
+	"gate_satisfied":        "门槛通过",
+	"score_total":           "评分总分",
+	"score_threshold":       "评分阈值",
+	"score_breakdown":       "评分明细",
+	"parse_ok":              "解析通过",
+	"tighten_reason":        "收紧原因",
+	"tp_tightened":          "止盈收紧",
+	"source":                "来源",
+	"close_qty":             "平仓数量",
+	"exit":                  "出场价(行情)",
+	"close_rate":            "平仓价(成交)",
+	"reason":                "原因",
+	"exit_reason":           "退出原因",
+	"exit_type":             "退出类型",
+	"pnl":                   "盈亏",
+	"pnl_pct":               "盈亏%",
+	"realized_profit":       "已实现盈亏",
+	"realized_profit_ratio": "已实现盈亏%",
+	"close_profit_abs":      "平仓盈亏",
+	"close_profit_pct":      "平仓盈亏%",
+	"profit_abs":            "总盈亏",
+	"profit_pct":            "总盈亏%",
+	"trade_duration":        "持仓时长(分)",
+	"trade_duration_s":      "持仓时长(秒)",
+}
+
+func Label(key string) string {
+	if label, ok := labelMap[key]; ok && label != "" {
+		return label
+	}
+	return key
+}

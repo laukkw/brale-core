@@ -1,0 +1,31 @@
+########################################################
+################System toml 配置#########################
+########################################################
+# 1. INDICATOR
+LLM_MODEL_INDICATOR =
+LLM_INDICATOR_ENDPOINT =
+LLM_INDICATOR_API_KEY =
+
+# 2. STRUCTURE
+LLM_MODEL_STRUCTURE =
+LLM_STRUCTURE_ENDPOINT =
+LLM_STRUCTURE_API_KEY =
+
+# 3. MECHANICS
+LLM_MODEL_MECHANICS =
+LLM_MECHANICS_ENDPOINT =
+LLM_MECHANICS_API_KEY =
+
+
+#########################################################
+##################freqtrade 配置##########################
+#########################################################
+EXEC_USERNAME =
+EXEC_SECRET =
+
+#########################################################
+##################telegram 推送##########################
+#########################################################
+NOTIFICATION_TELEGRAM_ENABLED =
+NOTIFICATION_TELEGRAM_TOKEN =
+NOTIFICATION_TELEGRAM_CHAT_ID =

@@ -1,0 +1,40 @@
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    # 更适合中国宝宝体制的配置
+    environment:
+      HTTP_PROXY: http://host.docker.internal:10080
+      HTTPS_PROXY: http://host.docker.internal:10080
+      NO_PROXY: localhost,127.0.0.1,brale,freqtrade
+    command:
+      - "trade"
+      - "--logfile"
+      - "/freqtrade/user_data/logs/freqtrade.log"
+      - "--db-url"
+      - "sqlite:////freqtrade/user_data/tradesv3.sqlite"
+      - "--config"
+      - "/freqtrade/configs/config.json"
+      - "--strategy-path"
+      - "/freqtrade/configs"
+      - "--strategy"
+      - "BraleSharedStrategy"
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - type: bind
+        source: ${FREQTRADE_CONFIG_ROOT:-./configs}
+        target: /freqtrade/configs
+        read_only: true
+      - type: bind
+        source: ${FREQTRADE_RUNTIME_ROOT:-./user_data}
+        target: /freqtrade/user_data
+    network_mode: host

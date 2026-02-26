@@ -1,0 +1,132 @@
+<!-- 本文件主要内容：2D/3D 决策图谱页面，加载 force-graph 与 3d-force-graph 展示链式决策与 LLM 详情。 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brale Brain - 3D Decision Graph</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="graph-container"></div>
+  <div id="hud-layer">
+    <div id="control-panel">
+      <div class="panel-top">
+        <div class="brand">Brale Brain</div>
+        <div class="panel-top-actions">
+          <div class="panel-mode">Org-Roam Layout</div>
+          <button type="button" class="panel-collapse-btn" id="left-panel-toggle" aria-label="隐藏左侧面板">Hide</button>
+        </div>
+      </div>
+      <div class="control-row">
+        <label class="toggle-control" for="dimension-toggle">
+          <input type="checkbox" id="dimension-toggle">
+          <span>3D</span>
+        </label>
+        <label class="toggle-control" for="follow-toggle">
+          <input type="checkbox" id="follow-toggle">
+          <span>Follow</span>
+        </label>
+        <button type="button" id="fit-btn">Fit</button>
+        <button type="button" id="reset-btn">Reset</button>
+      </div>
+      <div class="status" id="status-pill">加载中…</div>
+
+      <div class="settings-sections">
+        <section class="section-card" aria-labelledby="section-filter-title">
+          <div class="section-heading" id="section-filter-title">Filter</div>
+          <div class="section-body">
+            <label class="switch-row" for="filter-orphans">
+              <span>Orphans</span>
+              <input id="filter-orphans" type="checkbox">
+            </label>
+            <label class="switch-row" for="filter-dailies">
+              <span>Dailies</span>
+              <input id="filter-dailies" type="checkbox" checked>
+            </label>
+            <label class="switch-row" for="filter-missing">
+              <span>Non-existent nodes</span>
+              <input id="filter-missing" type="checkbox" checked>
+            </label>
+            <label class="ghost-row" for="filter-tag-query">
+              <span>Tag filters</span>
+              <input id="filter-tag-query" type="text" placeholder="stage/type/symbol">
+            </label>
+          </div>
+        </section>
+
+        <section class="section-card" aria-labelledby="section-physics-title">
+          <div class="section-heading" id="section-physics-title">Physics</div>
+          <div class="section-body">
+            <label class="range-row" for="physics-charge">
+              <span>Charge</span>
+              <input id="physics-charge" type="range" min="-300" max="-20" step="10" value="-120">
+            </label>
+            <label class="range-row" for="physics-link-distance">
+              <span>Link distance</span>
+              <input id="physics-link-distance" type="range" min="12" max="80" step="2" value="24">
+            </label>
+            <label class="range-row" for="physics-link-strength">
+              <span>Link strength</span>
+              <input id="physics-link-strength" type="range" min="0.3" max="2.4" step="0.1" value="1">
+            </label>
+          </div>
+        </section>
+
+        <section class="section-card" aria-labelledby="section-visual-title">
+          <div class="section-heading" id="section-visual-title">Visual</div>
+          <div class="section-body">
+            <label class="switch-row" for="visual-labels">
+              <span>Show labels</span>
+              <input id="visual-labels" type="checkbox" checked>
+            </label>
+            <label class="range-row" for="visual-link-scale">
+              <span>Link width</span>
+              <input id="visual-link-scale" type="range" min="0.5" max="2.5" step="0.1" value="1">
+            </label>
+          </div>
+        </section>
+
+        <section class="section-card" aria-labelledby="section-behavior-title">
+          <div class="section-heading" id="section-behavior-title">Behavior</div>
+          <div class="section-body">
+            <label class="switch-row" for="behavior-double-click-expand">
+              <span>Double-click expand</span>
+              <input id="behavior-double-click-expand" type="checkbox" checked>
+            </label>
+            <label class="switch-row" for="behavior-fade-unrelated">
+              <span>Fade unrelated</span>
+              <input id="behavior-fade-unrelated" type="checkbox" checked>
+            </label>
+            <label class="switch-row" for="behavior-auto-fit">
+              <span>Auto fit after expand</span>
+              <input id="behavior-auto-fit" type="checkbox">
+            </label>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <aside id="preview-sidebar">
+    <div class="preview-header">
+      <div class="preview-header-row">
+        <div class="preview-title" id="preview-title">选择节点</div>
+        <button type="button" class="panel-collapse-btn" id="right-panel-toggle" aria-label="隐藏右侧面板">Hide</button>
+      </div>
+    </div>
+    <div class="preview-content" id="preview-content">
+      <div class="placeholder">点击图节点查看详情</div>
+    </div>
+  </aside>
+  <button type="button" class="panel-handle panel-handle-left" id="left-panel-handle" aria-label="展开左侧面板">Controls</button>
+  <button type="button" class="panel-handle panel-handle-right" id="right-panel-handle" aria-label="展开右侧面板">Details</button>
+  <script>
+    window.__DECISION_VIEW_BASE__ = window.__DECISION_VIEW_BASE__ || '/decision-view';
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/force-graph@1.48.0/dist/force-graph.min.js"></script>
+  <script src="./vendor/three.min.js"></script>
+  <script src="./vendor/three-spritetext.min.js"></script>
+  <script src="./vendor/3d-force-graph.min.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>
