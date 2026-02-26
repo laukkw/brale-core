@@ -3,8 +3,8 @@ services:
     image: freqtradeorg/freqtrade:stable
     # 更适合中国宝宝体制的配置
     environment:
-      HTTP_PROXY: http://host.docker.internal:10080
-      HTTPS_PROXY: http://host.docker.internal:10080
+      HTTP_PROXY: http://host.docker.internal:7890
+      HTTPS_PROXY: http://host.docker.internal:7890
       NO_PROXY: localhost,127.0.0.1,brale,freqtrade
     command:
       - "trade"

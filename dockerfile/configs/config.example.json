@@ -40,12 +40,12 @@
     "secret": "",
     "ccxt_config": {
       "proxies": {
-        "http": "http://host.docker.internal:10080",
-        "https": "http://host.docker.internal:10080"
+        "http": "http://host.docker.internal:7890",
+        "https": "http://host.docker.internal:7890"
       }
     },
     "ccxt_async_config": {
-      "aiohttp_proxy": "http://host.docker.internal:10080"
+      "aiohttp_proxy": "http://host.docker.internal:7890"
     },
     "pair_whitelist": [],
     "pair_blacklist": [
@@ -62,7 +62,7 @@
     }
   ],
   "telegram": {
-    "enabled": true,
+    "enabled": false,
     "token": "REPLACE_ME",
     "chat_id": "REPLACE_ME"
   },
