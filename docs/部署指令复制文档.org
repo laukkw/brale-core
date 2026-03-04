@@ -1,0 +1,291 @@
+#+title: 部署命令复制文档
+
+* 更换ubuntu源
+#+begin_src shell
+#!/bin/bash
+
+# 1. 备份现有的源文件
+echo "正在备份原有的 sources.list..."
+sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
+
+# 2. 获取 Ubuntu 版本代号 (如 jammy, focal, noble)
+CODENAME=$(lsb_release -c | awk '{print $2}')
+
+# 3. 写入阿里云镜像源 (针对 Ubuntu 24.04 以前版本)
+# 注意：24.04 之后的版本建议修改 /etc/apt/sources.list.d/ubuntu.sources
+echo "正在更换为阿里云镜像源 (版本: $CODENAME)..."
+sudo tee /etc/apt/sources.list <<EOF
+deb https://mirrors.aliyun.com/ubuntu/ $CODENAME main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-security main restricted universe multiverse
+deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-security main restricted universe multiverse
+EOF
+
+# 4. 更新系统索引
+echo "正在更新系统索引..."
+sudo mv /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak
+sudo apt update
+
+# 5. 安装/配置 pnpm
+if ! command -v pnpm &> /dev/null
+then
+    echo "未检测到 pnpm，正在通过官方脚本安装..."
+    curl -fsSL https://get.pnpm.io/install.sh | sh -
+    source ~/.bashrc
+fi
+
+# 6. 强制设置 pnpm 国内镜像源
+echo "正在设置 pnpm 镜像源为淘宝镜像..."
+pnpm config set registry https://registry.npmmirror.com -g
+
+echo "🎉 所有操作已完成！"
+pnpm config get registry
+#+end_src
+* 安装tmux ,emacs
+#+begin_src shell
+sudo apt install tmux
+sudo apt install emacs
+#+end_src
+* 安装clash for linux install
+#+begin_src shell
+ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelvko/clash-for-linux-install.git \
+  && cd clash-for-linux-install \
+  && bash install.sh
+
+ source ~/.bashrc
+#+end_src
+* 安装node js
+#+begin_src shell
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  source ~/.bashrc
+  nvm install node
+  node --version
+#+end_src
+* 安装pnpm
+#+begin_src shell
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+  source ~/.bashrc
+#+end_src
+
+
+* 安装docker docker compose
+#+begin_src shell
+#!/bin/bash
+
+# 遇到错误立即退出脚本
+set -e
+
+echo "=== 开始安装 Docker 和 Docker Compose ==="
+
+echo "1. 更新软件包索引并安装依赖..."
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+echo "2. 添加 Docker 的官方 GPG 密钥..."
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo "3. 设置 Docker 稳定版仓库..."
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+echo "4. 安装 Docker Engine, CLI, Containerd 和 Docker Compose 插件..."
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+echo "5. 配置当前用户 ($USER) 免 sudo 运行 Docker..."
+# 如果 docker 用户组不存在则创建
+if ! getent group docker > /dev/null; then
+    sudo groupadd docker
+fi
+
+# 将当前用户加入 docker 组
+sudo usermod -aG docker "$USER"
+
+echo "6. 设置 Docker 开机自启并启动服务..."
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
+sudo systemctl start docker.service
+
+echo "================================================================================"
+echo "✅ 安装与配置已完成！"
+echo ""
+echo "⚠️  注意：为了让免 sudo 的用户组权限生效，你需要重新登录你的终端会话。"
+echo "你也可以现在直接运行以下命令来立即刷新当前终端的权限："
+echo ""
+echo "    newgrp docker"
+echo ""
+echo "验证安装请运行：docker compose version && docker run hello-world"
+echo "================================================================================"
+
+#+end_src
+
+
+* nginx 配置
+#+begin_src conf
+server {
+    listen 1234;
+    server_name xx.xx.xx.xx;  # 替换为你的域名或 IP
+
+    location / {
+        proxy_pass http://127.0.0.1:9090;
+
+        # 其他必要 header
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 2234;
+    server_name xx.xx.xx.xx;  # 替换为你的域名或 IP
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+ server {
+    listen 443 ssl;
+    server_name xxxxx.xxx.xxx;  # 替换为你的域名或 IP
+    ssl_certificate /etc/letsencrypt/live/openclaw.brale.club/fullchain.pem;      # SSL 证书路径
+    ssl_certificate_key /etc/letsencrypt/live/openclaw.brale.club/privkey.pem;    # SSL 私钥路径
+
+
+    location / {
+        proxy_pass http://127.0.0.1:18789;  # 注意使用 127.0.0.1 而非内网 IP
+
+        # WebSocket 透传（关键！）
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # 必须透传 Origin（配对机制依赖它！）
+        proxy_set_header Origin $scheme://$host:$server_port;
+
+        # 其他必要 header
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 超时调大（WebSocket 长连接）
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+
+#+end_src
+**  生成https证书
+#+begin_src shell
+sudo certbot certonly --manual --preferred-challenges dns -d xx.xx.xx #换成自己的域名
+#+end_src
+* openclaw 配置
+** 安装brale-runtime-mcp
+#+begin_src shell
+openclaw plugins install @laukliu/brale-runtime-mcp
+#+end_src
+** tools 权限设置
+#+begin_src json
+"tools": {
+    "profile": "coding",
+    "allow": [
+      "read",
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "list_files",
+      "search"
+    ]
+  },
+#+end_src
+** 安装 mcporter
+#+begin_src json
+# /home/ubuntu/.mcporter/mcporter.json路径
+{
+  "mcpServers": {
+    "brale-runtime": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@laukliu/brale-runtime-mcp"
+      ],
+      "env": {
+        "BRALE_RUNTIME_BASE_URL": "http://127.0.0.1:9991",
+        "BRALE_ENABLE_OPS": "true",
+        "BRALE_ENABLE_DEBUG": "true",
+        "BRALE_ENV": "dev",
+        "BRALE_MCP_TOKEN": ""
+      }
+    }
+  }
+}
+#+end_src
+**  配置 skills
+#+begin_src json
+# ~/.openclaw/openclaw.json
+  "skills": {
+    "install": {
+      "nodeManager": "pnpm"
+    },
+    "entries": {
+      "mcporter": {
+        "enabled": true,
+        "env": {
+          "MCPORTER_CONFIG": "/home/ubuntu/.mcporter/mcporter.json"
+        }
+      }
+    }
+  },
+#+end_src
+**  openclaw 授权
+#+begin_src shell
+openclaw devices list
+openclaw devices approve 后追加REQUEST_ID
+openclaw config get gateway.auth.token 获取token
+openclaw pairing approve telegram 后加PAIR TOKEN . 授权telegram
+#+end_src
+** openclaw 的 gateway 设置
+#+begin_src json
+ "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "trustedProxies": [
+      "127.0.0.1"
+    ],
+    "auth": {
+      "mode": "token",
+      "token": "92a721c2a3ef144f3bbb95e1147ab82eaf9774185d71faf7"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "https://openclaw.brale.club:3234"
+      ]
+    },
+#+end_src
