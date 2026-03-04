@@ -92,3 +92,7 @@ For full configuration fields and structure definitions, see `internal/config/ty
 - Users must independently evaluate strategy, parameters, risk controls, and counterparty risks, and assume all consequences.
 - Historical performance, backtest results, and sample configurations do not guarantee future returns.
 - Before enabling production trading, perform thorough testing, monitoring, and contingency planning in an isolated environment.
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
