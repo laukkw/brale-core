@@ -1058,7 +1058,7 @@ function createNodeObject(node) {
     const text = shortenLabel(nodeShortLabel(node), radius >= 7 ? 12 : 10);
     if (text) {
       label = new SpriteText(text);
-      label.color = "#f5f7ff";
+      label.color = node.type === "origin" ? "#ff4444" : "#f5f7ff";
       label.strokeWidth = 0.8;
       label.strokeColor = "rgba(5,5,16,0.85)";
       label.textHeight = Math.min(radius * 0.6, 4);
@@ -1084,7 +1084,7 @@ function draw2DNodeLabel(node, ctx, globalScale) {
   ctx.font = `600 ${fontSize}px "IBM Plex Sans", "Noto Sans SC", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(245,247,255,0.95)";
+  ctx.fillStyle = node.type === "origin" ? "rgba(255,68,68,0.95)" : "rgba(245,247,255,0.95)";
   ctx.strokeStyle = "rgba(6,10,22,0.72)";
   ctx.lineWidth = Math.max(1, fontSize * 0.2);
   ctx.strokeText(text, Number(node.x || 0), Number(node.y || 0));
