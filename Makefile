@@ -14,7 +14,7 @@ STACK_PROXY_ENV_FILE ?= $(CURDIR)/data/freqtrade/proxy.env
 COMPOSE = docker compose -p "$(PROJECT_NAME)" -f "$(COMPOSE_FILE)" --env-file ".env"
 STACK_ENV = BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" BRALE_SYSTEM_FILE="$(BRALE_SYSTEM_FILE)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
 
-.PHONY: check prepare start start-freqtrade wait-freqtrade start-brale stop restart down status logs
+.PHONY: check prepare start start-freqtrade wait-freqtrade start-brale stop restart rebuild down status logs
 
 check:
 	@if [ ! -f ".env" ]; then \
@@ -86,6 +86,9 @@ wait-freqtrade:
 
 start-brale:
 	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) up -d brale
+
+rebuild: check prepare
+	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) up -d --build brale
 
 stop:
 	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) stop brale freqtrade
