@@ -113,11 +113,11 @@ slippage_buffer_pct = 0.0005
 # C3. 持仓收紧（Tighten）
 # ------------------------------
 [risk_management.tighten_atr]
-# 结构受损/支撑测试 -> 0.5 ATR
-structure_threatened = 0.5
+# 结构受损/支撑测试 -> 1.5 ATR
+structure_threatened = 1.5
 
 # 持仓风控最小更新间隔（秒）；0 表示关闭防抖
-min_update_interval_sec = 300
+min_update_interval_sec = 3500
 
 [risk_management.sieve]
 # 作用：Gate 已放行(ALLOW)后的二次风控与仓位缩放
