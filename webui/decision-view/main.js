@@ -3,7 +3,7 @@ const BASE_PATH = normalizeBase(window.__DECISION_VIEW_BASE__ || "/decision-view
 const API_BASE = `${BASE_PATH}/api`;
 
 const STAGE_COLORS = {
-  origin: "#ffffff",
+  origin: "#7dd3fc",
   round: "#39d0ff",
   provider: "#8fb4ff",
   indicator: "#39d0ff",
@@ -1043,12 +1043,13 @@ function createNodeObject(node) {
   const group = new THREE.Group();
   const radius = Math.max(4, (node.val || 6) * 0.9);
   const geo = new THREE.SphereGeometry(radius, 20, 20);
+  const isOrigin = node.type === "origin";
   const mat = new THREE.MeshStandardMaterial({
     color: nodeColor(node),
-    roughness: 0.35,
-    metalness: 0.1,
+    roughness: isOrigin ? 0.45 : 0.35,
+    metalness: isOrigin ? 0.05 : 0.1,
     transparent: true,
-    opacity: 0.9,
+    opacity: isOrigin ? 0.72 : 0.9,
   });
   const mesh = new THREE.Mesh(geo, mat);
   group.add(mesh);
@@ -1058,9 +1059,10 @@ function createNodeObject(node) {
     const text = shortenLabel(nodeShortLabel(node), radius >= 7 ? 12 : 10);
     if (text) {
       label = new SpriteText(text);
-      label.color = node.type === "origin" ? "#ff4444" : "#f5f7ff";
-      label.strokeWidth = 0.8;
-      label.strokeColor = "rgba(5,5,16,0.85)";
+      label.color = node.type === "origin" ? "#ffffff" : "#f5f7ff";
+      label.strokeWidth = isOrigin ? 0 : 0.8;
+      label.strokeColor = node.type === "origin" ? "rgba(100,180,240,0.5)" : "rgba(5,5,16,0.85)";
+      label.fontWeight = isOrigin ? "bold" : "normal";
       label.textHeight = Math.min(radius * 0.6, 4);
       label.material.depthWrite = false;
       label.material.depthTest = false;
@@ -1081,10 +1083,11 @@ function draw2DNodeLabel(node, ctx, globalScale) {
 
   const minScale = Math.max(0.7, Number(globalScale || 1));
   const fontSize = Math.max(6, Math.min(13, 11 / minScale));
-  ctx.font = `600 ${fontSize}px "IBM Plex Sans", "Noto Sans SC", sans-serif`;
+  const isOrigin2D = node.type === "origin";
+  ctx.font = `${isOrigin2D ? 900 : 600} ${fontSize}px "IBM Plex Sans", "Noto Sans SC", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = node.type === "origin" ? "rgba(255,68,68,0.95)" : "rgba(245,247,255,0.95)";
+  ctx.fillStyle = node.type === "origin" ? "rgba(255,255,255,0.95)" : "rgba(245,247,255,0.95)";
   ctx.strokeStyle = "rgba(6,10,22,0.72)";
   ctx.lineWidth = Math.max(1, fontSize * 0.2);
   ctx.strokeText(text, Number(node.x || 0), Number(node.y || 0));
