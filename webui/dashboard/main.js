@@ -672,18 +672,37 @@ function renderDecisionDetail(detail, fallbackMessage) {
     els.decisionDetail.innerHTML = `<div>${escapeHtml(fallbackMessage || "暂无详情")}</div>`;
     return;
   }
-  const providers = Array.isArray(detail.providers) ? detail.providers : [];
-  const agents = Array.isArray(detail.agents) ? detail.agents : [];
+  const reportMarkdown = cleanDecisionMarkdown(detail.report_markdown || "");
   els.decisionDetail.innerHTML = [
     `<div><strong>Snapshot:</strong> ${Number(detail.snapshot_id || 0)}</div>`,
     `<div><strong>Action:</strong> ${escapeHtml(detail.action || "--")}</div>`,
     `<div><strong>Reason:</strong> ${escapeHtml(detail.reason || "--")}</div>`,
     `<div><strong>Tradeable:</strong> ${detail.tradeable ? "YES" : "NO"}</div>`,
-    `<div><strong>Providers:</strong> ${escapeHtml(providers.join(" | ") || "--")}</div>`,
-    `<div><strong>Agents:</strong> ${escapeHtml(agents.join(" | ") || "--")}</div>`,
     `<div><strong>Decision Link:</strong> <a href="${escapeHtml(detail.decision_view_url || "/decision-view/")}" target="_blank" rel="noopener noreferrer">Open</a></div>`,
-    `<pre>${escapeHtml(detail.report_markdown || "")}</pre>`
+    `<pre>${escapeHtml(reportMarkdown)}</pre>`
   ].join("");
+}
+
+function cleanDecisionMarkdown(input) {
+  const text = String(input || "");
+  if (!text.trim()) {
+    return "";
+  }
+  const lines = text.split("\n");
+  const filtered = lines.filter((line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) {
+      return true;
+    }
+    if (/^\s*(状态|动作|冲突|风险)\s*[：:]\s*[-—]\s*$/.test(trimmed)) {
+      return false;
+    }
+    if (/^\s*[-•]\s*(状态|动作|冲突|风险)\s*[：:]\s*[-—]\s*$/.test(trimmed)) {
+      return false;
+    }
+    return true;
+  });
+  return filtered.join("\n");
 }
 
 async function refreshOverview() {

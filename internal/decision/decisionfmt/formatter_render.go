@@ -137,20 +137,12 @@ func (f DefaultFormatter) RenderDecisionHTML(report DecisionReport) string {
 	}
 	metricsSection := renderHTMLMetrics(report)
 	monitorSection := renderHTMLMonitorDetail(report)
-	signalSection := renderHTMLSignals(report)
 	riskSection := renderHTMLRiskDetail(report)
 	sections := append([]string{}, baseSections...)
-	sections = append(sections, metricsSection, monitorSection, signalSection, riskSection)
+	sections = append(sections, metricsSection, monitorSection, riskSection)
 	assembled := joinHTMLSections(sections)
 	if utf8.RuneCountInString(assembled) > telegramHTMLLimit {
 		if riskSection != "" {
-			sections = append([]string{}, baseSections...)
-			sections = append(sections, metricsSection, signalSection)
-			assembled = joinHTMLSections(sections)
-		}
-	}
-	if utf8.RuneCountInString(assembled) > telegramHTMLLimit {
-		if signalSection != "" {
 			sections = append([]string{}, baseSections...)
 			sections = append(sections, metricsSection)
 			assembled = joinHTMLSections(sections)
