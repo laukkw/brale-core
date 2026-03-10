@@ -90,6 +90,14 @@ func (c *FreqtradeClient) Balance(ctx context.Context) (map[string]any, error) {
 	return out, nil
 }
 
+func (c *FreqtradeClient) ProfitAll(ctx context.Context) (map[string]any, error) {
+	var out map[string]any
+	if err := c.doGet(ctx, "/profit_all", &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type ForceEnterPayload struct {
 	Pair        string   `json:"pair"`
 	Side        string   `json:"side"`

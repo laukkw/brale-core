@@ -7,6 +7,7 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/transport"
+	dashboard "brale-core/webui/dashboard"
 	decisionview "brale-core/webui/decision-view"
 
 	"go.uber.org/zap"
@@ -43,6 +44,7 @@ func Run(baseCtx context.Context, opts Options) error {
 	runScheduledWarmup(env.ctx, env.logger, deps)
 
 	viewerHandler := decisionview.StartDecisionViewer(env.logger, env.sys, symbolIndexPath, env.index, deps.store)
+	dashboardHandler := dashboard.Start()
 	runtimes := buildRuntimeMap(env.ctx, env.logger, env.sys, symbolIndexPath, env.index, deps)
 	runFreqtradeBalanceCheck(env.ctx, env.logger, deps)
 	scheduler, err := startScheduler(env.ctx, env.logger, env.sys, deps, runtimes)
@@ -55,7 +57,7 @@ func Run(baseCtx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("runtime api init failed: %w", err)
 	}
-	topMux := buildTopMux(viewerHandler, runtimeHandler)
+	topMux := buildTopMux(viewerHandler, dashboardHandler, runtimeHandler)
 	attachWebhookRoutes(env.ctx, env.logger, env.sys, deps, scheduler, topMux)
 
 	addr := strings.TrimSpace(env.sys.Webhook.Addr)

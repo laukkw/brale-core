@@ -6,3 +6,11 @@
 symbol = "ETHUSDT" # 币种名，例：ETHUSDT
 config = "symbols/ETHUSDT.toml" # 币种配置路径，例：symbols/ETHUSDT.toml
 strategy = "strategies/ETHUSDT.toml" # 策略配置路径，例：strategies/ETHUSDT.toml
+#
+#
+#
+#
+[[symbols]]
+symbol = "SOLUSDT" # 币种名，例：ETHUSDT
+config = "symbols/SOLUSDT.toml" # 币种配置路径，例：symbols/ETHUSDT.toml
+strategy = "strategies/SOLUSDT.toml" # 策略配置路径，例：strategies/ETHUSDT.toml

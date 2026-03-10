@@ -8,6 +8,7 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/execution"
+	"brale-core/internal/market/binance"
 	"brale-core/internal/runtime"
 	"brale-core/internal/transport/runtimeapi"
 
@@ -135,6 +136,7 @@ func buildRuntimeHandler(sys config.SystemConfig, deps coreDeps, scheduler *runt
 		Resolver:              resolver,
 		PlanCache:             deps.positioner.PlanCache,
 		PriceSource:           deps.priceSource,
+		KlineProvider:         binance.NewFuturesMarket(),
 		AllowSymbol:           deps.allowSymbol,
 		Store:                 deps.store,
 		ExecClient:            deps.executor.Client,

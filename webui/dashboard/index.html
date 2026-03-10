@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brale Dashboard - Break A Leg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="ambient-glow"></div>
+  <main class="dashboard-shell">
+    <header class="hero">
+      <div>
+        <p class="hero-kicker">Execution Intelligence Console</p>
+        <h1>Brale Dashboard - Break A Leg</h1>
+      </div>
+      <div class="hero-meta">
+        <div class="chip"><span class="dot"></span> Runtime: <span id="runtime-status">Loading</span></div>
+        <div class="chip" id="clock-chip">--:--:--</div>
+        <a class="chip link-chip" id="decision-view-link" href="/decision-view/" target="_blank" rel="noopener noreferrer">Open Decision View</a>
+      </div>
+    </header>
+
+    <section class="grid top-grid" aria-label="仓位与盈亏概览">
+      <article class="panel" id="live-position-panel">
+        <div class="panel-head">
+          <h2>实时仓位</h2>
+          <span class="subtle">Per Symbol TP/SL + PnL</span>
+        </div>
+        <div class="live-position-list" id="live-position-list"></div>
+      </article>
+
+      <article class="panel" aria-label="盈亏统计">
+        <div class="panel-head">
+          <h2>账户与收益</h2>
+          <span class="subtle">Balance + ProfitAll</span>
+        </div>
+        <div class="pnl-stack">
+          <div class="pnl-card">
+            <span>账户余额</span>
+            <strong id="acct-total">--</strong>
+          </div>
+          <div class="pnl-card">
+            <span>可用金额</span>
+            <strong id="acct-free">--</strong>
+          </div>
+          <div class="pnl-card">
+            <span>占用金额</span>
+            <strong id="acct-used">--</strong>
+          </div>
+          <div class="pnl-card">
+            <span>监控币种</span>
+            <strong id="acct-symbols">--</strong>
+          </div>
+          <div class="pnl-card positive">
+            <span>已平仓收益</span>
+            <strong id="acct-profit-closed">--</strong>
+          </div>
+          <div class="pnl-card positive">
+            <span>综合收益</span>
+            <strong id="acct-profit-all">--</strong>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid kline-grid" aria-label="K线与关键交易点位">
+      <article class="panel kline-panel full-span">
+        <div class="panel-head">
+          <h2>K 线走势与关键交易点位</h2>
+          <div class="kline-controls">
+            <label for="symbol-select" class="subtle">交易对</label>
+            <select id="symbol-select"></select>
+            <label for="interval-select" class="subtle">周期</label>
+            <select id="interval-select"></select>
+            <span class="subtle" id="kline-range">--</span>
+          </div>
+        </div>
+        <div id="kline-chart" class="chart"></div>
+        <div id="kline-price-tags" class="kline-price-tags" aria-label="价格标签"></div>
+      </article>
+    </section>
+
+    <section class="grid flow-grid" aria-label="AI 决策关联链路">
+      <article class="panel flow-panel full-span">
+        <div class="panel-head">
+          <h2>AI 决策关联链路</h2>
+          <span class="subtle">Latest for selected symbol</span>
+        </div>
+        <div id="flow-graph" class="flow-graph"></div>
+        <div id="flow-meta" class="flow-meta"></div>
+      </article>
+    </section>
+
+    <section class="grid bottom-grid" aria-label="历史仓位与历史决策">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>历史仓位</h2>
+          <span class="subtle">Recent Closed Positions</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>交易对</th>
+                <th>时间</th>
+                <th>方向</th>
+                <th>仓位</th>
+                <th>结果</th>
+              </tr>
+            </thead>
+            <tbody id="position-history-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>历史决策与详情</h2>
+          <span class="subtle">Click row for details</span>
+        </div>
+        <div class="table-wrap decision-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>动作</th>
+                <th>原因</th>
+                <th>Snapshot</th>
+              </tr>
+            </thead>
+            <tbody id="decision-history-body"></tbody>
+          </table>
+        </div>
+        <div class="decision-detail" id="decision-detail"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    window.__DASHBOARD_BASE__ = window.__DASHBOARD_BASE__ || "/dashboard";
+  </script>
+  <script src="./main.js"></script>
+</body>
+</html>

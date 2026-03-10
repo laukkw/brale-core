@@ -17,3 +17,7 @@ type TradesReader interface {
 type TradeFinder interface {
 	FindTradeByID(ctx context.Context, tradeID int) (Trade, bool, error)
 }
+
+type ProfitAllReader interface {
+	ProfitAll(ctx context.Context) (map[string]any, error)
+}

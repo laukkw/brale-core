@@ -82,6 +82,7 @@ type TradeHistoryItem struct {
 	Amount       float64   `json:"amount"`
 	MarginAmount float64   `json:"margin_amount"`
 	OpenedAt     time.Time `json:"opened_at"`
+	ClosedAt     time.Time `json:"closed_at"`
 	DurationSec  int64     `json:"duration_sec"`
 	Profit       float64   `json:"profit"`
 }

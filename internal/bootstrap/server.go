@@ -26,11 +26,15 @@ var newFeishuBot = func(cfg feishubot.Config, logger *zap.Logger) (feishuBotRunn
 	return feishubot.New(cfg, logger)
 }
 
-func buildTopMux(viewerHandler http.Handler, runtimeHandler http.Handler) *http.ServeMux {
+func buildTopMux(viewerHandler http.Handler, dashboardHandler http.Handler, runtimeHandler http.Handler) *http.ServeMux {
 	topMux := http.NewServeMux()
 	if viewerHandler != nil {
 		topMux.Handle("/decision-view", viewerHandler)
 		topMux.Handle("/decision-view/", viewerHandler)
+	}
+	if dashboardHandler != nil {
+		topMux.Handle("/dashboard", dashboardHandler)
+		topMux.Handle("/dashboard/", dashboardHandler)
 	}
 	if runtimeHandler != nil {
 		topMux.Handle("/", runtimeHandler)

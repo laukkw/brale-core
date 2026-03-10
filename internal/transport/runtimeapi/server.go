@@ -15,6 +15,7 @@ import (
 	"brale-core/internal/position"
 	"brale-core/internal/prompt/positionprompt"
 	"brale-core/internal/runtime"
+	"brale-core/internal/snapshot"
 	"brale-core/internal/store"
 )
 
@@ -53,6 +54,7 @@ type ResolvedSymbol struct {
 
 type runtimeExecClient interface {
 	execution.BalanceReader
+	execution.ProfitAllReader
 	execution.OpenTradesReader
 	execution.TradesReader
 }
@@ -67,10 +69,13 @@ type Server struct {
 	PositionCache         *position.PositionCache
 	PlanCache             *position.PlanCache
 	PriceSource           market.PriceSource
+	KlineProvider         snapshot.KlineProvider
 	AllowSymbol           func(symbol string) bool
 	NewsOverlayStaleAfter time.Duration
 	lastMu                sync.RWMutex
 	lastRun               map[string]lastObserve
+	klineCacheMu          sync.RWMutex
+	klineCache            map[string]dashboardKlineCacheEntry
 }
 
 func (s *Server) Handler() (http.Handler, error) {
@@ -91,6 +96,11 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("/api/runtime/position/history", http.HandlerFunc(s.handleTradeHistory))
 	mux.Handle("/api/runtime/decision/latest", http.HandlerFunc(s.handleDecisionLatest))
 	mux.Handle("/api/runtime/news_overlay/latest", http.HandlerFunc(s.handleNewsOverlayLatest))
+	mux.Handle(dashboardOverviewPath, http.HandlerFunc(s.handleDashboardOverview))
+	mux.Handle(dashboardAccountSummaryPath, http.HandlerFunc(s.handleDashboardAccountSummary))
+	mux.Handle(dashboardKlinePath, http.HandlerFunc(s.handleDashboardKline))
+	mux.Handle(dashboardDecisionFlowPath, http.HandlerFunc(s.handleDashboardDecisionFlow))
+	mux.Handle(dashboardDecisionHistoryPath, http.HandlerFunc(s.handleDashboardDecisionHistory))
 	mux.Handle("/api/observe/run", http.HandlerFunc(s.handleObserveRun))
 	mux.Handle("/api/observe/report", http.HandlerFunc(s.handleObserveReport))
 	mux.Handle("/api/debug/plan/inject", http.HandlerFunc(s.handleDebugPlanInject))

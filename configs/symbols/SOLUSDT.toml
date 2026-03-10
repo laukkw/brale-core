@@ -1,0 +1,106 @@
+# ETHUSDT 币种配置示例（每个币种必须单独配置）
+# 说明：本文件控制单币种的采集、LLM 解析、映射、Gate、FSM 与 Plan 生成逻辑。
+
+# 币种标识（必须与交易所/行情源一致）。
+symbol = "SOLUSDT"
+# 拉取的 K 线周期列表，顺序仅影响展示，不影响逻辑。
+intervals = ["15m", "30m", "4h"]
+# 每个周期拉取的 K 线数量，越大越耗时但结构更完整。
+kline_limit = 300
+
+[agent]
+# 是否启用指标 Agent（输出技术指标摘要）。
+indicator = true
+# 是否启用结构 Agent（输出结构/形态摘要）。
+structure = true
+# 是否启用力学 Agent（输出衍生品/情绪摘要）。
+mechanics = true
+
+[require]
+# 是否强制要求 OI 数据，缺失则该币种本轮不跑。
+oi = true
+# 是否强制要求 Funding 数据，缺失则该币种本轮不跑。
+funding = true
+# 是否强制要求多空比数据，缺失则该币种本轮不跑。
+long_short = true
+# 是否强制要求恐惧贪婪指数，缺失则该币种本轮不跑。
+fear_greed = true
+# 是否强制要求清算数据；如策略不依赖可关闭。
+liquidations = false
+
+[indicators]
+# EMA 快线周期（用于指标特征计算）。
+ema_fast = 21
+# EMA 中线周期。
+ema_mid = 50
+# EMA 慢线周期。
+ema_slow = 200
+# RSI 计算周期。
+rsi_period = 14
+# ATR 计算周期。
+atr_period = 14
+# MACD 快线周期。
+macd_fast = 12
+# MACD 慢线周期。
+macd_slow = 26
+# MACD 信号周期。
+macd_signal = 9
+# 指标序列取最近 N 根窗口用于 LLM 总结。
+last_n = 5
+# 是否格式化输出 JSON（会增加体积）。
+pretty = false
+
+# consensus：三路共识方向判定阈值。
+[consensus]
+# score_threshold：共识总分门槛（|score| >= threshold 才允许有方向）。
+# 建议原因：避免“方向分数很弱”时误开仓。
+score_threshold = 0.35
+# confidence_threshold：共识置信门槛（confidence >= threshold 才允许有方向）。
+# 建议原因：当前 confidence = coverage * agreement，且权重含 C^1.5 惩罚，
+# 0.60 在实盘会偏严，容易长期不过门槛；默认 0.52 更平衡“机会”和“噪声过滤”。
+confidence_threshold = 0.52
+
+
+# cooldown：节流与防抖设置（避免短时间重复开仓）。
+[cooldown]
+# enabled：是否启用冷却控制。
+enabled = false
+# entry_cooldown_sec：两次开仓之间的最小间隔（秒）。
+entry_cooldown_sec = 120
+
+# llm：为各个 Agent/Provider 指定模型与采样温度。
+[llm.agent.indicator]
+# model：模型路由名，格式通常为“供应商/模型”。
+model = '${LLM_MODEL_INDICATOR}'
+# temperature：采样温度，越高越发散，越低越稳定。
+temperature = 0.2
+
+[llm.agent.structure]
+# model：结构 Agent 使用的模型。
+model = '${LLM_MODEL_STRUCTURE}'
+# temperature：结构 Agent 采样温度。
+temperature = 0.2
+
+[llm.agent.mechanics]
+# model：力学 Agent 使用的模型。
+model = '${LLM_MODEL_MECHANICS}'
+# temperature：力学 Agent 采样温度。
+temperature = 0.2
+
+[llm.provider.indicator]
+# model：指标 Provider 使用的模型。
+model = '${LLM_MODEL_INDICATOR}'
+# temperature：指标 Provider 采样温度。
+temperature = 0.2
+
+[llm.provider.structure]
+# model：结构 Provider 使用的模型。
+model = '${LLM_MODEL_STRUCTURE}'
+# temperature：结构 Provider 采样温度。
+temperature = 0.2
+
+[llm.provider.mechanics]
+# model：力学 Provider 使用的模型。
+model = '${LLM_MODEL_MECHANICS}'
+# temperature：力学 Provider 采样温度。
+temperature = 0.2
