@@ -28,7 +28,7 @@ const (
 	maxNewsNodes      = 80
 )
 
-//go:embed index.html styles.css main.js vendor/*.js
+//go:embed index.html styles.css main.js favicon-mask.svg vendor/*.js
 var content embed.FS
 
 type Server struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-//go:embed index.html styles.css main.js
+//go:embed index.html styles.css main.js favicon-mask.svg
 var content embed.FS
 
 type Server struct {
