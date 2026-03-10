@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"brale-core/internal/decision/decisionfmt"
 	"brale-core/internal/pkg/logging"
@@ -15,6 +17,68 @@ import (
 type Manager struct {
 	formatter decisionfmt.Formatter
 	senders   []Sender
+	dedupe    *dedupeGuard
+}
+
+type dedupeGuard struct {
+	mu          sync.Mutex
+	ttl         time.Duration
+	lastCleanup time.Time
+	items       map[string]time.Time
+}
+
+const defaultNotifyDedupeTTL = 90 * time.Second
+
+func newDedupeGuard(ttl time.Duration) *dedupeGuard {
+	if ttl <= 0 {
+		ttl = defaultNotifyDedupeTTL
+	}
+	return &dedupeGuard{ttl: ttl, items: make(map[string]time.Time)}
+}
+
+func (d *dedupeGuard) shouldSkip(key string, now time.Time) bool {
+	if d == nil {
+		return false
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.cleanupLocked(now)
+	if ts, ok := d.items[key]; ok {
+		if now.Sub(ts) <= d.ttl {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *dedupeGuard) remember(key string, now time.Time) {
+	if d == nil {
+		return
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.items[key] = now
+	d.cleanupLocked(now)
+}
+
+func (d *dedupeGuard) cleanupLocked(now time.Time) {
+	if d.lastCleanup.IsZero() || now.Sub(d.lastCleanup) >= d.ttl {
+		expireBefore := now.Add(-d.ttl)
+		for k, ts := range d.items {
+			if ts.Before(expireBefore) {
+				delete(d.items, k)
+			}
+		}
+		d.lastCleanup = now
+	}
 }
 
 type NopNotifier struct{}
@@ -93,7 +157,7 @@ func NewManager(cfg NotificationConfig, formatter decisionfmt.Formatter) (Notifi
 	if len(senders) == 0 {
 		return nil, fmt.Errorf("notification enabled but no channel configured")
 	}
-	return Manager{formatter: formatter, senders: senders}, nil
+	return Manager{formatter: formatter, senders: senders, dedupe: newDedupeGuard(defaultNotifyDedupeTTL)}, nil
 }
 
 func (m Manager) SendGate(ctx context.Context, report decisionfmt.DecisionReport) error {
@@ -119,7 +183,8 @@ func (m Manager) SendGate(ctx context.Context, report decisionfmt.DecisionReport
 		HTML:     html,
 		Plain:    plain,
 	}
-	return m.send(ctx, msg)
+	key := fmt.Sprintf("gate:%s:%d:%s:%s", strings.TrimSpace(report.Symbol), report.SnapshotID, strings.TrimSpace(report.Gate.Overall.DecisionAction), strings.TrimSpace(report.Gate.Overall.ReasonCode))
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendStartup(ctx context.Context) error {
@@ -128,7 +193,7 @@ func (m Manager) SendStartup(ctx context.Context) error {
 		Markdown: startupMessage,
 		Plain:    startupMessage,
 	}
-	return m.send(ctx, msg)
+	return m.sendWithKey(ctx, msg, "startup")
 }
 
 func (m Manager) SendPositionOpen(ctx context.Context, notice PositionOpenNotice) error {
@@ -179,7 +244,13 @@ func (m Manager) SendPositionOpen(ctx context.Context, notice PositionOpenNotice
 		Markdown: body,
 		Plain:    body,
 	}
-	return m.send(ctx, msg)
+	key := strings.TrimSpace(notice.PositionID)
+	if key != "" {
+		key = "position_open:" + key
+	} else {
+		key = fmt.Sprintf("position_open:%s:%s:%s:%s", symbol, strings.ToUpper(direction), entryText, qtyText)
+	}
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNotice) error {
@@ -248,7 +319,13 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 		Markdown: body,
 		Plain:    body,
 	}
-	return m.send(ctx, msg)
+	key := strings.TrimSpace(notice.PositionID)
+	if key != "" {
+		key = "position_close:" + key
+	} else {
+		key = fmt.Sprintf("position_close:%s:%s:%s:%s:%s", symbol, strings.ToUpper(direction), closeQtyText, triggerText, reasonText)
+	}
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCloseSummaryNotice) error {
@@ -316,7 +393,13 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 		Markdown: body,
 		Plain:    body,
 	}
-	return m.send(ctx, msg)
+	key := strings.TrimSpace(notice.PositionID)
+	if key != "" {
+		key = "position_closed_summary:" + key
+	} else {
+		key = fmt.Sprintf("position_closed_summary:%s:%s:%s:%s", symbol, strings.ToUpper(direction), exitText, pnlPctText)
+	}
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNotice) error {
@@ -427,7 +510,13 @@ func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNo
 		Markdown: body,
 		Plain:    body,
 	}
-	return m.send(ctx, msg)
+	key := strings.TrimSpace(notice.PositionID)
+	if key != "" {
+		key = "risk_plan_update:" + key + ":" + sourceText + ":" + newStopText
+	} else {
+		key = fmt.Sprintf("risk_plan_update:%s:%s:%s:%s", symbol, strings.ToUpper(direction), sourceText, newStopText)
+	}
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendTradeOpen(ctx context.Context, notice TradeOpenNotice) error {
@@ -458,7 +547,8 @@ func (m Manager) SendTradeOpen(ctx context.Context, notice TradeOpenNotice) erro
 	body := strings.Join(lines, "\n")
 	body = prependNoticeHeader("📈 开仓通知", body)
 	msg := Message{Title: title, Markdown: body, Plain: body}
-	return m.send(ctx, msg)
+	key := fmt.Sprintf("trade_open:%s:%d:%d", pair, notice.TradeID, notice.OpenTimestamp)
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialCloseNotice) error {
@@ -495,7 +585,8 @@ func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialC
 	body := strings.Join(lines, "\n")
 	body = prependNoticeHeader("🔄 部分平仓", body)
 	msg := Message{Title: title, Markdown: body, Plain: body}
-	return m.send(ctx, msg)
+	key := fmt.Sprintf("trade_partial_close:%s:%d:%s:%s:%s:%s", pair, notice.TradeID, exitReason, exitType, formatFloat(notice.CloseRate), formatFloat(notice.Amount))
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSummaryNotice) error {
@@ -537,7 +628,8 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 	body := strings.Join(lines, "\n")
 	body = prependNoticeHeader("📉 全部平仓完成", body)
 	msg := Message{Title: title, Markdown: body, Plain: body}
-	return m.send(ctx, msg)
+	key := fmt.Sprintf("trade_close_summary:%s:%d:%s:%s", pair, notice.TradeID, exitReason, exitType)
+	return m.sendWithKey(ctx, msg, key)
 }
 
 func (m Manager) SendError(ctx context.Context, message string) error {
@@ -596,11 +688,28 @@ func formatPercent(value float64) string {
 }
 
 func (m Manager) send(ctx context.Context, msg Message) error {
+	return m.sendWithKey(ctx, msg, "")
+}
+
+func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string) error {
+	now := time.Now()
+	if m.dedupe != nil {
+		if m.dedupe.shouldSkip(dedupeKey, now) {
+			logging.FromContext(ctx).Named("notify").Debug("notify skipped (dedupe)", zap.String("key", strings.TrimSpace(dedupeKey)), zap.String("title", strings.TrimSpace(msg.Title)))
+			return nil
+		}
+	}
 	errDetails := make([]string, 0)
+	successCount := 0
 	for _, sender := range m.senders {
 		if err := sender.Send(ctx, msg); err != nil {
 			errDetails = append(errDetails, fmt.Sprintf("%T: %v", sender, err))
+			continue
 		}
+		successCount++
+	}
+	if m.dedupe != nil && successCount > 0 {
+		m.dedupe.remember(dedupeKey, now)
 	}
 	if len(errDetails) > 0 {
 		return fmt.Errorf("notify send failed: %d (%s)", len(errDetails), strings.Join(errDetails, "; "))
