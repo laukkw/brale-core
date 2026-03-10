@@ -47,6 +47,8 @@ services:
     env_file:
       - .env
       - ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+    environment:
+      TZ: Asia/Shanghai
     command:
       - "-system"
       - "/app/data/system.toml"

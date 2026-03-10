@@ -32,9 +32,12 @@ ENV NO_PROXY=${NO_PROXY}
 ENV http_proxy=${HTTP_PROXY}
 ENV https_proxy=${HTTPS_PROXY}
 ENV no_proxy=${NO_PROXY}
+ENV TZ=Asia/Shanghai
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl tzdata \
+    && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime \
+    && echo ${TZ} > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
