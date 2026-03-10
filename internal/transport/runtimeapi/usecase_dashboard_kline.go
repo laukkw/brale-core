@@ -100,9 +100,9 @@ func (u dashboardKlineUsecase) build(ctx context.Context, rawSymbol, rawInterval
 	if u.now != nil {
 		now = u.now().UTC()
 	}
-	closed := filterClosedCandles(candles, dur, now)
-	if len(closed) > effectiveLimit {
-		closed = closed[len(closed)-effectiveLimit:]
+	visible := filterVisibleCandles(candles, dur, now)
+	if len(visible) > effectiveLimit {
+		visible = visible[len(visible)-effectiveLimit:]
 	}
 
 	resp := DashboardKlineResponse{
@@ -110,7 +110,7 @@ func (u dashboardKlineUsecase) build(ctx context.Context, rawSymbol, rawInterval
 		Symbol:   resolved.Symbol,
 		Interval: requestedInterval,
 		Limit:    effectiveLimit,
-		Candles:  mapDashboardCandles(closed, dur),
+		Candles:  mapDashboardCandles(visible, dur),
 		Summary:  dashboardContractSummary,
 	}
 	u.storeCache(cacheKey, resp)
@@ -159,11 +159,11 @@ func klineCacheTTL(intervalValue string) time.Duration {
 		return 5 * time.Second
 	}
 	ttl := dur / 10
-	if ttl < 3*time.Second {
-		ttl = 3 * time.Second
+	if ttl < 10*time.Second {
+		ttl = 10 * time.Second
 	}
-	if ttl > 20*time.Second {
-		ttl = 20 * time.Second
+	if ttl > 60*time.Second {
+		ttl = 60 * time.Second
 	}
 	return ttl
 }
@@ -189,18 +189,19 @@ func normalizedIntervals(intervals []string) []string {
 	return out
 }
 
-func filterClosedCandles(candles []snapshot.Candle, dur time.Duration, now time.Time) []snapshot.Candle {
-	closed := make([]snapshot.Candle, 0, len(candles))
+func filterVisibleCandles(candles []snapshot.Candle, dur time.Duration, now time.Time) []snapshot.Candle {
+	visible := make([]snapshot.Candle, 0, len(candles))
 	for _, candle := range candles {
 		if candle.OpenTime <= 0 {
 			continue
 		}
-		if time.UnixMilli(candle.OpenTime).UTC().Add(dur).After(now) {
+		openAt := time.UnixMilli(candle.OpenTime).UTC()
+		if openAt.After(now.Add(dur)) {
 			continue
 		}
-		closed = append(closed, candle)
+		visible = append(visible, candle)
 	}
-	return closed
+	return visible
 }
 
 func mapDashboardCandles(candles []snapshot.Candle, dur time.Duration) []DashboardCandle {

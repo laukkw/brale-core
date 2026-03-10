@@ -1,7 +1,7 @@
 const dashboardBase = String(window.__DASHBOARD_BASE__ || "/dashboard").replace(/\/$/, "");
 const apiBase = "/api/runtime/dashboard";
 const runtimeBase = "/api/runtime";
-const refreshMs = 15000;
+const refreshMs = 60000;
 const fetchTimeoutMs = 12000;
 
 const state = {
@@ -544,6 +544,19 @@ function renderKline(payload, flow) {
     els.klinePriceTags.innerHTML = tags.join("");
   }
 
+  function formatBeijingTime(value) {
+    const ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return "--";
+    }
+    return new Date(ts).toLocaleTimeString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
   c.setOption({
     backgroundColor: "transparent",
     grid: { left: 45, right: 168, top: 28, bottom: 30 },
@@ -566,10 +579,17 @@ function renderKline(payload, flow) {
       data: labels,
       boundaryGap: true,
       axisLine: { lineStyle: { color: "#8ea2bb" } },
+      axisPointer: {
+        label: {
+          formatter(params) {
+            return formatBeijingTime(params && params.value);
+          }
+        }
+      },
       axisLabel: {
         color: "#9caec6",
         formatter(value) {
-          return new Date(Number(value)).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" });
+          return formatBeijingTime(value);
         }
       }
     },
