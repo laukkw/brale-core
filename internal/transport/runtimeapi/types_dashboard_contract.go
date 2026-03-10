@@ -122,6 +122,7 @@ type DashboardFlowTrace struct {
 
 type DashboardFlowStageValues struct {
 	Stage  string                    `json:"stage"`
+	Mode   string                    `json:"mode,omitempty"`
 	Source string                    `json:"source"`
 	Values []DashboardFlowValueField `json:"values,omitempty"`
 }

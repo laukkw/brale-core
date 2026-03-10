@@ -230,6 +230,8 @@ function renderFlow(flow) {
   const providerIndicator = findStage(trace.providers, "indicator");
   const providerStructure = findStage(trace.providers, "structure");
   const providerMechanics = findStage(trace.providers, "mechanics");
+  const providerMode = String((providerIndicator && providerIndicator.mode) || (providerStructure && providerStructure.mode) || (providerMechanics && providerMechanics.mode) || "standard").toLowerCase();
+  const providerTitlePrefix = providerMode === "in_position" ? "InPositionProvider" : "Provider";
 
   function providerStatus(stage) {
     const values = stage && Array.isArray(stage.values) ? stage.values : [];
@@ -240,9 +242,9 @@ function renderFlow(flow) {
     node("agent-indicator", "flow-pos-agent-indicator", "ok", "Agent/indicator", summarizeStageValues(agentIndicator && agentIndicator.values), agentIndicator && agentIndicator.values, ""),
     node("agent-structure", "flow-pos-agent-structure", "ok", "Agent/structure", summarizeStageValues(agentStructure && agentStructure.values), agentStructure && agentStructure.values, ""),
     node("agent-mechanics", "flow-pos-agent-mechanics", "ok", "Agent/mechanics", summarizeStageValues(agentMechanics && agentMechanics.values), agentMechanics && agentMechanics.values, ""),
-    node("provider-indicator", "flow-pos-provider-indicator", providerStatus(providerIndicator), "Provider/indicator", summarizeStageValues(providerIndicator && providerIndicator.values), providerIndicator && providerIndicator.values, providerStatus(providerIndicator) === "blocked" ? "provider blocked by indicator rules" : ""),
-    node("provider-structure", "flow-pos-provider-structure", providerStatus(providerStructure), "Provider/structure", summarizeStageValues(providerStructure && providerStructure.values), providerStructure && providerStructure.values, providerStatus(providerStructure) === "blocked" ? "provider blocked by structure rules" : ""),
-    node("provider-mechanics", "flow-pos-provider-mechanics", providerStatus(providerMechanics), "Provider/mechanics", summarizeStageValues(providerMechanics && providerMechanics.values), providerMechanics && providerMechanics.values, providerStatus(providerMechanics) === "blocked" ? "provider blocked by mechanics rules" : "")
+    node("provider-indicator", "flow-pos-provider-indicator", providerStatus(providerIndicator), `${providerTitlePrefix}/indicator`, summarizeStageValues(providerIndicator && providerIndicator.values), providerIndicator && providerIndicator.values, providerStatus(providerIndicator) === "blocked" ? "provider blocked by indicator rules" : ""),
+    node("provider-structure", "flow-pos-provider-structure", providerStatus(providerStructure), `${providerTitlePrefix}/structure`, summarizeStageValues(providerStructure && providerStructure.values), providerStructure && providerStructure.values, providerStatus(providerStructure) === "blocked" ? "provider blocked by structure rules" : ""),
+    node("provider-mechanics", "flow-pos-provider-mechanics", providerStatus(providerMechanics), `${providerTitlePrefix}/mechanics`, summarizeStageValues(providerMechanics && providerMechanics.values), providerMechanics && providerMechanics.values, providerStatus(providerMechanics) === "blocked" ? "provider blocked by mechanics rules" : "")
   ];
 
   if (inPosition && inPosition.active) {

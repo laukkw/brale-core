@@ -55,7 +55,7 @@ func (u dashboardFlowUsecase) build(ctx context.Context, rawSymbol string) (Dash
 	}
 
 	anchor := resolveDashboardFlowAnchor(pos, isOpen, gates)
-	gateway := selectAnchorGate(anchor.SnapshotID, gates)
+	gateway := selectLatestFlowGate(gates)
 
 	providers := []store.ProviderEventRecord{}
 	agents := []store.AgentEventRecord{}
@@ -75,9 +75,11 @@ func (u dashboardFlowUsecase) build(ctx context.Context, rawSymbol string) (Dash
 		tighten = resolveDashboardTightenFromRiskHistory(ctx, u.store, pos)
 	}
 
-	nodes := buildDashboardFlowNodes(providers, agents, gateway, tighten)
+	preferInPositionProvider := shouldPreferInPositionProvider(isOpen, gateway)
+	providerByRole, providerInPositionMode := mapByProviderRoleWithMode(providers, preferInPositionProvider)
+	nodes := buildDashboardFlowNodes(providerByRole, providerInPositionMode, agents, gateway, tighten)
 	intervals := u.resolveSymbolIntervals(normalizedSymbol)
-	trace := buildDashboardFlowTrace(providers, agents, gateway, pos, isOpen)
+	trace := buildDashboardFlowTrace(providerByRole, providerInPositionMode, agents, gateway, pos, isOpen)
 
 	return DashboardDecisionFlowResponse{
 		Status: "ok",
@@ -93,10 +95,10 @@ func (u dashboardFlowUsecase) build(ctx context.Context, rawSymbol string) (Dash
 	}, nil
 }
 
-func buildDashboardFlowTrace(providers []store.ProviderEventRecord, agents []store.AgentEventRecord, gate *store.GateEventRecord, pos store.PositionRecord, isOpen bool) DashboardFlowTrace {
+func buildDashboardFlowTrace(providerByRole map[string]store.ProviderEventRecord, providerInPositionMode bool, agents []store.AgentEventRecord, gate *store.GateEventRecord, pos store.PositionRecord, isOpen bool) DashboardFlowTrace {
 	trace := DashboardFlowTrace{}
 	trace.Agents = buildAgentTrace(agents)
-	trace.Providers = buildProviderTrace(providers)
+	trace.Providers = buildProviderTrace(providerByRole, providerInPositionMode)
 	if isOpen {
 		trace.InPosition = &DashboardFlowInPosition{Active: true, Side: strings.ToLower(strings.TrimSpace(pos.Side))}
 	}
@@ -111,17 +113,20 @@ func buildDashboardFlowTrace(providers []store.ProviderEventRecord, agents []sto
 	return trace
 }
 
-func buildProviderTrace(records []store.ProviderEventRecord) []DashboardFlowStageValues {
+func buildProviderTrace(providerByRole map[string]store.ProviderEventRecord, inPositionMode bool) []DashboardFlowStageValues {
 	ordered := []string{"indicator", "structure", "mechanics"}
-	latest := mapByProviderRole(records)
 	out := make([]DashboardFlowStageValues, 0, len(ordered))
+	mode := "standard"
+	if inPositionMode {
+		mode = "in_position"
+	}
 	for _, role := range ordered {
-		rec, ok := latest[role]
+		rec, ok := providerByRole[role]
 		if !ok {
 			continue
 		}
 		fields := extractTraceFields([]byte(rec.OutputJSON))
-		out = append(out, DashboardFlowStageValues{Stage: role, Source: strings.TrimSpace(rec.ProviderID), Values: fields})
+		out = append(out, DashboardFlowStageValues{Stage: role, Mode: mode, Source: strings.TrimSpace(rec.ProviderID), Values: fields})
 	}
 	return out
 }
@@ -264,17 +269,31 @@ func selectAnchorGate(anchorSnapshotID uint, gates []store.GateEventRecord) *sto
 	return nil
 }
 
-func buildDashboardFlowNodes(providers []store.ProviderEventRecord, agents []store.AgentEventRecord, gate *store.GateEventRecord, tighten *DashboardTightenInfo) []DashboardFlowNode {
-	nodes := make([]DashboardFlowNode, 0, 10)
+func selectLatestFlowGate(gates []store.GateEventRecord) *store.GateEventRecord {
+	if len(gates) == 0 {
+		return nil
+	}
+	for idx := range gates {
+		if gates[idx].SnapshotID > 0 {
+			return &gates[idx]
+		}
+	}
+	return &gates[0]
+}
 
-	providerByRole := mapByProviderRole(providers)
+func buildDashboardFlowNodes(providerByRole map[string]store.ProviderEventRecord, providerInPositionMode bool, agents []store.AgentEventRecord, gate *store.GateEventRecord, tighten *DashboardTightenInfo) []DashboardFlowNode {
+	nodes := make([]DashboardFlowNode, 0, 10)
+	providerTitlePrefix := "Provider"
+	if providerInPositionMode {
+		providerTitlePrefix = "InPositionProvider"
+	}
 	for _, role := range dashboardFlowOrderedRoles {
 		rec, ok := providerByRole[role]
 		if !ok {
-			nodes = append(nodes, DashboardFlowNode{Stage: "gap", Title: fmt.Sprintf("Provider/%s", role), Outcome: "missing_provider_stage"})
+			nodes = append(nodes, DashboardFlowNode{Stage: "gap", Title: fmt.Sprintf("%s/%s", providerTitlePrefix, role), Outcome: "missing_provider_stage"})
 			continue
 		}
-		nodes = append(nodes, DashboardFlowNode{Stage: "provider", Title: fmt.Sprintf("Provider/%s", role), Outcome: summarizeProviderOutcome(rec)})
+		nodes = append(nodes, DashboardFlowNode{Stage: "provider", Title: fmt.Sprintf("%s/%s", providerTitlePrefix, role), Outcome: summarizeProviderOutcome(rec)})
 	}
 
 	agentByStage := mapByAgentStage(agents)
@@ -305,19 +324,63 @@ func buildDashboardFlowNodes(providers []store.ProviderEventRecord, agents []sto
 	return nodes
 }
 
-func mapByProviderRole(providers []store.ProviderEventRecord) map[string]store.ProviderEventRecord {
-	out := make(map[string]store.ProviderEventRecord, len(providers))
+func mapByProviderRoleWithMode(providers []store.ProviderEventRecord, preferInPosition bool) (map[string]store.ProviderEventRecord, bool) {
+	standard := make(map[string]store.ProviderEventRecord, len(providers))
+	inPosition := make(map[string]store.ProviderEventRecord, len(providers))
 	for _, rec := range providers {
-		key := normalizeFlowStageKey(rec.Role)
+		key, inPositionRole := parseProviderRole(rec.Role)
 		if key == "" {
 			continue
 		}
-		existing, ok := out[key]
+		target := standard
+		if inPositionRole {
+			target = inPosition
+		}
+		existing, ok := target[key]
 		if !ok || rec.Timestamp > existing.Timestamp {
-			out[key] = rec
+			target[key] = rec
 		}
 	}
-	return out
+	if preferInPosition {
+		if len(inPosition) > 0 {
+			return inPosition, true
+		}
+		return standard, false
+	}
+	if len(standard) > 0 {
+		return standard, false
+	}
+	if len(inPosition) > 0 {
+		return inPosition, true
+	}
+	return map[string]store.ProviderEventRecord{}, false
+}
+
+func parseProviderRole(raw string) (stage string, inPosition bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if trimmed == "" {
+		return "", false
+	}
+	inPosition = strings.Contains(trimmed, "in_position") || strings.Contains(trimmed, "inposition")
+	return normalizeFlowStageKey(trimmed), inPosition
+}
+
+func shouldPreferInPositionProvider(isOpen bool, gate *store.GateEventRecord) bool {
+	if !isOpen {
+		return false
+	}
+	if gate == nil {
+		return true
+	}
+	action := strings.ToUpper(strings.TrimSpace(gate.DecisionAction))
+	switch action {
+	case "ALLOW", "OPEN", "ENTRY", "LONG", "SHORT", "BUY", "SELL":
+		return false
+	case "TIGHTEN", "HOLD", "MANAGE", "KEEP", "WAIT", "SKIP":
+		return true
+	default:
+		return true
+	}
 }
 
 func mapByAgentStage(agents []store.AgentEventRecord) map[string]store.AgentEventRecord {
