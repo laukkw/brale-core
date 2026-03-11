@@ -7,7 +7,7 @@ rule_chain = "configs/rules/default.json"
 # A. 基础风险参数（Base Risk）
 # ==============================
 # 单笔风险占比（账户权益占比）
-risk_per_trade_pct = 0.05
+risk_per_trade_pct = 0.01
 
 # 最大可用资金占比
 max_invest_pct = 0.5
@@ -88,14 +88,14 @@ structure_interval = "1h"
 # - take_profit_rr (每项>0，至少 1 项)
 # 注意：若不显式配置，系统会用默认值；建议显式写出，便于审计与调参
 # ATR 止损倍数。例：2.0 表示 ATR*2 作为候选止损距离
-stop_atr_multiplier = 2.0
+stop_atr_multiplier = 2
 # 最小止损距离百分比。例：0.008 = 入场价的 0.8%
 stop_min_distance_pct = 0.008
 # 止盈 R 倍数数组。例：[1.0, 2.0] => TP1=1R, TP2=2R
-take_profit_rr = [1, 1.5]
+take_profit_rr = [1, 2]
 # [可选] 分批止盈比例，长度需与 take_profit_rr 一致；会自动归一化
 # 例：[0.5, 0.5] => 两档各平 50%
-take_profit_ratios = [0.7, 0.3]
+take_profit_ratios = [0.6, 0.4]
 # [仅 structure_tp_v1] 可选结构位缓冲
 # long: TP = structure_level*(1-buffer)；short: TP = structure_level*(1+buffer)
 # 字段解释：
