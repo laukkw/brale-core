@@ -114,6 +114,10 @@ slippage_buffer_pct = 0.0005
 [risk_management.tighten_atr]
 # 结构受损/支撑测试 -> 0.5 ATR
 structure_threatened = 0.5
+tp1_atr = 0.0
+tp2_atr = 0.0
+min_tp_distance_pct = 0.0
+min_tp_gap_pct = 0.0
 
 # 持仓风控最小更新间隔（秒）；0 表示关闭防抖
 min_update_interval_sec = 300

@@ -473,6 +473,18 @@ func validateRiskManagementTighten(cfg RiskManagementConfig) error {
 	if cfg.TightenATR.StructureThreatened <= 0 {
 		return validationErrorf("risk_management.tighten_atr.structure_threatened must be > 0")
 	}
+	if cfg.TightenATR.TP1ATR < 0 {
+		return validationErrorf("risk_management.tighten_atr.tp1_atr must be >= 0")
+	}
+	if cfg.TightenATR.TP2ATR < 0 {
+		return validationErrorf("risk_management.tighten_atr.tp2_atr must be >= 0")
+	}
+	if cfg.TightenATR.MinTPDistancePct < 0 || cfg.TightenATR.MinTPDistancePct >= 1 {
+		return validationErrorf("risk_management.tighten_atr.min_tp_distance_pct must be in [0,1)")
+	}
+	if cfg.TightenATR.MinTPGapPct < 0 || cfg.TightenATR.MinTPGapPct >= 1 {
+		return validationErrorf("risk_management.tighten_atr.min_tp_gap_pct must be in [0,1)")
+	}
 	if cfg.TightenATR.MinUpdateIntervalSec < 0 {
 		return validationErrorf("risk_management.tighten_atr.min_update_interval_sec must be >= 0")
 	}

@@ -204,6 +204,10 @@ type InitialExitConfig struct {
 
 type TightenATRConfig struct {
 	StructureThreatened  float64 `mapstructure:"structure_threatened"`
+	TP1ATR               float64 `mapstructure:"tp1_atr"`
+	TP2ATR               float64 `mapstructure:"tp2_atr"`
+	MinTPDistancePct     float64 `mapstructure:"min_tp_distance_pct"`
+	MinTPGapPct          float64 `mapstructure:"min_tp_gap_pct"`
 	MinUpdateIntervalSec int64   `mapstructure:"min_update_interval_sec"`
 }
 
