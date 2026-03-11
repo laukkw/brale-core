@@ -313,42 +313,126 @@ function fmtShortTime(value) {
   });
 }
 
-function renderRiskPlanTimeline(items) {
+const INITIAL_RISK_TIMELINE_SOURCES = new Set(["entry-fill", "open-fill", "init", "init_from_plan"]);
+
+function riskValuesEqual(left, right) {
+  const a = Number(left);
+  const b = Number(right);
+  if (!Number.isFinite(a) && !Number.isFinite(b)) {
+    return true;
+  }
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    return false;
+  }
+  return Math.abs(a - b) < 1e-8;
+}
+
+function isSameRiskPlanVersion(left, right) {
+  if (!riskValuesEqual(left && left.stop_loss, right && right.stop_loss)) {
+    return false;
+  }
+  const leftTPs = Array.isArray(left && left.take_profits) ? left.take_profits : [];
+  const rightTPs = Array.isArray(right && right.take_profits) ? right.take_profits : [];
+  if (leftTPs.length !== rightTPs.length) {
+    return false;
+  }
+  for (let i = 0; i < leftTPs.length; i += 1) {
+    if (!riskValuesEqual(leftTPs[i], rightTPs[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeRiskTimelineItems(items) {
   const rows = Array.isArray(items) ? items : [];
   if (rows.length === 0) {
+    return [];
+  }
+  const normalized = rows.map((item, index) => {
+    const createdAt = String(item && item.created_at ? item.created_at : "").trim();
+    const ts = Date.parse(createdAt);
+    return {
+      ...item,
+      __idx: index,
+      __ts: Number.isFinite(ts) ? ts : Number.NaN
+    };
+  });
+  normalized.sort((a, b) => {
+    const aValid = Number.isFinite(a.__ts);
+    const bValid = Number.isFinite(b.__ts);
+    if (aValid && bValid && a.__ts !== b.__ts) {
+      return a.__ts - b.__ts;
+    }
+    if (aValid && !bValid) {
+      return -1;
+    }
+    if (!aValid && bValid) {
+      return 1;
+    }
+    return a.__idx - b.__idx;
+  });
+  const deduped = [];
+  normalized.forEach((item) => {
+    if (deduped.length === 0 || !isSameRiskPlanVersion(deduped[deduped.length - 1], item)) {
+      deduped.push(item);
+    }
+  });
+  return deduped;
+}
+
+function isInitialRiskTimelineItem(item) {
+  const source = String(item && item.source ? item.source : "").trim().toLowerCase();
+  return INITIAL_RISK_TIMELINE_SOURCES.has(source);
+}
+
+function renderRiskTakeProfitPills(values) {
+  const takeProfits = Array.isArray(values) ? values : [];
+  if (takeProfits.length === 0) {
+    return `<span class="risk-version-empty">--</span>`;
+  }
+  return takeProfits
+    .map((price, index) => `<span class="risk-tp-pill">TP${index + 1} ${fmtNumber(Number(price))}</span>`)
+    .join("");
+}
+
+function renderRiskPlanTimeline(items) {
+  const versions = normalizeRiskTimelineItems(items);
+  if (versions.length === 0) {
+    return "";
+  }
+  if (versions.length === 1 && isInitialRiskTimelineItem(versions[0])) {
     return "";
   }
   return `<div class="position-hold-panel" data-hold-panel>
     <div class="position-hold-head">
       <strong>止盈止损变化</strong>
-      <span>按住查看，松手收起</span>
+      <span>${versions.length} 个版本，从旧到新</span>
     </div>
     <div class="position-hold-timeline">
-      ${rows.map((item, index) => {
-        const takeProfits = Array.isArray(item.take_profits) ? item.take_profits : [];
-        const previousTakeProfits = Array.isArray(item.previous_take_profits) ? item.previous_take_profits : [];
-        const leadTP = takeProfits.length > 0 ? fmtNumber(Number(takeProfits[0])) : "--";
-        const previousLeadTP = previousTakeProfits.length > 0 ? fmtNumber(Number(previousTakeProfits[0])) : "--";
-        const previousStop = fmtNumber(Number(item.previous_stop_loss));
-        const changeType = index === rows.length - 1 ? "initial" : "changed";
-        return `<article class="risk-change-card ${index === 0 ? "latest" : ""}">
-          <div class="risk-change-top">
-            <span class="risk-change-label">${escapeHtml(item.label || item.source || "风险计划")}</span>
+      ${versions.map((item, index) => {
+        const isCurrent = index === versions.length - 1;
+        const card = `<article class="risk-version-card ${isCurrent ? "current" : ""}">
+          <div class="risk-version-top">
+            <span class="risk-version-label">${escapeHtml(isCurrent ? "当前版本" : `版本 ${index + 1}`)}</span>
             <em>${escapeHtml(fmtShortTime(item.created_at))}</em>
           </div>
-          <div class="risk-change-delta ${changeType}">${changeType === "initial" ? "初始版本" : "从上一版调整"}</div>
-          <div class="risk-change-values diff">
-            <div class="risk-change-metric stop">
-              <span>Stop Loss</span>
-              <strong>${escapeHtml(previousStop)} <b class="risk-change-arrow">-&gt;</b> ${fmtNumber(Number(item.stop_loss))}</strong>
+          <div class="risk-version-values">
+            <div class="risk-version-metric stop">
+              <span>止损 SL</span>
+              <strong>${fmtNumber(Number(item.stop_loss))}</strong>
             </div>
-            <div class="risk-change-metric tp">
-              <span>TP1</span>
-              <strong>${escapeHtml(previousLeadTP)} <b class="risk-change-arrow">-&gt;</b> ${escapeHtml(leadTP)}</strong>
+            <div class="risk-version-metric tp">
+              <span>止盈 TP</span>
+              <div class="risk-version-tp-list">${renderRiskTakeProfitPills(item.take_profits)}</div>
             </div>
           </div>
-          <div class="risk-change-foot">${escapeHtml(String(item.source || "risk_update"))}</div>
+          <div class="risk-version-foot">${escapeHtml(String(item.label || item.source || "risk_update"))}</div>
         </article>`;
+        if (index === versions.length - 1) {
+          return card;
+        }
+        return `${card}<span class="risk-version-link" aria-hidden="true"></span>`;
       }).join("")}
     </div>
   </div>`;
@@ -400,7 +484,8 @@ function renderLivePositions(cards) {
     .map((card) => {
       const position = card.position || {};
       const timeline = Array.isArray(position.risk_plan_timeline) ? position.risk_plan_timeline : [];
-      const holdable = timeline.length > 0;
+      const timelineMarkup = renderRiskPlanTimeline(timeline);
+      const holdable = timelineMarkup !== "";
       const pnl = card.pnl || {};
       const realizedClass = Number(pnl.realized) >= 0 ? "positive" : "negative";
       const unrealizedClass = Number(pnl.unrealized) >= 0 ? "positive" : "negative";
@@ -408,7 +493,7 @@ function renderLivePositions(cards) {
         <div class="position-head">
           <div>
             <div class="position-symbol">${escapeHtml(card.symbol)}</div>
-            ${holdable ? `<div class="position-hold-hint">按住查看风控变化</div>` : ""}
+            ${holdable ? `<div class="position-hold-hint">按住查看止盈止损版本</div>` : ""}
           </div>
           <span class="side-chip">${escapeHtml(position.side || "--")}</span>
         </div>
@@ -422,7 +507,7 @@ function renderLivePositions(cards) {
           <div class="metric"><span class="k">未实现盈亏</span><span class="v ${unrealizedClass}">${fmtUsd(Number(pnl.unrealized))}</span></div>
           <div class="metric"><span class="k">合计盈亏</span><span class="v ${Number(pnl.total) >= 0 ? "positive" : "negative"}">${fmtUsd(Number(pnl.total || 0))}</span></div>
         </div>
-        ${renderRiskPlanTimeline(timeline)}
+        ${timelineMarkup}
       </article>`;
     })
     .join("");
