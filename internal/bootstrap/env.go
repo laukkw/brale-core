@@ -40,6 +40,9 @@ func bootstrapAppEnv(baseCtx context.Context, systemPath, symbolIndexPath string
 	)
 	ctx := logging.WithLogger(baseCtx, logger)
 	logger.Info("config loaded", zap.String("log_path", logPath), zap.String("persist_mode", sys.PersistMode))
+	if err := configureLLMConcurrency(sys, logger); err != nil {
+		return appEnv{}, err
+	}
 	if err := configureLLMMinInterval(sys, logger); err != nil {
 		return appEnv{}, err
 	}
@@ -58,6 +61,20 @@ func bootstrapAppEnv(baseCtx context.Context, systemPath, symbolIndexPath string
 		index:    index,
 		notifier: notifier,
 	}, nil
+}
+
+func configureLLMConcurrency(sys config.SystemConfig, logger *zap.Logger) error {
+	const defaultLimit = 1
+	modelLimits := make(map[string]int)
+	for model, cfg := range sys.LLMModels {
+		if cfg.Concurrency == nil {
+			continue
+		}
+		modelLimits[model] = *cfg.Concurrency
+	}
+	llm.ConfigureModelConcurrency(defaultLimit, modelLimits)
+	logger.Info("llm model concurrency configured", zap.Int("default_limit", defaultLimit), zap.Int("model_overrides", len(modelLimits)))
+	return nil
 }
 
 func configureLLMMinInterval(sys config.SystemConfig, logger *zap.Logger) error {

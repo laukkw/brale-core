@@ -8,9 +8,12 @@ import (
 	"time"
 )
 
-const defaultMinInterval = 5 * time.Second
+const (
+	defaultMinInterval          = 5 * time.Second
+	defaultSameModelConcurrency = 1
+)
 
-var defaultModelGates = NewModelGateRegistry(1)
+var defaultModelGates = NewModelGateRegistry(defaultSameModelConcurrency)
 
 func init() {
 	defaultModelGates.SetMinInterval(defaultMinInterval)
@@ -28,10 +31,16 @@ func ConfigureMinInterval(min time.Duration) {
 	defaultModelGates.SetMinInterval(min)
 }
 
+func ConfigureModelConcurrency(defaultLimit int, modelLimits map[string]int) {
+	defaultModelGates.SetDefaultLimit(defaultLimit)
+	defaultModelGates.SetModelLimits(modelLimits)
+}
+
 type ModelGateRegistry struct {
 	mu           sync.Mutex
 	defaultLimit int
 	minInterval  time.Duration
+	modelLimits  map[string]int
 	gates        map[string]*modelGate
 }
 
@@ -46,7 +55,30 @@ type modelGate struct {
 
 func NewModelGateRegistry(defaultLimit int) *ModelGateRegistry {
 	defaultLimit = max(1, defaultLimit)
-	return &ModelGateRegistry{defaultLimit: defaultLimit, minInterval: 0, gates: make(map[string]*modelGate)}
+	return &ModelGateRegistry{defaultLimit: defaultLimit, minInterval: 0, modelLimits: make(map[string]int), gates: make(map[string]*modelGate)}
+}
+
+func (r *ModelGateRegistry) SetDefaultLimit(limit int) {
+	if limit <= 0 {
+		limit = 1
+	}
+	r.mu.Lock()
+	r.defaultLimit = limit
+	r.mu.Unlock()
+}
+
+func (r *ModelGateRegistry) SetModelLimits(limits map[string]int) {
+	normalized := make(map[string]int)
+	for key, limit := range limits {
+		gateKey := normalizeGateKey(key)
+		if gateKey == "" {
+			continue
+		}
+		normalized[gateKey] = max(1, limit)
+	}
+	r.mu.Lock()
+	r.modelLimits = normalized
+	r.mu.Unlock()
 }
 
 func (r *ModelGateRegistry) Acquire(ctx context.Context, key string) (func(), error) {
@@ -119,7 +151,11 @@ func (r *ModelGateRegistry) getOrCreate(key string) *modelGate {
 	if g, ok := r.gates[key]; ok {
 		return g
 	}
-	g := &modelGate{sem: make(chan struct{}, r.defaultLimit), minInterval: r.minInterval}
+	limit := r.defaultLimit
+	if configuredLimit, ok := r.modelLimits[key]; ok {
+		limit = configuredLimit
+	}
+	g := &modelGate{sem: make(chan struct{}, limit), minInterval: r.minInterval}
 	r.gates[key] = g
 	return g
 }
