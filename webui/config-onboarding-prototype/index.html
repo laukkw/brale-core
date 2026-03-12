@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brale Config Onboarding</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+  <main class="layout">
+    <aside class="rail">
+      <p class="kicker">Brale 部署引导</p>
+      <h1>配置向导</h1>
+      <p class="lead">集中填写并预览 `.env`、`freqtrade.json`、`symbols/strategies` 配置。</p>
+
+      <div class="progress">
+        <div class="progress-track"><span id="progress-fill"></span></div>
+        <strong id="progress-text">步骤 1 / 5</strong>
+      </div>
+
+      <ol class="step-list" id="step-list">
+        <li class="step active" data-step="0"><span>01</span><div><b>部署基础</b><small>dry-run 与币种</small></div></li>
+        <li class="step" data-step="1"><span>02</span><div><b>交易所与代理</b><small>Freqtrade 凭据</small></div></li>
+        <li class="step" data-step="2"><span>03</span><div><b>LLM 模型</b><small>三路模型参数</small></div></li>
+        <li class="step" data-step="3"><span>04</span><div><b>策略风控</b><small>按币种编辑保存</small></div></li>
+        <li class="step" data-step="4"><span>05</span><div><b>通知与导出</b><small>预览输出</small></div></li>
+      </ol>
+    </aside>
+
+    <section class="panel">
+      <form id="config-form" novalidate>
+        <section class="wizard-step active" data-step="0">
+          <header>
+            <h2>部署基础</h2>
+            <p>运行模式固定为 Dry Run，最大并发仓位固定为 10。</p>
+          </header>
+
+          <div class="grid two">
+            <div class="fixed-box">`dry_run = true`（固定）</div>
+            <div class="fixed-box">`max_open_trades = 10`（固定）</div>
+          </div>
+
+          <fieldset>
+            <legend>监控交易对</legend>
+            <div class="symbol-picks">
+              <label><input type="checkbox" name="symbols" value="ETHUSDT" checked>ETHUSDT</label>
+              <label><input type="checkbox" name="symbols" value="SOLUSDT" checked>SOLUSDT</label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="wizard-step" data-step="1">
+          <header>
+            <h2>交易所与代理</h2>
+            <p>Freqtrade 仅需用户名和密钥；留空时使用 `.env` 对应变量。</p>
+          </header>
+
+          <div class="grid two">
+            <label>Freqtrade 用户名（EXEC_USERNAME）
+              <input name="exec_username" type="text" placeholder="请输入执行端用户名，留空使用 .env" />
+            </label>
+            <label>Freqtrade 密钥（EXEC_SECRET）
+              <input name="exec_secret" type="password" placeholder="请输入执行端密钥，留空使用 .env" />
+            </label>
+          </div>
+
+          <fieldset>
+            <legend>代理设置</legend>
+            <div class="grid three">
+              <label class="inline"><input type="checkbox" name="proxy_enabled">启用代理（PROXY_ENABLED）</label>
+              <label>代理主机（PROXY_HOST）
+                <input name="proxy_host" type="text" placeholder="请输入代理主机，留空默认 host.docker.internal" />
+              </label>
+              <label>代理端口（PROXY_PORT）
+                <input name="proxy_port" type="number" placeholder="请输入代理端口，留空默认 7890" />
+              </label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="wizard-step" data-step="2">
+          <header>
+            <h2>LLM 模型配置</h2>
+            <p>每个输入项均无默认值，请按模型线路分别填写。</p>
+          </header>
+
+          <div class="llm-grid">
+            <article>
+              <h3>Indicator</h3>
+              <label>模型名称
+                <input name="llm_model_indicator" placeholder="请输入指标模型名称" />
+              </label>
+              <label>接口地址
+                <input name="llm_indicator_endpoint" placeholder="请输入指标模型接口地址" />
+              </label>
+              <label>API 密钥
+                <input name="llm_indicator_key" type="password" placeholder="请输入指标模型 API 密钥" />
+              </label>
+            </article>
+
+            <article>
+              <h3>Structure</h3>
+              <label>模型名称
+                <input name="llm_model_structure" placeholder="请输入结构模型名称" />
+              </label>
+              <label>接口地址
+                <input name="llm_structure_endpoint" placeholder="请输入结构模型接口地址" />
+              </label>
+              <label>API 密钥
+                <input name="llm_structure_key" type="password" placeholder="请输入结构模型 API 密钥" />
+              </label>
+            </article>
+
+            <article>
+              <h3>Mechanics</h3>
+              <label>模型名称
+                <input name="llm_model_mechanics" placeholder="请输入力学模型名称" />
+              </label>
+              <label>接口地址
+                <input name="llm_mechanics_endpoint" placeholder="请输入力学模型接口地址" />
+              </label>
+              <label>API 密钥
+                <input name="llm_mechanics_key" type="password" placeholder="请输入力学模型 API 密钥" />
+              </label>
+            </article>
+          </div>
+        </section>
+
+        <section class="wizard-step" data-step="3">
+          <header>
+            <h2>策略风控（按币种）</h2>
+            <p>先选择币种并填写，点击“保存当前币种配置”后再切换到其他币种。</p>
+          </header>
+
+          <div class="symbol-editor-head">
+            <div id="symbol-tabs" class="symbol-tabs" aria-label="币种策略标签"></div>
+            <div class="save-bar">
+              <button type="button" id="save-symbol-btn" class="btn-secondary">保存当前币种配置</button>
+              <span id="save-status" aria-live="polite">未保存</span>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <label>单笔风险占比（账户权益占比）
+              <input id="risk_per_trade_pct" type="number" step="0.1" placeholder="例如 0.5" />
+            </label>
+            <label>最大可用资金占比
+              <input id="max_invest_pct" type="number" step="0.1" placeholder="例如 1.0" />
+            </label>
+            <label>最大有效杠杆（整数）
+              <input id="max_leverage" type="number" min="1" step="1" placeholder="例如 3" />
+            </label>
+
+            <fieldset class="span-2">
+              <legend>拉取的 K 线周期（可多选数组）</legend>
+              <div class="interval-grid">
+                <label><input type="checkbox" name="strategy_intervals" value="5m">5m</label>
+                <label><input type="checkbox" name="strategy_intervals" value="15m">15m</label>
+                <label><input type="checkbox" name="strategy_intervals" value="30m">30m</label>
+                <label><input type="checkbox" name="strategy_intervals" value="1h">1h</label>
+                <label><input type="checkbox" name="strategy_intervals" value="4h">4h</label>
+                <label><input type="checkbox" name="strategy_intervals" value="1d">1d</label>
+              </div>
+            </fieldset>
+
+            <label>B. 入场模式（Entry Mode）
+              <select id="entry_mode">
+                <option value="" selected disabled>请选择入场模式</option>
+                <option value="orderbook">orderbook（按盘口）</option>
+                <option value="atr_offset">atr_offset（ATR 偏移）</option>
+                <option value="market">market（市价）</option>
+              </select>
+            </label>
+
+            <label>C. 出场模式（Exit / TP-SL）
+              <select id="exit_policy">
+                <option value="" selected disabled>请选择出场模式</option>
+                <option value="atr_structure_v1">atr_structure_v1</option>
+                <option value="fixed_rr_v1">fixed_rr_v1</option>
+                <option value="structure_tp_v1">structure_tp_v1</option>
+              </select>
+            </label>
+
+            <label>持仓风控最小更新间隔（秒）
+              <input id="tighten_min_update_interval_sec" type="number" min="0" step="1" placeholder="0 表示关闭防抖" />
+            </label>
+
+            <label>EMA 快线周期（ema_fast）
+              <input id="ema_fast" type="number" min="1" step="1" placeholder="例如 21" />
+            </label>
+            <label>EMA 中线周期（ema_mid）
+              <input id="ema_mid" type="number" min="1" step="1" placeholder="例如 50" />
+            </label>
+            <label>EMA 慢线周期（ema_slow）
+              <input id="ema_slow" type="number" min="1" step="1" placeholder="例如 200" />
+            </label>
+            <label>RSI 计算周期（rsi_period）
+              <input id="rsi_period" type="number" min="1" step="1" placeholder="例如 14" />
+            </label>
+            <label>指标观察窗口（last_n）
+              <input id="last_n" type="number" min="1" step="1" placeholder="例如 5" />
+            </label>
+            <label>MACD 快线周期（macd_fast）
+              <input id="macd_fast" type="number" min="1" step="1" placeholder="例如 12" />
+            </label>
+            <label>MACD 慢线周期（macd_slow）
+              <input id="macd_slow" type="number" min="1" step="1" placeholder="例如 26" />
+            </label>
+            <label>MACD 信号周期（macd_signal）
+              <input id="macd_signal" type="number" min="1" step="1" placeholder="例如 9" />
+            </label>
+          </div>
+        </section>
+
+        <section class="wizard-step" data-step="4">
+          <header>
+            <h2>通知与导出</h2>
+            <p>Telegram / 飞书都可选；不选也可完成。勾选后再填写对应参数。</p>
+          </header>
+
+          <div class="grid two">
+            <label class="inline"><input type="checkbox" id="telegram_enabled" name="telegram_enabled">启用 Telegram 推送</label>
+            <label class="inline"><input type="checkbox" id="feishu_enabled" name="feishu_enabled">启用飞书推送</label>
+          </div>
+
+          <div id="telegram-fields" class="notify-fields hidden">
+            <h3>Telegram 参数</h3>
+            <div class="grid two">
+              <label>NOTIFICATION_TELEGRAM_TOKEN
+                <input name="telegram_token" type="password" placeholder="请输入 Telegram Bot Token" />
+              </label>
+              <label>NOTIFICATION_TELEGRAM_CHAT_ID
+                <input name="telegram_chat_id" type="text" placeholder="请输入 Telegram Chat ID" />
+              </label>
+            </div>
+          </div>
+
+          <div id="feishu-fields" class="notify-fields hidden">
+            <h3>飞书参数</h3>
+            <div class="grid two">
+              <label>NOTIFICATION_FEISHU_APP_ID
+                <input name="feishu_app_id" type="text" placeholder="请输入飞书应用 App ID" />
+              </label>
+              <label>NOTIFICATION_FEISHU_APP_SECRET
+                <input name="feishu_app_secret" type="password" placeholder="请输入飞书应用 App Secret" />
+              </label>
+              <label class="inline"><input type="checkbox" name="feishu_bot_enabled">NOTIFICATION_FEISHU_BOT_ENABLED</label>
+              <label>NOTIFICATION_FEISHU_BOT_MODE
+                <select name="feishu_bot_mode">
+                  <option value="" selected disabled>请选择飞书 Bot 模式</option>
+                  <option value="long_connection">long_connection</option>
+                </select>
+              </label>
+              <label>NOTIFICATION_FEISHU_VERIFICATION_TOKEN
+                <input name="feishu_verification_token" type="text" placeholder="请输入飞书 Verification Token" />
+              </label>
+              <label>NOTIFICATION_FEISHU_ENCRYPT_KEY
+                <input name="feishu_encrypt_key" type="text" placeholder="请输入飞书 Encrypt Key" />
+              </label>
+              <label>NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE
+                <select name="feishu_default_receive_id_type">
+                  <option value="" selected disabled>请选择接收 ID 类型</option>
+                  <option value="chat_id">chat_id</option>
+                  <option value="open_id">open_id</option>
+                  <option value="user_id">user_id</option>
+                  <option value="union_id">union_id</option>
+                </select>
+              </label>
+              <label>NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID
+                <input name="feishu_default_receive_id" type="text" placeholder="请输入默认接收 ID" />
+              </label>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="配置预览">
+            <button type="button" class="tab active" data-tab="env">.env</button>
+            <button type="button" class="tab" data-tab="freq">freqtrade.json</button>
+            <button type="button" class="tab" data-tab="symbol">symbol-config</button>
+            <button type="button" class="tab" data-tab="script">deploy.sh</button>
+          </div>
+          <pre id="preview" aria-live="polite"></pre>
+        </section>
+
+        <footer class="actions">
+          <button type="button" id="prev-btn" class="btn-secondary">上一步</button>
+          <button type="button" id="next-btn" class="btn-primary">下一步</button>
+        </footer>
+      </form>
+    </section>
+  </main>
+
+  <script defer src="./main.js"></script>
+</body>
+</html>
