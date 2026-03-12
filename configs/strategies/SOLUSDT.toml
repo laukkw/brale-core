@@ -116,7 +116,7 @@ slippage_buffer_pct = 0.0005
 # 结构受损/支撑测试 -> 1.5 ATR
 structure_threatened = 1.2
 tp1_atr = 0.8
-tp2_atr = 1.2
+tp2_atr = 1.5
 min_tp_distance_pct = 0.006
 min_tp_gap_pct = 0.005
 

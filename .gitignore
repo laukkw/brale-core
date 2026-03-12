@@ -19,7 +19,17 @@ docs/project_introduction_technical.md
 *_test.go
 AGENTS.md
 
+skills/*
 
+.agents/
+.agent/
+.claude/
+brale-core
+docs/.vite/
+
+skills-lock.json
+scripts/__pycache__/
+docs/presentations/
 /brale-web/
 
 .env
