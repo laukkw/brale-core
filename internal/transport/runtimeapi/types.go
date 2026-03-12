@@ -77,14 +77,17 @@ type TradeHistoryResponse struct {
 }
 
 type TradeHistoryItem struct {
-	Symbol       string    `json:"symbol"`
-	Side         string    `json:"side"`
-	Amount       float64   `json:"amount"`
-	MarginAmount float64   `json:"margin_amount"`
-	OpenedAt     time.Time `json:"opened_at"`
-	ClosedAt     time.Time `json:"closed_at"`
-	DurationSec  int64     `json:"duration_sec"`
-	Profit       float64   `json:"profit"`
+	Symbol       string                          `json:"symbol"`
+	Side         string                          `json:"side"`
+	Amount       float64                         `json:"amount"`
+	MarginAmount float64                         `json:"margin_amount"`
+	OpenedAt     time.Time                       `json:"opened_at"`
+	ClosedAt     time.Time                       `json:"closed_at"`
+	DurationSec  int64                           `json:"duration_sec"`
+	Profit       float64                         `json:"profit"`
+	StopLoss     float64                         `json:"stop_loss,omitempty"`
+	TakeProfits  []float64                       `json:"take_profits,omitempty"`
+	Timeline     []DashboardRiskPlanTimelineItem `json:"risk_plan_timeline,omitempty"`
 }
 
 type DecisionLatestResponse struct {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type portfolioUsecase struct {
 
 type portfolioStore interface {
 	FindPositionBySymbol(ctx context.Context, symbol string, statuses []string) (store.PositionRecord, bool, error)
+	ListPositionsByStatus(ctx context.Context, statuses []string) ([]store.PositionRecord, error)
 	ListRiskPlanHistory(ctx context.Context, positionID string, limit int) ([]store.RiskPlanHistoryRecord, error)
 }
 
@@ -458,6 +460,21 @@ func (u portfolioUsecase) buildTradeHistory(ctx context.Context, limit, offset i
 			return nil, err
 		}
 	}
+
+	positionByExecID := map[string]store.PositionRecord{}
+	if u.store != nil {
+		positions, err := u.store.ListPositionsByStatus(ctx, []string{position.PositionClosed})
+		if err == nil {
+			for _, pos := range positions {
+				execID := strings.TrimSpace(pos.ExecutorPositionID)
+				if execID == "" {
+					continue
+				}
+				positionByExecID[execID] = pos
+			}
+		}
+	}
+
 	items := make([]TradeHistoryItem, 0, len(resp.Trades))
 	for _, tr := range resp.Trades {
 		symbol := normalizeFreqtradePair(tr.Pair)
@@ -487,6 +504,20 @@ func (u portfolioUsecase) buildTradeHistory(ctx context.Context, limit, offset i
 		if tr.IsShort {
 			side = "short"
 		}
+
+		riskState := dashboardRiskState{}
+		if u.store != nil {
+			execID := strconv.Itoa(int(tr.ID))
+			if pos, ok := positionByExecID[execID]; ok {
+				stopLoss, takeProfits, _ := decodeDashboardRiskLevels(pos.RiskJSON)
+				riskState = dashboardRiskState{
+					StopLoss:    stopLoss,
+					TakeProfits: takeProfits,
+					Timeline:    u.lookupRiskPlanTimeline(ctx, pos),
+				}
+			}
+		}
+
 		items = append(items, TradeHistoryItem{
 			Symbol:       symbol,
 			Side:         side,
@@ -496,6 +527,9 @@ func (u portfolioUsecase) buildTradeHistory(ctx context.Context, limit, offset i
 			ClosedAt:     closedAt,
 			DurationSec:  durationSec,
 			Profit:       profit,
+			StopLoss:     riskState.StopLoss,
+			TakeProfits:  riskState.TakeProfits,
+			Timeline:     riskState.Timeline,
 		})
 	}
 	return items, nil
