@@ -14,6 +14,8 @@ import (
 
 var dashboardKlineNow = time.Now
 
+const dashboardKlineCacheTTL = time.Minute
+
 type dashboardKlineCacheEntry struct {
 	createdAt time.Time
 	payload   DashboardKlineResponse
@@ -83,7 +85,7 @@ func (u dashboardKlineUsecase) build(ctx context.Context, rawSymbol, rawInterval
 		effectiveLimit = resolved.KlineLimit
 	}
 	cacheKey := fmt.Sprintf("%s|%s|%d", resolved.Symbol, requestedInterval, effectiveLimit)
-	if cached, ok := u.loadCache(cacheKey, requestedInterval); ok {
+	if cached, ok := u.loadCache(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -117,7 +119,7 @@ func (u dashboardKlineUsecase) build(ctx context.Context, rawSymbol, rawInterval
 	return resp, nil
 }
 
-func (u dashboardKlineUsecase) loadCache(key, intervalValue string) (DashboardKlineResponse, bool) {
+func (u dashboardKlineUsecase) loadCache(key string) (DashboardKlineResponse, bool) {
 	if u.cacheMu == nil || u.cache == nil {
 		return DashboardKlineResponse{}, false
 	}
@@ -131,7 +133,7 @@ func (u dashboardKlineUsecase) loadCache(key, intervalValue string) (DashboardKl
 	if u.now != nil {
 		now = u.now().UTC()
 	}
-	if now.Sub(entry.createdAt) > klineCacheTTL(intervalValue) {
+	if now.Sub(entry.createdAt) > dashboardKlineCacheTTL {
 		u.cacheMu.Lock()
 		delete(u.cache, key)
 		u.cacheMu.Unlock()
@@ -151,21 +153,6 @@ func (u dashboardKlineUsecase) storeCache(key string, payload DashboardKlineResp
 	u.cacheMu.Lock()
 	u.cache[key] = dashboardKlineCacheEntry{createdAt: now, payload: payload}
 	u.cacheMu.Unlock()
-}
-
-func klineCacheTTL(intervalValue string) time.Duration {
-	dur, err := interval.ParseInterval(strings.ToLower(strings.TrimSpace(intervalValue)))
-	if err != nil || dur <= 0 {
-		return 5 * time.Second
-	}
-	ttl := dur / 10
-	if ttl < 10*time.Second {
-		ttl = 10 * time.Second
-	}
-	if ttl > 60*time.Second {
-		ttl = 60 * time.Second
-	}
-	return ttl
 }
 
 func containsInterval(intervals []string, target string) bool {
