@@ -12,6 +12,8 @@ const previewEl = document.getElementById("preview");
 const symbolTabsEl = document.getElementById("symbol-tabs");
 const saveSymbolBtn = document.getElementById("save-symbol-btn");
 const saveStatusEl = document.getElementById("save-status");
+const generateBtn = document.getElementById("generate-btn");
+const generateStatusEl = document.getElementById("generate-status");
 
 const telegramEnabledEl = document.getElementById("telegram_enabled");
 const feishuEnabledEl = document.getElementById("feishu_enabled");
@@ -236,6 +238,8 @@ function payload() {
     proxy_enabled: checked("proxy_enabled"),
     proxy_host: value("proxy_host", "host.docker.internal"),
     proxy_port: toInteger(value("proxy_port", ""), 7890),
+    proxy_scheme: "http",
+    proxy_no_proxy: "localhost,127.0.0.1,brale,freqtrade",
 
     llm_model_indicator: value("llm_model_indicator", "${LLM_MODEL_INDICATOR}"),
     llm_indicator_endpoint: value("llm_indicator_endpoint", "${LLM_INDICATOR_ENDPOINT}"),
@@ -374,6 +378,29 @@ function renderScript(data) {
   ].join("\n");
 }
 
+async function generateConfigs() {
+  generateBtn.disabled = true;
+  generateStatusEl.textContent = "生成中...";
+  try {
+    const resp = await fetch("api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload())
+    });
+    const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+    const result = JSON.parse(text);
+    const files = Array.isArray(result.files) ? result.files.length : 0;
+    generateStatusEl.textContent = `已生成 ${files} 个文件，可直接 make start`;
+  } catch (err) {
+    generateStatusEl.textContent = `生成失败: ${err?.message || err}`;
+  } finally {
+    generateBtn.disabled = false;
+  }
+}
+
 function syncNotifyFields() {
   const telegramOn = telegramEnabledEl.checked;
   const feishuOn = feishuEnabledEl.checked;
@@ -412,7 +439,7 @@ function syncStepUI() {
   progressText.textContent = `步骤 ${currentStep + 1} / ${steps.length}`;
 
   prevBtn.disabled = currentStep === 0;
-  nextBtn.textContent = currentStep === steps.length - 1 ? "回到第一步" : "下一步";
+  nextBtn.textContent = currentStep === steps.length - 1 ? "生成配置文件" : "下一步";
 
   renderPreview();
 }
@@ -424,10 +451,10 @@ prevBtn.addEventListener("click", () => {
 
 nextBtn.addEventListener("click", () => {
   if (currentStep === steps.length - 1) {
-    currentStep = 0;
-  } else {
-    currentStep += 1;
+    generateConfigs();
+    return;
   }
+  currentStep += 1;
   syncStepUI();
 });
 
@@ -487,6 +514,7 @@ telegramEnabledEl.addEventListener("change", renderPreview);
 feishuEnabledEl.addEventListener("change", renderPreview);
 form.addEventListener("input", renderPreview);
 form.addEventListener("change", renderPreview);
+generateBtn.addEventListener("click", generateConfigs);
 
 renderSymbolTabs();
 syncNotifyFields();

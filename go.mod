@@ -17,6 +17,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/bitly/go-simplejson v0.5.0 // indirect
+	github.com/creachadair/tomledit v0.0.28 // indirect
 	github.com/dlclark/regexp2 v1.7.0 // indirect
 	github.com/dop251/goja v0.0.0-20231024180952-594410467bc6 // indirect
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // indirect

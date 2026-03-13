@@ -1,0 +1,59 @@
+symbol = "DEFAULT"
+intervals = [{{ joinQuoted .Intervals }}]
+kline_limit = 300
+
+[agent]
+indicator = true
+structure = true
+mechanics = true
+
+[require]
+oi = true
+funding = true
+long_short = true
+fear_greed = true
+liquidations = false
+
+[indicators]
+ema_fast = {{ .EMAFast }}
+ema_mid = {{ .EMAMid }}
+ema_slow = {{ .EMASlow }}
+rsi_period = {{ .RSIPeriod }}
+atr_period = 14
+macd_fast = {{ .MACDFast }}
+macd_slow = {{ .MACDSlow }}
+macd_signal = {{ .MACDSignal }}
+last_n = {{ .LastN }}
+pretty = false
+
+[consensus]
+score_threshold = 0.35
+confidence_threshold = 0.52
+
+[cooldown]
+enabled = false
+entry_cooldown_sec = 120
+
+[llm.agent.indicator]
+model = '${LLM_MODEL_INDICATOR}'
+temperature = 0.2
+
+[llm.agent.structure]
+model = '${LLM_MODEL_STRUCTURE}'
+temperature = 0.2
+
+[llm.agent.mechanics]
+model = '${LLM_MODEL_MECHANICS}'
+temperature = 0.2
+
+[llm.provider.indicator]
+model = '${LLM_MODEL_INDICATOR}'
+temperature = 0.2
+
+[llm.provider.structure]
+model = '${LLM_MODEL_STRUCTURE}'
+temperature = 0.2
+
+[llm.provider.mechanics]
+model = '${LLM_MODEL_MECHANICS}'
+temperature = 0.2

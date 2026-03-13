@@ -1,0 +1,88 @@
+log_format = "text"
+log_level = "info"
+log_path = "./data/brale-core.log"
+db_path = "./data/brale-core.db"
+persist_mode = "minimal"
+execution_system = "freqtrade"
+exec_endpoint = "{{ .ExecEndpoint }}"
+exec_api_key = "${EXEC_USERNAME}"
+exec_api_secret = "${EXEC_SECRET}"
+exec_auth = "basic"
+enable_scheduled_decision = true
+
+llm_min_interval = "5s"
+
+[llm_models.'${LLM_MODEL_INDICATOR}']
+endpoint = "${LLM_INDICATOR_ENDPOINT}"
+api_key = "${LLM_INDICATOR_API_KEY}"
+timeout_sec = 300
+concurrency = 1
+
+[llm_models.'${LLM_MODEL_STRUCTURE}']
+endpoint = "${LLM_STRUCTURE_ENDPOINT}"
+api_key = "${LLM_STRUCTURE_API_KEY}"
+timeout_sec = 300
+concurrency = 1
+
+[llm_models.'${LLM_MODEL_MECHANICS}']
+endpoint = "${LLM_MECHANICS_ENDPOINT}"
+api_key = "${LLM_MECHANICS_API_KEY}"
+timeout_sec = 300
+concurrency = 1
+
+[webhook]
+enabled = true
+addr = ":9991"
+queue_size = 1024
+worker_count = 4
+fallback_order_poll_sec = 120
+fallback_reconcile_sec = 300
+
+[notification]
+enabled = true
+startup_notify_enabled = ${NOTIFICATION_STARTUP_NOTIFY_ENABLED}
+
+[notification.telegram]
+enabled = ${NOTIFICATION_TELEGRAM_ENABLED}
+token = "${NOTIFICATION_TELEGRAM_TOKEN}"
+chat_id = ${NOTIFICATION_TELEGRAM_CHAT_ID}
+
+[notification.feishu]
+enabled = ${NOTIFICATION_FEISHU_ENABLED}
+app_id = "${NOTIFICATION_FEISHU_APP_ID}"
+app_secret = "${NOTIFICATION_FEISHU_APP_SECRET}"
+bot_enabled = ${NOTIFICATION_FEISHU_BOT_ENABLED}
+bot_mode = "${NOTIFICATION_FEISHU_BOT_MODE}"
+verification_token = "${NOTIFICATION_FEISHU_VERIFICATION_TOKEN}"
+encrypt_key = "${NOTIFICATION_FEISHU_ENCRYPT_KEY}"
+default_receive_id_type = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE}"
+default_receive_id = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID}"
+
+[news_overlay]
+enabled = false
+source_mode = "doc"
+interval = "1h"
+snapshot_stale_after = "4h"
+maxrecords = 50
+min_items_1h = 2
+min_items_4h = 5
+min_effective_items_1h = 1
+min_effective_items_4h = 3
+max_items_per_domain = 4
+blocked_domains = ["tickerreport.com", "dailypolitical.com"]
+blocked_title_keywords = [
+  "shares sold by",
+  "boosts stock position in",
+  "raises stake in",
+  "largest position",
+  "stock position lifted by",
+  "shares acquired by"
+]
+tighten_threshold_1h = 80
+tighten_threshold_4h = 75
+model = "${LLM_MODEL_STRUCTURE}"
+queries = [
+  "(liquidation OR hack OR exploit OR \"funding rate\" OR \"open interest\") sourcelang:english",
+  "(\"spot bitcoin etf\" OR \"spot ethereum etf\" OR SEC OR CFTC) sourcelang:english",
+  "(bitcoin OR BTC OR ethereum OR ETH OR crypto) sourcelang:english"
+]

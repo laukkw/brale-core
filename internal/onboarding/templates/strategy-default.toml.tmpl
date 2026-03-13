@@ -1,0 +1,39 @@
+symbol = "DEFAULT"
+id = "default-observe"
+rule_chain = "configs/rules/default.json"
+
+[risk_management]
+risk_per_trade_pct = 0.0
+max_invest_pct = 0.0
+max_leverage = 1.0
+grade_3_factor = 0.0
+grade_2_factor = 0.0
+grade_1_factor = 0.0
+entry_mode = "orderbook"
+orderbook_depth = 5
+entry_offset_atr = 0.1
+breakeven_fee_pct = 0.0
+slippage_buffer_pct = 0.0005
+
+[risk_management.initial_exit]
+policy = "atr_structure_v1"
+structure_interval = "auto"
+
+[risk_management.initial_exit.params]
+stop_atr_multiplier = 2
+stop_min_distance_pct = 0.008
+take_profit_rr = [1, 2]
+take_profit_ratios = [0.6, 0.4]
+
+[risk_management.tighten_atr]
+structure_threatened = 1.2
+tp1_atr = 0.8
+tp2_atr = 1.5
+min_tp_distance_pct = 0.006
+min_tp_gap_pct = 0.005
+min_update_interval_sec = 300
+
+[risk_management.sieve]
+min_size_factor = 0.0
+default_gate_action = "WAIT"
+default_size_factor = 0.0
