@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brale 配置运维台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="paper-grain" aria-hidden="true"></div>
+
+  <main class="workspace">
+    <section class="status-panel panel" id="status-section">
+      <header class="panel-head">
+        <h1>服务运行情况</h1>
+      </header>
+
+      <div class="service-grid">
+        <article class="service-card" id="service-brale">
+          <strong>brale</strong>
+          <span class="service-state running">running</span>
+        </article>
+        <article class="service-card" id="service-freqtrade">
+          <strong>freqtrade</strong>
+          <span class="service-state running">running</span>
+        </article>
+      </div>
+
+      <div class="status-links">
+        <button id="jump-system-btn" type="button" class="link-btn">全局正在生效配置：点击跳转到全局配置页</button>
+      </div>
+
+      <section class="running-list">
+        <h3>正在运行币种</h3>
+        <ul id="running-symbols"></ul>
+      </section>
+
+      <div class="ops-actions">
+        <button id="op-soft-stop" type="button" class="btn-secondary">先软停（schedule disable）</button>
+        <button id="op-make-stop" type="button" class="btn-danger">执行 make stop</button>
+        <button id="op-make-start" type="button" class="btn-primary">执行 make start</button>
+      </div>
+
+      <pre id="ops-log"></pre>
+    </section>
+
+    <section class="editors">
+      <article class="panel editor-panel" id="symbol-panel">
+        <header class="panel-head compact">
+          <h2>对应币种配置页</h2>
+          <small>symbols</small>
+        </header>
+
+        <div id="symbol-tabs" class="symbol-tabs"></div>
+        <div id="symbol-fields" class="field-list"></div>
+
+        <div class="editor-actions">
+          <button id="submit-symbol-btn" type="button" class="btn-primary">提交 symbols 并重启</button>
+        </div>
+      </article>
+
+      <article class="panel editor-panel" id="strategy-panel">
+        <header class="panel-head compact">
+          <h2>对应币种配置页</h2>
+          <small>strategies</small>
+        </header>
+
+        <div id="strategy-fields" class="field-list"></div>
+
+        <div class="editor-actions">
+          <button id="submit-strategy-btn" type="button" class="btn-primary">提交 strategies 并重启</button>
+        </div>
+      </article>
+
+      <article class="panel editor-panel" id="system-panel">
+        <header class="panel-head compact">
+          <h2>全局配置页</h2>
+          <small>system.toml</small>
+        </header>
+
+        <div class="hint-card">每一栏都可按住 <code>?</code> 查看详细说明，松手自动收起。</div>
+        <div id="system-fields" class="field-list"></div>
+
+        <div class="editor-actions">
+          <button id="submit-system-btn" type="button" class="btn-primary">提交全局配置并重启</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel change-panel" id="change-panel">
+      <header class="panel-head compact">
+        <h2>配置变更详情</h2>
+      </header>
+
+      <div class="change-block">
+        <h3>symbols</h3>
+        <div class="compare-row">
+          <article class="compare-box">
+            <h4>旧</h4>
+            <pre id="cmp-symbol-before"></pre>
+          </article>
+          <div class="compare-arrow" aria-hidden="true">→</div>
+          <article class="compare-box">
+            <h4>新</h4>
+            <pre id="cmp-symbol-after"></pre>
+          </article>
+        </div>
+      </div>
+
+      <div class="change-block">
+        <h3>strategies</h3>
+        <div class="compare-row">
+          <article class="compare-box">
+            <h4>旧</h4>
+            <pre id="cmp-strategy-before"></pre>
+          </article>
+          <div class="compare-arrow" aria-hidden="true">→</div>
+          <article class="compare-box">
+            <h4>新</h4>
+            <pre id="cmp-strategy-after"></pre>
+          </article>
+        </div>
+      </div>
+
+      <div class="change-block">
+        <h3>全局配置</h3>
+        <div class="compare-row">
+          <article class="compare-box">
+            <h4>旧</h4>
+            <pre id="cmp-system-before"></pre>
+          </article>
+          <div class="compare-arrow" aria-hidden="true">→</div>
+          <article class="compare-box">
+            <h4>新</h4>
+            <pre id="cmp-system-after"></pre>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="help-scrim" class="help-scrim" aria-hidden="true"></div>
+
+  <aside id="help-panel" class="help-panel" aria-live="polite">
+    <div class="help-head">
+      <strong id="help-title">参数说明</strong>
+      <button id="help-close" type="button" class="btn-secondary">关闭</button>
+    </div>
+    <p id="help-content">按住字段右侧的 ? 查看说明，松手自动收起。</p>
+  </aside>
+
+  <div id="confirm-modal" class="confirm-modal" aria-hidden="true">
+    <section class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <header class="help-head">
+        <h3 id="confirm-title">确认覆盖文件</h3>
+        <button id="confirm-cancel-top" type="button" class="btn-secondary">取消</button>
+      </header>
+      <p id="confirm-desc">确认后将覆盖目标文件，并执行重启。</p>
+      <div id="confirm-diffs" class="confirm-diffs"></div>
+      <footer class="confirm-actions">
+        <button id="confirm-cancel-btn" type="button" class="btn-secondary">返回检查</button>
+        <button id="confirm-apply-btn" type="button" class="btn-primary">确认覆盖并重启</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <script defer src="./main.js"></script>
+</body>
+</html>
