@@ -304,6 +304,7 @@ func (u portfolioUsecase) mapDashboardOverviewSymbol(ctx context.Context, tr exe
 	symbol := normalizeFreqtradePair(tr.Pair)
 	riskState := u.lookupRiskState(ctx, symbol)
 	pnl, _ := resolveDashboardPnLFromTrade(tr)
+	leverage := resolveDashboardLeverage(tr)
 
 	side := "long"
 	if tr.IsShort {
@@ -315,6 +316,7 @@ func (u portfolioUsecase) mapDashboardOverviewSymbol(ctx context.Context, tr exe
 		Position: DashboardPositionCard{
 			Side:             side,
 			Amount:           float64(tr.Amount),
+			Leverage:         leverage,
 			EntryPrice:       float64(tr.OpenRate),
 			CurrentPrice:     float64(tr.CurrentRate),
 			TakeProfits:      riskState.TakeProfits,
@@ -324,6 +326,25 @@ func (u portfolioUsecase) mapDashboardOverviewSymbol(ctx context.Context, tr exe
 		PnL:            pnl,
 		Reconciliation: reconcileDashboardPnL(pnl),
 	}
+}
+
+func resolveDashboardLeverage(tr execution.Trade) float64 {
+	lever := float64(tr.Leverage)
+	if lever > 0 {
+		return lever
+	}
+	notional := float64(tr.OpenRate) * float64(tr.Amount)
+	margin := float64(tr.StakeAmount)
+	if margin <= 0 {
+		margin = float64(tr.OpenTradeValue)
+	}
+	if notional > 0 && margin > 0 {
+		ratio := notional / margin
+		if ratio > 0 {
+			return ratio
+		}
+	}
+	return 0
 }
 
 func (u portfolioUsecase) buildDashboardAccountPnL(ctx context.Context) (DashboardPnLCard, bool) {

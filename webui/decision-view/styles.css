@@ -8,6 +8,9 @@
   --accent-color: #f3a7c7;
   --accent-soft: rgba(243, 167, 199, 0.28);
   --border-color: rgba(212, 204, 178, 0.22);
+  --scroll-track: rgba(26, 28, 38, 0.95);
+  --scroll-thumb: rgba(222, 175, 201, 0.76);
+  --scroll-thumb-hover: rgba(238, 192, 218, 0.88);
 }
 
 * { box-sizing: border-box; }
@@ -22,6 +25,41 @@ body {
   color: var(--text-main);
   overflow: hidden;
   font-size: 14px;
+}
+
+html {
+  background: var(--bg-color);
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block)::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block)::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(35, 38, 52, 0.96), rgba(24, 26, 36, 0.96));
+  border: 1px solid rgba(219, 200, 179, 0.14);
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block)::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(24, 26, 34, 0.92);
+  background: linear-gradient(180deg, rgba(183, 204, 255, 0.92), var(--scroll-thumb));
+  box-shadow: 0 0 0 1px rgba(243, 167, 199, 0.14), 0 0 12px rgba(243, 167, 199, 0.2);
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block)::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(200, 216, 255, 0.98), var(--scroll-thumb-hover));
+}
+
+:where(html, body, #control-panel, .preview-content, .code-block)::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 #graph-container {

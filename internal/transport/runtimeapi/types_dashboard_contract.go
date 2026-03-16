@@ -58,6 +58,7 @@ type DashboardOverviewSymbol struct {
 type DashboardPositionCard struct {
 	Side             string                          `json:"side"`
 	Amount           float64                         `json:"amount"`
+	Leverage         float64                         `json:"leverage"`
 	EntryPrice       float64                         `json:"entry_price"`
 	CurrentPrice     float64                         `json:"current_price"`
 	TakeProfits      []float64                       `json:"take_profits"`

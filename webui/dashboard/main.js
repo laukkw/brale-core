@@ -936,6 +936,8 @@ function renderLivePositions(cards) {
       const pnl = card.pnl || {};
       const realizedClass = Number(pnl.realized) >= 0 ? "positive" : "negative";
       const unrealizedClass = Number(pnl.unrealized) >= 0 ? "positive" : "negative";
+      const leverage = Number(position.leverage);
+      const leverageLabel = Number.isFinite(leverage) && leverage > 0 ? `（${fmtNumber(leverage)}x）` : "";
       return `<article class="position-card ${holdable ? "holdable" : ""}" data-position-card data-holdable="${holdable ? "true" : "false"}" ${holdAttrs}>
         <div class="position-head">
           <div>
@@ -950,9 +952,9 @@ function renderLivePositions(cards) {
           <div class="metric"><span class="k">当前价</span><span class="v">${fmtNumber(position.current_price)}</span></div>
           <div class="metric"><span class="k">止盈 TP</span><span class="v positive">${(position.take_profits || []).map((v) => fmtNumber(Number(v))).join(" / ") || "--"}</span></div>
           <div class="metric"><span class="k">止损 SL</span><span class="v negative">${fmtNumber(position.stop_loss)}</span></div>
-          <div class="metric"><span class="k">已实现盈亏</span><span class="v ${realizedClass}">${fmtUsd(Number(pnl.realized))}</span></div>
           <div class="metric"><span class="k">未实现盈亏</span><span class="v ${unrealizedClass}">${fmtUsd(Number(pnl.unrealized))}</span></div>
           <div class="metric"><span class="k">合计盈亏</span><span class="v ${Number(pnl.total) >= 0 ? "positive" : "negative"}">${fmtUsd(Number(pnl.total || 0))}</span></div>
+          <div class="metric"><span class="k">已实现盈亏${leverageLabel}</span><span class="v ${realizedClass}">${fmtUsd(Number(pnl.realized))}</span></div>
         </div>
         ${timelineMarkup}
       </article>`;
@@ -1424,6 +1426,39 @@ function renderKline(payload, flow) {
     }
   });
 
+  const axisPrices = [];
+  values.forEach((entry) => {
+    if (!Array.isArray(entry)) {
+      return;
+    }
+    const low = Number(entry[2]);
+    const high = Number(entry[3]);
+    if (Number.isFinite(low)) {
+      axisPrices.push(low);
+    }
+    if (Number.isFinite(high)) {
+      axisPrices.push(high);
+    }
+  });
+  lineData.forEach((line) => {
+    const y = Number(line && line.yAxis);
+    if (Number.isFinite(y)) {
+      axisPrices.push(y);
+    }
+  });
+
+  let yAxisMin;
+  let yAxisMax;
+  if (axisPrices.length > 0) {
+    const rawMin = Math.min(...axisPrices);
+    const rawMax = Math.max(...axisPrices);
+    const span = rawMax - rawMin;
+    const safeSpan = span > 0 ? span : Math.max(Math.abs(rawMax) * 0.01, 1);
+    const pad = safeSpan * 0.08;
+    yAxisMin = rawMin - pad;
+    yAxisMax = rawMax + pad;
+  }
+
   let lineHash = HASH_OFFSET_BASIS;
   lineData.forEach((line) => {
     lineHash = hashAppend(lineHash, line && line.name);
@@ -1622,6 +1657,8 @@ function renderKline(payload, flow) {
     },
     yAxis: {
       scale: true,
+      min: yAxisMin,
+      max: yAxisMax,
       axisLine: { lineStyle: { color: palette.axis } },
       splitLine: { lineStyle: { color: palette.lineMuted } },
       axisLabel: { color: palette.textSubtle }
