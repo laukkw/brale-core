@@ -51,15 +51,51 @@
       }
     ],
     "connections": [
-      {"fromId": "root", "toId": "derive_tradeable", "type": "Success"},
-      {"fromId": "derive_tradeable", "toId": "state_switch", "type": "Success"},
-      {"fromId": "state_switch", "toId": "hard_guard", "type": "in_position"},
-      {"fromId": "hard_guard", "toId": "monitor_fusion", "type": "Success"},
-      {"fromId": "monitor_fusion", "toId": "fsm_decision", "type": "Success"},
-      {"fromId": "state_switch", "toId": "gate_decision", "type": "flat"},
-      {"fromId": "gate_decision", "toId": "plan_builder", "type": "Success"},
-      {"fromId": "plan_builder", "toId": "fsm_decision", "type": "Success"},
-      {"fromId": "fsm_decision", "toId": "end", "type": "Success"}
+      {
+        "fromId": "root",
+        "toId": "derive_tradeable",
+        "type": "Success"
+      },
+      {
+        "fromId": "derive_tradeable",
+        "toId": "state_switch",
+        "type": "Success"
+      },
+      {
+        "fromId": "state_switch",
+        "toId": "hard_guard",
+        "type": "in_position"
+      },
+      {
+        "fromId": "hard_guard",
+        "toId": "monitor_fusion",
+        "type": "Success"
+      },
+      {
+        "fromId": "monitor_fusion",
+        "toId": "fsm_decision",
+        "type": "Success"
+      },
+      {
+        "fromId": "state_switch",
+        "toId": "gate_decision",
+        "type": "flat"
+      },
+      {
+        "fromId": "gate_decision",
+        "toId": "plan_builder",
+        "type": "Success"
+      },
+      {
+        "fromId": "plan_builder",
+        "toId": "fsm_decision",
+        "type": "Success"
+      },
+      {
+        "fromId": "fsm_decision",
+        "toId": "end",
+        "type": "Success"
+      }
     ]
   }
 }

@@ -1,23 +1,17 @@
-# brale-core 全局配置示例（仅放所有币种通用的数据）
-# - 该文件不包含任何币种差异项（如 intervals/require/LLM model 等）
-# - 币种差异配置请放到 configs/symbols/*.toml
+log_format = "text"
+log_level = "info"
+log_path = "./data/brale-core.log"
+db_path = "./data/brale-core.db"
+persist_mode = "minimal"
+execution_system = "freqtrade"
+exec_endpoint = "http://127.0.0.1:8080/api/v1"
+exec_api_key = "${EXEC_USERNAME}"
+exec_api_secret = "${EXEC_SECRET}"
+exec_auth = "basic"
+enable_scheduled_decision = true
 
-log_format = "text" # 日志格式，例：json 或 text
-log_level = "info" # 日志级别，例：debug/info/warn/error
-log_path = "./data/brale-core.log" # 日志文件路径，默认与 db 同目录
-db_path = "./data/brale-core.db" # SQLite 路径，例：data/brale-core.db
-persist_mode = "minimal" # 持久化模式：minimal(默认) 或 full(回测)
-execution_system = "freqtrade" # 执行系统标识，例：freqtrade
-exec_endpoint = "http://127.0.0.1:8080/api/v1" # 执行端 API 地址，例：http://freqtrade:8080/api/v1
-exec_api_key = "${EXEC_USERNAME}" # 执行端 API Key，例：abc123
-exec_api_secret = "${EXEC_SECRET}" # 执行端 API Secret，例：secret123
-exec_auth = "basic" # 执行端鉴权方式：basic 或 header
-enable_scheduled_decision = true # 是否启用定时 LLM 决策任务；true=定时+API，false=仅API
+llm_min_interval = "5s"
 
-
-
-# LLM 配置（symbols 中的 llm.*.model 需要匹配这里的 key）
-llm_min_interval = "5s" # LLM 请求最小间隔，避免触发 RPM 限流
 [llm_models.'${LLM_MODEL_INDICATOR}']
 endpoint = "${LLM_INDICATOR_ENDPOINT}"
 api_key = "${LLM_INDICATOR_API_KEY}"
@@ -37,12 +31,12 @@ timeout_sec = 300
 concurrency = 1
 
 [webhook]
-enabled = true # 是否启用 webhook 接收器
-addr = ":9991" # webhook 监听地址
-queue_size = 1024 # webhook 队列大小
-worker_count = 4 # webhook 处理并发数
-fallback_order_poll_sec = 120 # 兜底订单轮询（秒）
-fallback_reconcile_sec = 300 # 兜底对账轮询（秒）
+enabled = true
+addr = ":9991"
+queue_size = 1024
+worker_count = 4
+fallback_order_poll_sec = 120
+fallback_reconcile_sec = 300
 
 [notification]
 enabled = true
@@ -65,57 +59,30 @@ default_receive_id_type = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE}"
 default_receive_id = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID}"
 
 [news_overlay]
-# 是否启用 News Overlay。开启后会定时抓取新闻并生成舆论决策。
 enabled = false
 source_mode = "doc"
-# 抓取与更新周期。建议与主交易节奏一致，常用 30m/1h。
 interval = "1h"
-# 快照过期时间。超过该时长后，系统认为舆论结果不可用于交易门控。
-snapshot_stale_after = "4h" # 超过 4 小时视为不可用
-# 每个时间窗口从 GDELT 拉取的最大新闻条数（原始样本上限）。
-# 值越大覆盖面越广，但噪音与 LLM 输入体量也会增大。
+snapshot_stale_after = "4h"
 maxrecords = 50
-
-# 旧门槛：原始样本最低条数（抓取层）。
-# 保留该项用于兼容与报警基线。
 min_items_1h = 2
 min_items_4h = 5
-
-# 新门槛：有效样本最低条数（过滤后）。
-# 若低于该门槛，系统会直接给中性结果并跳过 LLM，避免“垃圾进垃圾出”。
-# 建议 1h 设 2~4，4h 设 3~6。
 min_effective_items_1h = 1
 min_effective_items_4h = 3
-
-# 单一域名在最终输入中的最大保留条数。
-# 用于防止某个站点刷屏导致观点偏置。常见建议：2~5。
 max_items_per_domain = 4
-
-# 域名黑名单（过滤前置）。
-# 命中后直接丢弃该域名新闻，适合长期高噪音“持仓流水/搬运站”。
 blocked_domains = ["tickerreport.com", "dailypolitical.com"]
-
-# 标题关键词黑名单（大小写不敏感，按子串匹配）。
-# 主要用于过滤 ETF 持仓流水类模板新闻；可按你后续观察继续增删。
-# 注意：关键词过宽会误杀有效新闻，建议逐步迭代。
 blocked_title_keywords = [
   "shares sold by",
   "boosts stock position in",
   "raises stake in",
   "largest position",
   "stock position lifted by",
-  "shares acquired by",
+  "shares acquired by"
 ]
-# tighten 触发阈值（0~100），数值越高越严格。
-# 1h 侧重短期冲击，4h 侧重中短期背景。
 tighten_threshold_1h = 80
 tighten_threshold_4h = 75
-# News Overlay 专用模型。建议显式固定，避免随 llm_models 顺序变化。
-model = "deepseek/deepseek-v3.2-exp"
+model = "${LLM_MODEL_STRUCTURE}"
 queries = [
   "(liquidation OR hack OR exploit OR \"funding rate\" OR \"open interest\") sourcelang:english",
   "(\"spot bitcoin etf\" OR \"spot ethereum etf\" OR SEC OR CFTC) sourcelang:english",
-  "(bitcoin OR BTC OR ethereum OR ETH OR crypto) sourcelang:english",
-  "(solana OR SOL OR XRP OR stablecoin OR \"crypto exchange\") sourcelang:english",
-  "(\"Federal Reserve\" OR FOMC OR Treasury OR \"digital asset\") sourcelang:english"
+  "(bitcoin OR BTC OR ethereum OR ETH OR crypto) sourcelang:english"
 ]

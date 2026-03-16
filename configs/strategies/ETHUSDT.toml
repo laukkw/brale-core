@@ -7,10 +7,10 @@ rule_chain = "configs/rules/default.json"
 # A. 基础风险参数（Base Risk）
 # ==============================
 # 单笔风险占比（账户权益占比）
-risk_per_trade_pct = 0.01
+risk_per_trade_pct = 0.1
 
 # 最大可用资金占比
-max_invest_pct = 0.5
+max_invest_pct = 1
 
 # 最大有效杠杆
 max_leverage = 10
@@ -121,7 +121,7 @@ min_tp_distance_pct = 0.006
 min_tp_gap_pct = 0.005
 
 # 持仓风控最小更新间隔（秒）；0 表示关闭防抖
-min_update_interval_sec = 600
+min_update_interval_sec = 300
 
 [risk_management.sieve]
 # 作用：Gate 已放行(ALLOW)后的二次风控与仓位缩放

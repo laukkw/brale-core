@@ -37,15 +37,6 @@
     "name": "binance",
     "key": "",
     "secret": "",
-    "ccxt_config": {
-      "proxies": {
-        "http": "http://host.docker.internal:7890",
-        "https": "http://host.docker.internal:7890"
-      }
-    },
-    "ccxt_async_config": {
-      "aiohttp_proxy": "http://host.docker.internal:7890"
-    },
     "pair_whitelist": [],
     "pair_blacklist": [
       "BNB/.*"
@@ -173,3 +164,4 @@
     "process_throttle_secs": 5
   }
 }
+

@@ -1,23 +1,24 @@
-id = "eth-breakout-1"
+id = "default-observe"
 rule_chain = "configs/rules/default.json"
 
+symbol = "DEFAULT"
 [risk_management]
 # ==============================
 # A. 基础风险参数（Base Risk）
 # ==============================
 # 单笔风险占比（账户权益占比）
-risk_per_trade_pct = 0.5
+risk_per_trade_pct = 0.0
 
 # 最大可用资金占比
-max_invest_pct = 1.0
+max_invest_pct = 0.0
 
 # 最大有效杠杆
-max_leverage = 3.0
+max_leverage = 1.0
 
 # 信号评分映射（Grade -> 风险系数）
-grade_3_factor = 1.0
-grade_2_factor = 0.75
-grade_1_factor = 0.5
+grade_3_factor = 0.0
+grade_2_factor = 0.0
+grade_1_factor = 0.0
 
 # ==============================
 # B. 入场模式（Entry Mode）
@@ -132,10 +133,10 @@ min_update_interval_sec = 300
 # reason_code：命中理由回写到 gate 派生信息，便于审计
 # default_gate_action/default_size_factor：未命中任何行时的兜底（建议 WAIT + 0.0 做白名单）
 # min_size_factor：最小仓位比例（仅对 ALLOW 生效）
-min_size_factor = 0.35
+min_size_factor = 0.0
 # 未命中任何行时默认动作与比例
-default_gate_action = "ALLOW"
-default_size_factor = 1.0
+default_gate_action = "WAIT"
+default_size_factor = 0.0
 # 字段含义说明：
 # indicator_tag：指标标签（来自 indicator.signal_tag）
 # structure_tag：结构标签（来自 structure.signal_tag）
@@ -155,8 +156,8 @@ default_size_factor = 1.0
 mechanics_tag = "fuel_ready"
 liq_confidence = "high"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 1.0
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "FUEL_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -164,8 +165,8 @@ reason_code = "FUEL_HIGH"
 mechanics_tag = "fuel_ready"
 liq_confidence = "low"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.7
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "FUEL_LOW"
 
 [[risk_management.sieve.rows]]
@@ -173,8 +174,8 @@ reason_code = "FUEL_LOW"
 mechanics_tag = "fuel_ready"
 liq_confidence = "high"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 1.0
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "FUEL_HIGH_ALIGN"
 
 [[risk_management.sieve.rows]]
@@ -182,8 +183,8 @@ reason_code = "FUEL_HIGH_ALIGN"
 mechanics_tag = "fuel_ready"
 liq_confidence = "low"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 0.7
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "FUEL_LOW_ALIGN"
 
 [[risk_management.sieve.rows]]
@@ -191,8 +192,8 @@ reason_code = "FUEL_LOW_ALIGN"
 mechanics_tag = "neutral"
 liq_confidence = "high"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.7
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "NEUTRAL_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -200,8 +201,8 @@ reason_code = "NEUTRAL_HIGH"
 mechanics_tag = "neutral"
 liq_confidence = "low"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.5
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "NEUTRAL_LOW"
 
 [[risk_management.sieve.rows]]
@@ -209,8 +210,8 @@ reason_code = "NEUTRAL_LOW"
 mechanics_tag = "neutral"
 liq_confidence = "high"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 0.7
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "NEUTRAL_HIGH_ALIGN"
 
 [[risk_management.sieve.rows]]
@@ -218,8 +219,8 @@ reason_code = "NEUTRAL_HIGH_ALIGN"
 mechanics_tag = "neutral"
 liq_confidence = "low"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 0.5
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "NEUTRAL_LOW_ALIGN"
 
 [[risk_management.sieve.rows]]
@@ -227,8 +228,8 @@ reason_code = "NEUTRAL_LOW_ALIGN"
 mechanics_tag = "crowded_long"
 liq_confidence = "high"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 0.4
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_ALIGN_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -245,8 +246,8 @@ reason_code = "CROWD_ALIGN_LOW_BLOCK"
 mechanics_tag = "crowded_short"
 liq_confidence = "high"
 crowding_align = true
-gate_action = "ALLOW"
-size_factor = 0.4
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_ALIGN_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -263,8 +264,8 @@ reason_code = "CROWD_ALIGN_LOW_BLOCK"
 mechanics_tag = "crowded_long"
 liq_confidence = "high"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.6
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_COUNTER_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -272,8 +273,8 @@ reason_code = "CROWD_COUNTER_HIGH"
 mechanics_tag = "crowded_long"
 liq_confidence = "low"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.5
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_COUNTER_LOW"
 
 [[risk_management.sieve.rows]]
@@ -281,8 +282,8 @@ reason_code = "CROWD_COUNTER_LOW"
 mechanics_tag = "crowded_short"
 liq_confidence = "high"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.6
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_COUNTER_HIGH"
 
 [[risk_management.sieve.rows]]
@@ -290,8 +291,8 @@ reason_code = "CROWD_COUNTER_HIGH"
 mechanics_tag = "crowded_short"
 liq_confidence = "low"
 crowding_align = false
-gate_action = "ALLOW"
-size_factor = 0.5
+gate_action = "WAIT"
+size_factor = 0.0
 reason_code = "CROWD_COUNTER_LOW"
 
 [[risk_management.sieve.rows]]
