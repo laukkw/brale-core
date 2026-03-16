@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brale Config Onboarding</title>
+  <link rel="icon" type="image/svg+xml" href="http://127.0.0.1:9991/dashboard/favicon-mask.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600&display=swap" rel="stylesheet">
@@ -19,7 +20,7 @@
 
       <div class="progress">
         <div class="progress-track"><span id="progress-fill"></span></div>
-        <strong id="progress-text">步骤 1 / 5</strong>
+        <strong id="progress-text">步骤 1 / 7</strong>
       </div>
 
       <ol class="step-list" id="step-list">
@@ -28,6 +29,8 @@
         <li class="step" data-step="2"><span>03</span><div><b>LLM 模型</b><small>三路模型参数</small></div></li>
         <li class="step" data-step="3"><span>04</span><div><b>策略风控</b><small>按币种编辑保存</small></div></li>
         <li class="step" data-step="4"><span>05</span><div><b>通知与导出</b><small>预览输出</small></div></li>
+        <li class="step" data-step="5"><span>06</span><div><b>运行启动</b><small>环境检测与一键启动</small></div></li>
+        <li class="step" data-step="6"><span>07</span><div><b>监控状态</b><small>运行状态与快捷操作</small></div></li>
       </ol>
     </aside>
 
@@ -36,12 +39,12 @@
         <section class="wizard-step active" data-step="0">
           <header>
             <h2>部署基础</h2>
-            <p>运行模式固定为 Dry Run，最大并发仓位固定为 10。</p>
+            <p><span class="label-title">运行模式固定为 Dry Run <span class="field-help field-help-wide" tabindex="0" data-tip="Dry Run（模拟盘）是一种“接收实时市场行情，但使用虚拟资金交易”的测试模式。&#10;模拟盘使用虚拟钱包，试错成本为零，能让你在无风险环境下验证策略对当前行情的适应力。&#10;模拟盘在本地进行理想化撮合，通常只要价格触达就会完美且全额成交；而实盘受限于交易所真实的盘口流动性，可能会遭遇滑点（Slippage）、部分成交甚至无法成交。&#10;模拟盘几乎没有 API 下单的物理延迟，也不涉及真实的手续费抵扣细节。" aria-label="Dry Run 说明">?</span></span>，最大并发仓位固定为 10，最大同时存在仓位数 10。</p>
           </header>
 
           <div class="grid two">
             <div class="fixed-box">`dry_run = true`（固定）</div>
-            <div class="fixed-box">`max_open_trades = 10`（固定）</div>
+            <div class="fixed-box">`max_open_trades = 10`（最大同时存在仓位数，固定）</div>
           </div>
 
           <fieldset>
@@ -145,10 +148,10 @@
           </div>
 
           <div class="grid two">
-            <label>单笔风险占比（账户权益占比）
+            <label><span class="label-title">单笔风险占比（账户权益占比）<span class="field-help" tabindex="0" data-tip="开仓时先算风险金额：risk_amount = base_balance × effective_risk_pct × entry_multiplier。&#10;其中 effective_risk_pct = risk_per_trade_pct × grade_factor × sieve_size_factor。&#10;再按止损距离定仓位：position_size = risk_amount / |entry - stop_loss|。" aria-label="单笔风险占比说明">?</span></span>
               <input id="risk_per_trade_pct" type="number" step="0.1" placeholder="例如 0.5" />
             </label>
-            <label>最大可用资金占比
+            <label><span class="label-title">最大可用资金占比<span class="field-help" tabindex="0" data-tip="开仓时先算 max_invest_amt = base_balance × max_invest_pct（base_balance 优先用 available，否则用 equity）。&#10;随后按该上限计算杠杆：leverage = ceil((entry × position_size) / max_invest_amt)，并受 max_leverage 上限约束。&#10;若保证金仍超限，会把仓位收缩为 (leverage × max_invest_amt) / entry。" aria-label="最大可用资金占比说明">?</span></span>
               <input id="max_invest_pct" type="number" step="0.1" placeholder="例如 1.0" />
             </label>
             <label>最大有效杠杆（整数）
@@ -280,13 +283,92 @@
             <button type="button" class="tab active" data-tab="env">.env</button>
             <button type="button" class="tab" data-tab="freq">freqtrade.json</button>
             <button type="button" class="tab" data-tab="symbol">symbol-config</button>
-            <button type="button" class="tab" data-tab="script">deploy.sh</button>
+            <button type="button" class="tab" data-tab="script">onboarding-start.mk</button>
           </div>
           <div class="save-bar" style="margin-top: 10px;">
             <button type="button" id="generate-btn" class="btn-primary">生成配置文件</button>
             <span id="generate-status" aria-live="polite">未生成</span>
           </div>
           <pre id="preview" aria-live="polite"></pre>
+        </section>
+
+        <section class="wizard-step" data-step="5">
+          <header>
+            <h2>运行启动</h2>
+            <p>检测 Docker / Docker Compose 与配置有效性，并实时展示首次拉取镜像进度。</p>
+          </header>
+
+          <div class="startup-grid">
+            <article class="startup-card">
+              <h3>Docker</h3>
+              <p id="startup-docker-status" class="startup-status">未检测</p>
+              <small id="startup-docker-version">-</small>
+            </article>
+            <article class="startup-card">
+              <h3>Docker Compose</h3>
+              <p id="startup-compose-status" class="startup-status">未检测</p>
+              <small id="startup-compose-version">-</small>
+            </article>
+            <article class="startup-card">
+              <h3>配置校验</h3>
+              <p id="startup-config-status" class="startup-status">未检测</p>
+              <small id="startup-config-detail">-</small>
+            </article>
+          </div>
+
+          <div class="save-bar" style="margin-top: 10px;">
+            <button type="button" id="startup-check-btn" class="btn-secondary">检测环境与配置</button>
+            <button type="button" id="startup-start-btn" class="btn-primary" disabled>一键运行启动</button>
+            <span id="startup-run-status" aria-live="polite">等待检测</span>
+          </div>
+
+          <div class="startup-progress-wrap" aria-live="polite">
+            <div class="startup-progress-track"><span id="startup-progress-fill"></span></div>
+            <div class="startup-progress-meta">
+              <strong id="startup-progress-text">拉取进度：0%</strong>
+              <span id="startup-speed-text">速度：-</span>
+            </div>
+          </div>
+
+          <pre id="startup-log">等待启动...</pre>
+        </section>
+
+        <section class="wizard-step" data-step="6">
+          <header>
+            <h2>监控状态</h2>
+            <p>查看 brale-core / freqtrade 运行状态，并提供一键打开、一键停止、拉取 brale-core 代码并执行 make rebuild 操作。</p>
+          </header>
+
+          <div class="startup-monitor-wrap" aria-live="polite">
+            <div class="startup-monitor-head">
+              <div class="startup-monitor-actions">
+                <small id="startup-monitor-updated">最近刷新：-</small>
+                <button type="button" id="startup-monitor-refresh-btn" class="btn-secondary">刷新监控状态</button>
+              </div>
+            </div>
+            <div class="startup-grid startup-monitor-grid">
+              <article class="startup-card">
+                <h3>brale-core（9991）</h3>
+                <p id="startup-brale-status" class="startup-status">未检测</p>
+                <a id="startup-brale-link" class="startup-link disabled" href="http://127.0.0.1:9991/dashboard/" target="_blank" rel="noopener noreferrer" aria-disabled="true">打开 brale-core Dashboard（9991）</a>
+                <div class="startup-action-row">
+                  <button type="button" id="startup-brale-open-btn" class="btn-secondary">一键打开</button>
+                  <button type="button" id="startup-brale-stop-btn" class="btn-secondary">一键停止</button>
+                </div>
+              </article>
+              <article class="startup-card">
+                <h3>freqtrade（8080）</h3>
+                <p id="startup-freqtrade-status" class="startup-status">未检测</p>
+                <a id="startup-freqtrade-link" class="startup-link disabled" href="http://127.0.0.1:8080" target="_blank" rel="noopener noreferrer" aria-disabled="true">启动成功后可跳转后台</a>
+                <div class="startup-action-row">
+                  <button type="button" id="startup-freqtrade-open-btn" class="btn-secondary">一键打开</button>
+                  <button type="button" id="startup-freqtrade-stop-btn" class="btn-secondary">一键停止</button>
+                  <button type="button" id="startup-freqtrade-refresh-btn" class="btn-primary">拉取 brale-core 代码并 Rebuild</button>
+                </div>
+              </article>
+            </div>
+            <pre id="startup-monitor-log">监控操作日志：等待操作...</pre>
+          </div>
         </section>
 
         <footer class="actions">
