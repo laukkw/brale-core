@@ -28,6 +28,7 @@ func (s Server) Handler() (http.Handler, error) {
 		assetPrefix = ""
 	}
 	gen := NewGenerator(repoRoot)
+	runner := &startupRunner{}
 
 	mux := http.NewServeMux()
 	mux.Handle(join(base, "/api/status"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +68,54 @@ func (s Server) Handler() (http.Handler, error) {
 			return
 		}
 		writeJSON(w, result)
+	}))
+	mux.Handle(join(base, "/api/startup/check"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		writeJSON(w, runStartupCheck(repoRoot))
+	}))
+	mux.Handle(join(base, "/api/startup/monitor"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		writeJSON(w, runStartupMonitor())
+	}))
+	mux.Handle(join(base, "/api/startup/service-action"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		var req startupServiceActionRequest
+		if err := decodeJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		result := runStartupServiceAction(repoRoot, req)
+		if !result.OK {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(result)
+			return
+		}
+		writeJSON(w, result)
+	}))
+	mux.Handle(join(base, "/api/startup/start-stream"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamStartup(repoRoot, runner, w, r)
 	}))
 
 	fs := http.FileServer(http.FS(configonboardingprototype.Assets))

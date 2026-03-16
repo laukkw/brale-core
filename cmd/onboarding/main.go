@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":7788", "http listen addr")
+	addr := flag.String("addr", "127.0.0.1:9992", "http listen addr")
 	repo := flag.String("repo", ".", "repository root")
 	basePath := flag.String("base", "/", "http base path")
 	flag.Parse()
@@ -28,7 +28,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("onboarding listening on http://127.0.0.1%s\n", *addr)
+	listenURL := "http://" + *addr
+	if len(*addr) > 0 && (*addr)[0] == ':' {
+		listenURL = "http://127.0.0.1" + *addr
+	}
+	fmt.Printf("onboarding listening on %s\n", listenURL)
 	if err := http.ListenAndServe(*addr, handler); err != nil {
 		fmt.Fprintf(os.Stderr, "serve onboarding: %v\n", err)
 		os.Exit(1)
