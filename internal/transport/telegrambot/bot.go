@@ -35,7 +35,6 @@ const (
 	cbMenuObserve   = "menu_observe"
 	cbMenuToggle    = "menu_toggle"
 	cbMenuLatest    = "menu_latest"
-	cbMenuNews      = "menu_news_overlay"
 	cbToggleOn      = "toggle_on"
 	cbToggleOff     = "toggle_off"
 	cbMenuCancel    = "menu_cancel"
@@ -251,8 +250,6 @@ func (b *Bot) handleCallback(ctx context.Context, cb *callbackQuery) {
 		b.toggleSchedule(ctx, chatID, false)
 	case data == cbMenuLatest:
 		b.handleLatestMenu(ctx, chatID)
-	case data == cbMenuNews:
-		b.handleNewsOverlayMenu(ctx, chatID)
 	case data == cbMenuCancel:
 		b.sessions.delete(chatID, userID)
 		b.sendText(ctx, chatID, "已取消当前会话。")
@@ -359,9 +356,6 @@ func (b *Bot) sendMainMenu(ctx context.Context, chatID int64) {
 			{Text: "决策开关", CallbackData: cbMenuToggle},
 			{Text: "最近决策", CallbackData: cbMenuLatest},
 		},
-		{
-			{Text: "舆论信息", CallbackData: cbMenuNews},
-		},
 	}}
 	b.sendInline(ctx, chatID, "请选择功能：", keyboard)
 }
@@ -459,17 +453,6 @@ func (b *Bot) handleLatestMenu(ctx context.Context, chatID int64) {
 	}
 	b.sendInline(ctx, chatID, "请选择币种：", inlineKeyboard{Buttons: buttons})
 }
-
-func (b *Bot) handleNewsOverlayMenu(ctx context.Context, chatID int64) {
-	resp, err := b.fetchNewsOverlayLatest(ctx)
-	if err != nil {
-		b.sendText(ctx, chatID, fmt.Sprintf("舆论信息获取失败：%s", err.Error()))
-		return
-	}
-	text := formatNewsOverlayResponse(resp)
-	b.sendLongText(ctx, chatID, text)
-}
-
 func (b *Bot) handleDecisionLatest(ctx context.Context, chatID int64, symbol string) {
 	b.sendText(ctx, chatID, "正在查询...")
 	resp, err := b.fetchDecisionLatest(ctx, symbol)

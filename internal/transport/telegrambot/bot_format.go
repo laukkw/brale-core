@@ -145,34 +145,6 @@ func formatScheduleResponse(resp ScheduleResponse) string {
 	}
 	return strings.TrimSpace(b.String())
 }
-
-func formatNewsOverlayResponse(resp NewsOverlayLatestResponse) string {
-	if strings.TrimSpace(resp.LLMDecisionRaw) == "" {
-		if strings.TrimSpace(resp.Summary) != "" {
-			return resp.Summary
-		}
-		return "暂无舆论信息。"
-	}
-	b := &strings.Builder{}
-	b.WriteString("舆论信息（LLM 决策）\n")
-	if strings.TrimSpace(resp.UpdatedAt) != "" {
-		b.WriteString("更新时间: ")
-		b.WriteString(resp.UpdatedAt)
-		b.WriteString("\n")
-	}
-	if resp.Stale {
-		b.WriteString("状态: 已过期")
-		if strings.TrimSpace(resp.StaleAfter) != "" {
-			b.WriteString("（超过 ")
-			b.WriteString(resp.StaleAfter)
-			b.WriteString("）")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString(resp.LLMDecisionRaw)
-	return strings.TrimSpace(b.String())
-}
-
 func splitMessageChunks(text string, maxRunes int) []string {
 	text = strings.TrimSpace(text)
 	if text == "" {

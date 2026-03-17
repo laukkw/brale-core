@@ -26,7 +26,6 @@ func LoadSystemConfig(path string) (SystemConfig, error) {
 		defaultOn := true
 		cfg.EnableScheduledDecision = &defaultOn
 	}
-	applyNewsOverlayDefaults(&cfg.NewsOverlay)
 	applyWebhookDefaults(&cfg.Webhook)
 	cfg.PersistMode = normalizePersistMode(cfg.PersistMode)
 	if err := ValidateSystemConfig(cfg); err != nil {
@@ -39,84 +38,6 @@ func LoadSystemConfig(path string) (SystemConfig, error) {
 	cfg.Hash = hash
 	return cfg, nil
 }
-
-func applyNewsOverlayDefaults(cfg *NewsOverlayConfig) {
-	if cfg == nil {
-		return
-	}
-	if strings.TrimSpace(cfg.SourceMode) == "" {
-		cfg.SourceMode = "doc"
-	}
-	if strings.TrimSpace(cfg.Interval) == "" {
-		cfg.Interval = "1h"
-	}
-	if strings.TrimSpace(cfg.SnapshotStaleAfter) == "" {
-		cfg.SnapshotStaleAfter = "4h"
-	}
-	if cfg.MaxRecords <= 0 {
-		cfg.MaxRecords = 20
-	}
-	if cfg.MinItems1H <= 0 {
-		cfg.MinItems1H = 3
-	}
-	if cfg.MinItems4H <= 0 {
-		cfg.MinItems4H = 5
-	}
-	if cfg.MinEffectiveItems1H <= 0 {
-		cfg.MinEffectiveItems1H = 2
-	}
-	if cfg.MinEffectiveItems4H <= 0 {
-		cfg.MinEffectiveItems4H = 3
-	}
-	if cfg.MaxItemsPerDomain <= 0 {
-		cfg.MaxItemsPerDomain = 4
-	}
-	if cfg.TightenThreshold1H <= 0 {
-		cfg.TightenThreshold1H = 80
-	}
-	if cfg.TightenThreshold4H <= 0 {
-		cfg.TightenThreshold4H = 75
-	}
-	cfg.Queries = normalizeQueryList(cfg.Queries)
-	if len(cfg.Queries) == 0 && strings.TrimSpace(cfg.Query) == "" {
-		cfg.Queries = []string{
-			`(liquidation OR hack OR exploit OR "funding rate" OR "open interest") sourcelang:english`,
-			`("spot bitcoin etf" OR "spot ethereum etf" OR SEC OR CFTC) sourcelang:english`,
-			`(bitcoin OR BTC OR ethereum OR ETH OR crypto) sourcelang:english`,
-			`(solana OR SOL OR XRP OR stablecoin OR "crypto exchange") sourcelang:english`,
-			`("Federal Reserve" OR FOMC OR Treasury OR "digital asset") sourcelang:english`,
-		}
-	}
-	if len(cfg.Queries) == 0 && strings.TrimSpace(cfg.Query) != "" {
-		cfg.Queries = []string{strings.TrimSpace(cfg.Query)}
-	}
-	if strings.TrimSpace(cfg.Query) == "" && len(cfg.Queries) > 0 {
-		cfg.Query = strings.Join(cfg.Queries, " || ")
-	}
-	if len(cfg.BlockedDomains) == 0 {
-		cfg.BlockedDomains = []string{
-			"themarketsdaily.com",
-			"tickerreport.com",
-			"dailypolitical.com",
-		}
-	}
-	if len(cfg.BlockedTitleKeywords) == 0 {
-		cfg.BlockedTitleKeywords = []string{
-			"shares sold by",
-			"boosts stock position in",
-			"raises stake in",
-			"largest position",
-			"stock position lifted by",
-			"shares acquired by",
-			"holdings in",
-			"position in",
-			"purchases",
-		}
-	}
-	cfg.BlockedDomains = normalizeStringList(cfg.BlockedDomains)
-	cfg.BlockedTitleKeywords = normalizeStringList(cfg.BlockedTitleKeywords)
-}
-
 func applyWebhookDefaults(cfg *WebhookConfig) {
 	if cfg == nil {
 		return

@@ -22,7 +22,6 @@ type LLMPromptBuilder struct {
 	AgentIndicatorSystem      string
 	AgentStructureSystem      string
 	AgentMechanicsSystem      string
-	AgentNewsOverlaySystem    string
 	ProviderIndicatorSystem   string
 	ProviderStructureSystem   string
 	ProviderMechanicsSystem   string
@@ -30,18 +29,6 @@ type LLMPromptBuilder struct {
 	ProviderInPosStructureSys string
 	ProviderInPosMechanicsSys string
 	UserFormat                UserPromptFormat
-}
-
-func (b LLMPromptBuilder) AgentNewsOverlayPrompt(inputJSON string) (string, string, error) {
-	system, err := requirePrompt("prompts.agent.news_overlay", b.AgentNewsOverlaySystem)
-	if err != nil {
-		return "", "", err
-	}
-	user := formatPayloads(
-		b.UserFormat,
-		payloadBlock{label: "News Overlay 输入", payload: inputJSON},
-	)
-	return system, user, nil
 }
 
 func (b LLMPromptBuilder) AgentIndicatorPrompt(ind features.IndicatorJSON) (string, string, error) {

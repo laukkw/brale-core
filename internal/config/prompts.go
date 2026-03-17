@@ -156,27 +156,10 @@ const defaultInPosMechanicsPrompt = "" +
 	"- 若输入包含 liquidations_by_window 等清算证据，可用于判断 adverse_liquidation=true，并在 reason 中引用对应字段。\n" +
 	"monitor_tag：adverse_liquidation=true -> exit；否则 crowding_reversal=true -> tighten；否则 keep"
 
-const defaultAgentNewsOverlayPrompt = "" +
-	"你是交易系统中的 News Overlay 分析器，负责分析舆论信息对虚拟货币交易风险的影响。你的任务是：基于输入新闻条目，输出固定 JSON，用于仓位缩放与 tighten 门槛评估。\n" +
-	"硬性规则：只输出一个 JSON 对象；禁止 markdown/解释/额外字段；只能使用输入条目，不可编造。\n" +
-	"输出字段（必须完整）：entry_multiplier_long, entry_multiplier_short, tighten_score_by_side, evidence。\n" +
-	"JSON 结构：{\"entry_multiplier_long\": <number>, \"entry_multiplier_short\": <number>, \"tighten_score_by_side\": {\"long\": {\"1h\": <number>, \"4h\": <number>}, \"short\": {\"1h\": <number>, \"4h\": <number>}}, \"evidence\": [{\"window\": \"1h|4h\", \"title\": \"必须来自输入标题\"}]}\n" +
-	"取值约束：\n" +
-	"- entry_multiplier_long/short 必须在 [0.2,1.5]\n" +
-	"- tighten_score_by_side.*.* 必须在 [0,100]\n" +
-	"- evidence 最多 5 条，window 只能是 1h 或 4h，仅保留 window+title。\n" +
-	"- 当输入存在有效新闻时，evidence 不得为空，且至少 1 条。\n" +
-	"- 仅当两个窗口都没有可用新闻时，才允许 evidence=[] 且使用中性输出（倍率=1、score=0）。\n" +
-	"语义约束：\n" +
-	"- 偏风险/偏空新闻：long 倍率更小、short 倍率可更高；相反亦然。\n" +
-	"- tighten_score 表示“是否支持执行 tighten”的强度，分数越高越支持。\n" +
-	"- 若输入体现明显方向性，不可机械返回全中性值。\n"
-
 type PromptDefaults struct {
 	AgentIndicator              string
 	AgentStructure              string
 	AgentMechanics              string
-	AgentNewsOverlay            string
 	ProviderIndicator           string
 	ProviderStructure           string
 	ProviderMechanics           string
@@ -190,7 +173,6 @@ func DefaultPromptDefaults() PromptDefaults {
 		AgentIndicator:              defaultAgentIndicatorPrompt,
 		AgentStructure:              defaultAgentStructurePrompt,
 		AgentMechanics:              defaultAgentMechanicsPrompt,
-		AgentNewsOverlay:            defaultAgentNewsOverlayPrompt,
 		ProviderIndicator:           defaultProviderIndicatorPrompt,
 		ProviderStructure:           defaultProviderStructurePrompt,
 		ProviderMechanics:           defaultProviderMechanicsPrompt,

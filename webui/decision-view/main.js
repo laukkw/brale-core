@@ -11,8 +11,6 @@ const STAGE_COLORS = {
   mechanics: "#ffd666",
   gate: "#ff5c8d",
   execution: "#cccccc",
-  news_overlay: "#ffb347",
-  news_item: "#ffe08a",
   missing: "#8a90a5",
 };
 
@@ -31,7 +29,6 @@ const state = {
   configBySymbol: new Map(),
   roundsBySymbol: new Map(),
   symbols: [],
-  newsOverlay: null,
 
   graph: null,
   graphsByMode: new Map(),
@@ -62,7 +59,6 @@ const state = {
   lastClick: null,
   ignoreClickUntil: 0,
   dragging: false,
-  newsDragPrev: null,
   rebuildFrameRequested: false,
   pendingRebuildFit: false,
 
@@ -327,7 +323,6 @@ function ingestConfig(payload) {
   const symbols = payload?.symbols || [];
   state.symbols = symbols.map((s) => ({ id: s.id, label: s.label || s.id }));
   state.configBySymbol = new Map(symbols.map((s) => [s.id, s.config]));
-  state.newsOverlay = payload?.news_overlay || null;
 }
 
 function ingestChains(payload) {
@@ -366,12 +361,6 @@ function ingestChains(payload) {
   });
 
   state.expandedRounds = new Set(state.defaultExpandedRounds);
-
-  state.parentByNodeId.set("news-overlay", null);
-  const items = Array.isArray(state.newsOverlay?.items) ? state.newsOverlay.items : [];
-  items.forEach((_, idx) => {
-    state.parentByNodeId.set(`news-item-${idx + 1}`, "news-overlay");
-  });
 }
 
 function initGraphs() {
@@ -529,16 +518,7 @@ function applyPhysicsSettingsToGraph(graph) {
 
   const linkForce = graph.d3Force("link");
   if (linkForce?.distance && linkForce?.strength) {
-    linkForce.distance(linkDistance).strength((l) => {
-      const sourceType = typeof l.source === "object" ? l.source?.type : "";
-      const targetType = typeof l.target === "object" ? l.target?.type : "";
-      const base =
-        (sourceType === "news_overlay" && targetType === "news_item") ||
-        (sourceType === "news_item" && targetType === "news_overlay")
-          ? 2.1
-          : 1;
-      return base * linkStrengthScale;
-    });
+    linkForce.distance(linkDistance).strength(() => linkStrengthScale);
   }
 
   const chargeForce = graph.d3Force("charge");
@@ -847,8 +827,6 @@ function buildGraphData(previousPositions) {
     });
   });
 
-  appendNewsOverlayNodes(nodes, links, nodeIds, previousPositions);
-
   const normalized = {
     nodes,
     links: links
@@ -868,11 +846,7 @@ function filterGraphData(gData) {
   let links = [...(gData.links || [])];
 
   if (!state.settings.filters.showDailies) {
-    const keepIds = new Set(
-      nodes
-        .filter((n) => n.type !== "news_overlay" && n.type !== "news_item")
-        .map((n) => String(n.id))
-    );
+    const keepIds = new Set(nodes.map((n) => String(n.id)));
     nodes = nodes.filter((n) => keepIds.has(String(n.id)));
     links = links.filter((l) => keepIds.has(String(l.source)) && keepIds.has(String(l.target)));
   }
@@ -934,61 +908,6 @@ function nodeTagText(node) {
     String(node.name || ""),
   ];
   return tags.join(" ").toLowerCase();
-}
-
-function appendNewsOverlayNodes(nodes, links, nodeIds, previousPositions) {
-  const overlay = state.newsOverlay;
-  if (!overlay || typeof overlay !== "object") return;
-
-  const overlayId = "news-overlay";
-  addNode(
-    nodes,
-    nodeIds,
-    {
-      id: overlayId,
-      name: "舆论信息",
-      type: "news_overlay",
-      val: 11,
-      data: overlay,
-      x: 0,
-      y: 0,
-      z: 48,
-    },
-    previousPositions
-  );
-
-  const items = Array.isArray(overlay.items) ? overlay.items : [];
-  const perRing = 20;
-  const baseRadius = 36;
-  items.forEach((item, idx) => {
-    const ring = Math.floor(idx / perRing);
-    const posInRing = idx % perRing;
-    const ringSize = Math.min(perRing, items.length - ring * perRing);
-    const angle = (posInRing / Math.max(1, ringSize)) * Math.PI * 2;
-    const radius = baseRadius + ring * 12;
-    const itemId = `news-item-${idx + 1}`;
-    addNode(
-      nodes,
-      nodeIds,
-      {
-        id: itemId,
-        name: shortenLabel(item?.title || `消息 ${idx + 1}`, 16),
-        type: "news_item",
-        val: 4.5,
-        data: item,
-        itemIndex: idx + 1,
-        x: Math.cos(angle) * radius,
-        y: Math.sin(angle) * radius,
-        z: 48 + ring * 6,
-      },
-      previousPositions
-    );
-    links.push({
-      source: itemId,
-      target: overlayId,
-      color: "rgba(255,179,71,0.45)",
-    });
-  });
 }
 
 function addNode(nodes, nodeIds, node, previousPositions) {
@@ -1283,72 +1202,12 @@ function applyNodeVisualState() {
 function handleNodeDrag(node, translate) {
   if (!node || !state.graph) return;
   state.dragging = true;
-  if (node.type !== "news_overlay") return;
-
-  let dx = 0;
-  let dy = 0;
-  let dz = 0;
-  if (translate && typeof translate === "object") {
-    dx = Number(translate.x || 0);
-    dy = Number(translate.y || 0);
-    dz = Number(translate.z || 0);
-  } else {
-    const prev = state.newsDragPrev || {
-      x: Number(node.x || 0),
-      y: Number(node.y || 0),
-      z: Number(node.z || 0),
-    };
-    dx = Number(node.x || 0) - prev.x;
-    dy = Number(node.y || 0) - prev.y;
-    dz = Number(node.z || 0) - prev.z;
-  }
-  if (dx === 0 && dy === 0 && dz === 0) return;
-
-  forEachNewsItemNode(state.graph, (n) => {
-    n.x = Number(n.x || 0) + dx;
-    n.y = Number(n.y || 0) + dy;
-    n.z = Number(n.z || 0) + dz;
-    n.fx = n.x;
-    n.fy = n.y;
-    n.fz = n.z;
-  });
-
-  node.fx = Number(node.x || 0);
-  node.fy = Number(node.y || 0);
-  node.fz = Number(node.z || 0);
-  state.newsDragPrev = {
-    x: Number(node.x || 0),
-    y: Number(node.y || 0),
-    z: Number(node.z || 0),
-  };
 }
 
 function handleNodeDragEnd(node) {
   state.dragging = false;
   state.ignoreClickUntil = performance.now() + 140;
   queueHoverUpdate(null);
-  if (!node) return;
-  state.newsDragPrev = null;
-  if (node.type !== "news_overlay" || !state.graph) return;
-
-  forEachNewsItemNode(state.graph, (n) => {
-    n.fx = Number(n.x || 0);
-    n.fy = Number(n.y || 0);
-    n.fz = Number(n.z || 0);
-  });
-  node.fx = Number(node.x || 0);
-  node.fy = Number(node.y || 0);
-  node.fz = Number(node.z || 0);
-}
-
-function forEachNewsItemNode(graph, iteratee) {
-  if (!graph || typeof iteratee !== "function") return;
-  const gData = graph.graphData();
-  const nodes = Array.isArray(gData?.nodes) ? gData.nodes : [];
-  nodes.forEach((n) => {
-    if (n.type !== "news_item") return;
-    iteratee(n);
-  });
 }
 
 function handlePreviewClick(evt) {
@@ -1630,8 +1489,6 @@ function panelTitle(node) {
   if (!node) return "详情";
   if (node.type === "origin") return node.name || node.symbol || "Origin";
   if (node.type === "round") return node.name || node.data?.label || "Round";
-  if (node.type === "news_overlay") return "舆论信息";
-  if (node.type === "news_item") return node.name || "舆论消息";
   return stageDisplayName({
     stage: node.stage || node.type,
     title: node.title || node.name,
@@ -1643,8 +1500,6 @@ function panelBody(node) {
   if (!node) return '<div class="placeholder">暂无数据</div>';
   if (node.type === "origin") return renderConfigHTML(node.symbol);
   if (node.type === "round") return renderRoundHTML(node.data);
-  if (node.type === "news_overlay") return renderNewsOverlayHTML(node.data);
-  if (node.type === "news_item") return renderNewsItemHTML(node.data, node.itemIndex);
   return renderStageHTML(node.data);
 }
 
@@ -1814,49 +1669,6 @@ function renderGateFactors(factors) {
   return `<div class="code-block">${lines.join("\n")}</div>`;
 }
 
-function renderNewsOverlayHTML(data) {
-  if (!data || typeof data !== "object") {
-    return '<div class="placeholder">暂无舆论信息</div>';
-  }
-  const updatedAt = data.updated_at || "—";
-  const staleText = data.stale ? "已过期" : "有效";
-  const staleAfter = data.stale_after || "—";
-  const usedCount = Number(data.items_used_count || 0);
-  const shownCount = Array.isArray(data.items) ? data.items.length : 0;
-  const rawDecision = String(data.llm_decision_raw || "").trim();
-  const formattedDecision = rawDecision ? formatData(rawDecision) : "—";
-
-  return `
-    <div class="note-title">舆论信息（LLM 决策）</div>
-    <div class="note-meta">
-      <span class="tag">News Overlay</span>
-      <span class="tag">状态 ${escapeHTML(staleText)}</span>
-    </div>
-    <div class="block"><strong>更新时间</strong> ${escapeHTML(updatedAt)}</div>
-    <div class="block"><strong>过期阈值</strong> ${escapeHTML(staleAfter)}</div>
-    <div class="block"><strong>数据条数</strong> used=${usedCount} / shown=${shownCount}</div>
-    <div class="block"><strong>LLM 输出</strong><div class="code-block">${escapeHTML(
-      formattedDecision
-    )}</div></div>
-  `;
-}
-
-function renderNewsItemHTML(item, index) {
-  if (!item || typeof item !== "object") {
-    return '<div class="placeholder">暂无新闻明细</div>';
-  }
-  return `
-    <div class="note-title">消息 #${escapeHTML(String(index || "—"))}</div>
-    <div class="note-meta">
-      <span class="tag">window ${escapeHTML(item.window || "—")}</span>
-      <span class="tag">${escapeHTML(item.domain || "—")}</span>
-    </div>
-    <div class="block"><strong>标题</strong> ${escapeHTML(item.title || "—")}</div>
-    <div class="block"><strong>时间</strong> ${escapeHTML(item.seen_at || "—")}</div>
-    <div class="block"><strong>链接</strong> ${formatExternalLink(item.url || "")}</div>
-  `;
-}
-
 function extractPrompts(input) {
   if (!input) return ["—", "—"];
   if (typeof input === "string") return ["—", input];
@@ -1996,12 +1808,6 @@ function nodeShortLabel(node) {
   }
   if (type === "round") {
     return roundShortLabel(node.data || node);
-  }
-  if (type === "news_overlay") {
-    return "NEWS";
-  }
-  if (type === "news_item") {
-    return `N${String(node.itemIndex || "")}`;
   }
   if (type === "provider") {
     return `P-${classifyRoleToken(node)}`;

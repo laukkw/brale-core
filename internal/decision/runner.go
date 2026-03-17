@@ -29,17 +29,15 @@ import (
 )
 
 type Runner struct {
-	Snapshotter           Snapshotter
-	Compressor            Compressor
-	Agent                 AgentService
-	Provider              ProviderService
-	Bindings              map[string]strategy.StrategyBinding
-	Configs               map[string]config.SymbolConfig
-	Enabled               map[string]AgentEnabled
-	Ruleflow              ruleflow.Evaluator
-	NewsOverlayEnabled    bool
-	NewsOverlayStaleAfter time.Duration
-	mu                    sync.Mutex
+	Snapshotter Snapshotter
+	Compressor  Compressor
+	Agent       AgentService
+	Provider    ProviderService
+	Bindings    map[string]strategy.StrategyBinding
+	Configs     map[string]config.SymbolConfig
+	Enabled     map[string]AgentEnabled
+	Ruleflow    ruleflow.Evaluator
+	mu          sync.Mutex
 }
 
 type RunOptions struct {
@@ -151,7 +149,6 @@ func (r *Runner) runSymbol(ctx context.Context, symbol string, comp features.Com
 		risk,
 		ruleflow.InPositionOutputs{},
 		ruleflow.HardGuardPosition{},
-		r.currentNewsOverlayPayload(),
 	)
 
 	rfStart := time.Now()

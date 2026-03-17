@@ -58,9 +58,6 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 			return validationErrorf("llm_models.%s.concurrency must be > 0", model)
 		}
 	}
-	if err := validateNewsOverlayConfig(cfg.NewsOverlay, cfg.LLMModels); err != nil {
-		return err
-	}
 	if err := validateWebhookConfig(cfg.Webhook); err != nil {
 		return err
 	}
@@ -69,105 +66,6 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 	}
 	return nil
 }
-
-func validateNewsOverlayConfig(cfg NewsOverlayConfig, llmModels map[string]LLMModelConfig) error {
-	if !cfg.Enabled {
-		return nil
-	}
-	intervalVal, err := parseRequiredPositiveDuration(
-		cfg.Interval,
-		"news_overlay.interval is required when enabled=true",
-		"news_overlay.interval must be a valid duration > 0",
-	)
-	if err != nil {
-		return err
-	}
-	staleVal, err := parseRequiredPositiveDuration(
-		cfg.SnapshotStaleAfter,
-		"news_overlay.snapshot_stale_after is required when enabled=true",
-		"news_overlay.snapshot_stale_after must be a valid duration > 0",
-	)
-	if err != nil {
-		return err
-	}
-	if staleVal < intervalVal {
-		return validationErrorf("news_overlay.snapshot_stale_after must be >= news_overlay.interval")
-	}
-	if err := validateNewsOverlayLimits(cfg); err != nil {
-		return err
-	}
-	if err := validateNewsOverlaySourceMode(cfg.SourceMode); err != nil {
-		return err
-	}
-	if err := validateNoEmptyItems(cfg.BlockedDomains, "news_overlay.blocked_domains contains empty value"); err != nil {
-		return err
-	}
-	if err := validateNoEmptyItems(cfg.BlockedTitleKeywords, "news_overlay.blocked_title_keywords contains empty value"); err != nil {
-		return err
-	}
-	if err := validateNewsOverlayTightenThresholds(cfg); err != nil {
-		return err
-	}
-	if err := validateNewsOverlayQueries(cfg); err != nil {
-		return err
-	}
-	return validateNewsOverlayModel(cfg.Model, llmModels)
-}
-
-func parseRequiredPositiveDuration(raw, requiredErr, invalidErr string) (time.Duration, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return 0, validationErrorf("%s", requiredErr)
-	}
-	duration, err := time.ParseDuration(value)
-	if err != nil || duration <= 0 {
-		return 0, validationErrorf("%s", invalidErr)
-	}
-	return duration, nil
-}
-
-func validateNewsOverlayLimits(cfg NewsOverlayConfig) error {
-	if cfg.MaxRecords <= 0 || cfg.MaxRecords > 250 {
-		return validationErrorf("news_overlay.maxrecords must be in [1,250]")
-	}
-	if cfg.MinItems1H <= 0 {
-		return validationErrorf("news_overlay.min_items_1h must be > 0")
-	}
-	if cfg.MinItems4H <= 0 {
-		return validationErrorf("news_overlay.min_items_4h must be > 0")
-	}
-	if cfg.MinEffectiveItems1H <= 0 {
-		return validationErrorf("news_overlay.min_effective_items_1h must be > 0")
-	}
-	if cfg.MinEffectiveItems4H <= 0 {
-		return validationErrorf("news_overlay.min_effective_items_4h must be > 0")
-	}
-	if cfg.MinEffectiveItems1H > cfg.MaxRecords {
-		return validationErrorf("news_overlay.min_effective_items_1h must be <= news_overlay.maxrecords")
-	}
-	if cfg.MinEffectiveItems4H > cfg.MaxRecords {
-		return validationErrorf("news_overlay.min_effective_items_4h must be <= news_overlay.maxrecords")
-	}
-	if cfg.MaxItemsPerDomain <= 0 {
-		return validationErrorf("news_overlay.max_items_per_domain must be > 0")
-	}
-	if cfg.MaxItemsPerDomain > cfg.MaxRecords {
-		return validationErrorf("news_overlay.max_items_per_domain must be <= news_overlay.maxrecords")
-	}
-	return nil
-}
-
-func validateNewsOverlaySourceMode(raw string) error {
-	sourceMode := strings.ToLower(strings.TrimSpace(raw))
-	if sourceMode == "" {
-		sourceMode = "doc"
-	}
-	if sourceMode != "doc" {
-		return validationErrorf("news_overlay.source_mode must be doc")
-	}
-	return nil
-}
-
 func validateNoEmptyItems(items []string, errMsg string) error {
 	for _, item := range items {
 		if strings.TrimSpace(item) == "" {
@@ -176,53 +74,6 @@ func validateNoEmptyItems(items []string, errMsg string) error {
 	}
 	return nil
 }
-
-func validateNewsOverlayTightenThresholds(cfg NewsOverlayConfig) error {
-	if cfg.TightenThreshold1H < 0 || cfg.TightenThreshold1H > 100 {
-		return validationErrorf("news_overlay.tighten_threshold_1h must be in [0,100]")
-	}
-	if cfg.TightenThreshold4H < 0 || cfg.TightenThreshold4H > 100 {
-		return validationErrorf("news_overlay.tighten_threshold_4h must be in [0,100]")
-	}
-	return nil
-}
-
-func validateNewsOverlayQueries(cfg NewsOverlayConfig) error {
-	queries := cfg.Queries
-	if len(queries) == 0 && strings.TrimSpace(cfg.Query) != "" {
-		queries = []string{cfg.Query}
-	}
-	if len(queries) == 0 {
-		return validationErrorf("news_overlay.query or news_overlay.queries is required when enabled=true")
-	}
-	if len(queries) > 8 {
-		return validationErrorf("news_overlay.queries must contain at most 8 items")
-	}
-	for i, query := range queries {
-		if strings.TrimSpace(query) == "" {
-			return validationErrorf("news_overlay.queries[%d] is empty", i)
-		}
-	}
-	return nil
-}
-
-func validateNewsOverlayModel(rawModel string, llmModels map[string]LLMModelConfig) error {
-	model := strings.TrimSpace(rawModel)
-	if model != "" {
-		if len(llmModels) == 0 {
-			return validationErrorf("news_overlay.model is set but llm_models is empty")
-		}
-		if _, ok := llmModels[model]; !ok {
-			return validationErrorf("news_overlay.model=%s not found in llm_models", model)
-		}
-		return nil
-	}
-	if len(llmModels) == 0 {
-		return validationErrorf("news_overlay.enabled=true requires llm_models to be configured")
-	}
-	return nil
-}
-
 func normalizePersistMode(raw string) string {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	switch mode {

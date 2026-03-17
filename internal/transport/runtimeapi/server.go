@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
 	"brale-core/internal/execution"
 	"brale-core/internal/market"
@@ -60,22 +59,21 @@ type runtimeExecClient interface {
 }
 
 type Server struct {
-	Scheduler             Scheduler
-	Resolver              SymbolResolver
-	SymbolConfigs         map[string]ConfigBundle
-	ObserveJobs           *asyncjob.Manager[observeResponse]
-	Store                 store.Store
-	ExecClient            runtimeExecClient
-	PositionCache         *position.PositionCache
-	PlanCache             *position.PlanCache
-	PriceSource           market.PriceSource
-	KlineProvider         snapshot.KlineProvider
-	AllowSymbol           func(symbol string) bool
-	NewsOverlayStaleAfter time.Duration
-	lastMu                sync.RWMutex
-	lastRun               map[string]lastObserve
-	klineCacheMu          sync.RWMutex
-	klineCache            map[string]dashboardKlineCacheEntry
+	Scheduler     Scheduler
+	Resolver      SymbolResolver
+	SymbolConfigs map[string]ConfigBundle
+	ObserveJobs   *asyncjob.Manager[observeResponse]
+	Store         store.Store
+	ExecClient    runtimeExecClient
+	PositionCache *position.PositionCache
+	PlanCache     *position.PlanCache
+	PriceSource   market.PriceSource
+	KlineProvider snapshot.KlineProvider
+	AllowSymbol   func(symbol string) bool
+	lastMu        sync.RWMutex
+	lastRun       map[string]lastObserve
+	klineCacheMu  sync.RWMutex
+	klineCache    map[string]dashboardKlineCacheEntry
 }
 
 func (s *Server) Handler() (http.Handler, error) {
@@ -95,7 +93,6 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("/api/runtime/position/status", http.HandlerFunc(s.handlePositionStatus))
 	mux.Handle("/api/runtime/position/history", http.HandlerFunc(s.handleTradeHistory))
 	mux.Handle("/api/runtime/decision/latest", http.HandlerFunc(s.handleDecisionLatest))
-	mux.Handle("/api/runtime/news_overlay/latest", http.HandlerFunc(s.handleNewsOverlayLatest))
 	mux.Handle(dashboardOverviewPath, http.HandlerFunc(s.handleDashboardOverview))
 	mux.Handle(dashboardAccountSummaryPath, http.HandlerFunc(s.handleDashboardAccountSummary))
 	mux.Handle(dashboardKlinePath, http.HandlerFunc(s.handleDashboardKline))

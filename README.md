@@ -157,7 +157,6 @@ The data and interface layer provides persistent state storage and external inte
 | Long/Short Ratio | Binance Futures |
 | Fear & Greed | Dedicated FearGreed service |
 | Liquidations | Binance Futures (window aggregation) |
-| News Overlay | GDELT Doc API + LLM evaluation |
 | Mark Price | Binance MarkPriceStream |
 | Trade execution and account | Freqtrade API |
 
@@ -167,7 +166,7 @@ Note: At symbol level, configuration can decide whether OI/Funding/LongShort/Fea
 
 The configuration system uses a three-layer structure: system-level, index-level, and strategy-level, so global behavior is decoupled from per-symbol strategy settings.
 
-- System-level config: `configs/system.toml`, defines global capabilities such as execution system, Webhook, notifications, News Overlay, and LLM models.
+- System-level config: `configs/system.toml`, defines global capabilities such as execution system, Webhook, notifications, and LLM models.
 - Index-level config: `configs/symbols-index.toml`, maintains mappings from symbols to config and strategy files.
 - Strategy-level config: `configs/symbols/*.toml` and `configs/strategies/*.toml`, describes per-instrument parameters, risk controls, and strategy details.
 

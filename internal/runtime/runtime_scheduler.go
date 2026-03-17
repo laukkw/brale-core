@@ -27,15 +27,14 @@ type RuntimeScheduler struct {
 	Reconciler  Reconciler
 	RiskMonitor RiskMonitor
 
-	SyncOrderInterval   time.Duration
-	ReconcileInterval   time.Duration
-	PriceTickInterval   time.Duration
-	NewsOverlayInterval time.Duration
-	cancel              context.CancelFunc
-	streamCtx           context.Context
-	started             bool
-	startMu             sync.Mutex
-	lifecycleMu         sync.RWMutex
+	SyncOrderInterval time.Duration
+	ReconcileInterval time.Duration
+	PriceTickInterval time.Duration
+	cancel            context.CancelFunc
+	streamCtx         context.Context
+	started           bool
+	startMu           sync.Mutex
+	lifecycleMu       sync.RWMutex
 
 	Logger      *zap.Logger
 	PriceStream interface {
@@ -43,10 +42,7 @@ type RuntimeScheduler struct {
 		Close()
 	}
 
-	AccountFetcher     func(ctx context.Context, symbol string) (execution.AccountState, error)
-	NewsOverlayUpdater interface {
-		RunOnce(ctx context.Context) error
-	}
+	AccountFetcher func(ctx context.Context, symbol string) (execution.AccountState, error)
 
 	EnableScheduledDecision bool
 	mu                      sync.RWMutex
@@ -331,9 +327,6 @@ func (s *RuntimeScheduler) Enqueue(task RuntimeTask) error {
 }
 
 func (s *RuntimeScheduler) startLoops(ctx context.Context) {
-	if s.NewsOverlayUpdater != nil && s.NewsOverlayInterval > 0 {
-		go s.newsOverlayLoop(ctx)
-	}
 	for symbol, rt := range s.Symbols {
 		interval := rt.BarInterval
 		if interval <= 0 {
@@ -346,34 +339,6 @@ func (s *RuntimeScheduler) startLoops(ctx context.Context) {
 	}
 	if s.ReconcileInterval > 0 {
 		go s.reconcileLoop(ctx)
-	}
-}
-
-func (s *RuntimeScheduler) newsOverlayLoop(ctx context.Context) {
-	run := func() {
-		if s.NewsOverlayUpdater == nil {
-			return
-		}
-		if err := s.NewsOverlayUpdater.RunOnce(ctx); err != nil {
-			if s.Logger != nil {
-				s.Logger.Warn("news overlay update failed", zap.Error(err))
-			}
-			return
-		}
-		if s.Logger != nil {
-			s.Logger.Debug("news overlay updated")
-		}
-	}
-	run()
-	ticker := time.NewTicker(s.NewsOverlayInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			run()
-		}
 	}
 }
 

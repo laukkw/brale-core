@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"brale-core/internal/decision/features"
-	"brale-core/internal/decision/newsoverlay"
 	"brale-core/internal/execution"
 	"brale-core/internal/market"
 	"brale-core/internal/pkg/errclass"
@@ -46,10 +45,6 @@ func (p *Pipeline) applyRiskPlanUpdate(ctx context.Context, res SymbolResult, co
 		exec.DebounceRemain = debounceRemain
 		exec.Eligible = false
 		exec.addBlocked(tightenBlockDebounce)
-		return exec, nil
-	}
-	exec = p.applyNewsGate(ctx, exec, pos)
-	if !exec.Eligible {
 		return exec, nil
 	}
 	updateCtx, reason, err := p.buildTightenContext(ctx, res, comp, exec)
@@ -106,23 +101,8 @@ type tightenExecution struct {
 	ScoreThreshold float64
 	ScoreParseOK   bool
 	ScoreBreakdown []RiskPlanUpdateScoreItem
-	NewsGate       *tightenNewsGate
 	TPTightened    bool
 	ExitConfirmHit bool
-}
-
-type tightenNewsGate struct {
-	Enabled    bool
-	Decision   string
-	Window     string
-	Side       string
-	ReasonCode string
-	ReasonZH   string
-	Score      float64
-	Threshold  float64
-	ItemsCount int
-	MinItems   int
-	UpdatedAt  string
 }
 
 const (
@@ -140,11 +120,6 @@ const (
 	tightenBlockNoTightenNeeded  = "no_tighten_needed"
 	tightenBlockNotEvaluated     = "not_evaluated"
 	tightenBlockDebounce         = "tighten_debounce"
-	tightenBlockNewsGate         = "news_gate"
-
-	newsGateDecisionPass  = "pass"
-	newsGateDecisionSkip  = "skip"
-	newsGateDecisionBlock = "block"
 )
 
 func newTightenExecution(res SymbolResult, comp features.CompressionResult) tightenExecution {
@@ -224,163 +199,7 @@ func (e tightenExecution) toMap() map[string]any {
 		"parse_ok":  e.ScoreParseOK,
 		"breakdown": formatTightenScoreBreakdown(e.ScoreBreakdown),
 	}
-	if e.NewsGate != nil {
-		out["news_gate"] = map[string]any{
-			"enabled":     e.NewsGate.Enabled,
-			"decision":    e.NewsGate.Decision,
-			"window":      e.NewsGate.Window,
-			"side":        e.NewsGate.Side,
-			"reason_code": e.NewsGate.ReasonCode,
-			"reason_zh":   e.NewsGate.ReasonZH,
-			"score":       e.NewsGate.Score,
-			"threshold":   e.NewsGate.Threshold,
-			"items_count": e.NewsGate.ItemsCount,
-			"min_items":   e.NewsGate.MinItems,
-			"updated_at":  e.NewsGate.UpdatedAt,
-		}
-	}
 	return out
-}
-
-func (p *Pipeline) applyNewsGate(ctx context.Context, exec tightenExecution, pos store.PositionRecord) tightenExecution {
-	if p == nil || !p.NewsOverlayEnabled {
-		return exec
-	}
-	newsGate := &tightenNewsGate{
-		Enabled:  true,
-		Decision: newsGateDecisionSkip,
-		Window:   resolveNewsWindow(p.BarInterval),
-		Side:     normalizeSide(pos.Side),
-	}
-	if newsGate.Side == "" {
-		newsGate.ReasonCode = "news_gate_snapshot_missing"
-		newsGate.ReasonZH = "无可用舆情快照，已跳过舆情门槛"
-		exec.NewsGate = newsGate
-		p.notifyNewsGateSkip(ctx, newsGate, "snapshot_missing")
-		return exec
-	}
-	snapshot, ok := newsoverlay.GlobalStore().Load()
-	if !ok {
-		newsGate.ReasonCode = "news_gate_snapshot_missing"
-		newsGate.ReasonZH = "无可用舆情快照，已跳过舆情门槛"
-		exec.NewsGate = newsGate
-		p.notifyNewsGateSkip(ctx, newsGate, "snapshot_missing")
-		return exec
-	}
-	newsGate.UpdatedAt = snapshot.UpdatedAt.UTC().Format(time.RFC3339)
-	if isSnapshotStale(snapshot.UpdatedAt, p.NewsOverlayStaleAfter) {
-		newsGate.ReasonCode = "news_gate_snapshot_stale"
-		newsGate.ReasonZH = "舆情快照已过期（超过 4 小时），已跳过舆情门槛"
-		exec.NewsGate = newsGate
-		p.notifyNewsGateSkip(ctx, newsGate, "snapshot_stale")
-		return exec
-	}
-	newsGate.ItemsCount = snapshot.Overlay.ItemsCount[newsGate.Window]
-	newsGate.MinItems = p.newsGateMinItems(newsGate.Window)
-	if newsGate.ItemsCount < newsGate.MinItems {
-		newsGate.ReasonCode = "news_gate_data_insufficient"
-		newsGate.ReasonZH = "舆情样本不足，已跳过舆情门槛"
-		exec.NewsGate = newsGate
-		p.notifyNewsGateSkip(ctx, newsGate, "data_insufficient")
-		return exec
-	}
-	newsGate.Score = snapshot.Overlay.TightenScoreBySide[newsGate.Side][newsGate.Window]
-	newsGate.Threshold = p.newsGateThreshold(newsGate.Window)
-	if newsGate.Score < newsGate.Threshold {
-		newsGate.Decision = newsGateDecisionBlock
-		newsGate.ReasonCode = "news_gate_threshold_not_met"
-		newsGate.ReasonZH = "舆情分数未达到收紧阈值"
-		exec.Eligible = false
-		exec.addBlocked(tightenBlockNewsGate)
-		exec.NewsGate = newsGate
-		p.notifyNewsGateBlocked(ctx, newsGate)
-		return exec
-	}
-	newsGate.Decision = newsGateDecisionPass
-	newsGate.ReasonCode = ""
-	newsGate.ReasonZH = ""
-	exec.NewsGate = newsGate
-	return exec
-}
-
-func (p *Pipeline) newsGateMinItems(window string) int {
-	switch strings.ToLower(strings.TrimSpace(window)) {
-	case "4h":
-		if p.NewsOverlayMinItems4H > 0 {
-			return p.NewsOverlayMinItems4H
-		}
-		return 5
-	default:
-		if p.NewsOverlayMinItems1H > 0 {
-			return p.NewsOverlayMinItems1H
-		}
-		return 3
-	}
-}
-
-func (p *Pipeline) newsGateThreshold(window string) float64 {
-	switch strings.ToLower(strings.TrimSpace(window)) {
-	case "4h":
-		if p.NewsOverlayThreshold4H > 0 {
-			return p.NewsOverlayThreshold4H
-		}
-		return 75
-	default:
-		if p.NewsOverlayThreshold1H > 0 {
-			return p.NewsOverlayThreshold1H
-		}
-		return 80
-	}
-}
-
-func (p *Pipeline) notifyNewsGateSkip(ctx context.Context, gate *tightenNewsGate, reason string) {
-	if p == nil || p.Notifier == nil || gate == nil {
-		return
-	}
-	logger := logging.FromContext(ctx).Named("risk")
-	switch reason {
-	case "data_insufficient":
-		message := fmt.Sprintf("[NEWS_OVERLAY][WARN] data insufficient\n- window: %s\n- items_count: %d\n- min_items: %d\n- sourcelang: english\n- maxrecords: %d\n- query: %s\n- action: skip_news_gate (tighten not blocked)",
-			gate.Window,
-			gate.ItemsCount,
-			gate.MinItems,
-			p.NewsOverlayMaxRecords,
-			strings.TrimSpace(p.NewsOverlayQuery),
-		)
-		if err := p.Notifier.SendError(ctx, message); err != nil {
-			logger.Warn("news gate skip notify failed", zap.Error(err), zap.String("reason", reason))
-		}
-	case "snapshot_stale":
-		message := fmt.Sprintf("[NEWS_OVERLAY][WARN] snapshot stale\n- updated_at: %s\n- stale_after: 4h\n- reason_zh: %s",
-			gate.UpdatedAt,
-			gate.ReasonZH,
-		)
-		if err := p.Notifier.SendError(ctx, message); err != nil {
-			logger.Warn("news gate skip notify failed", zap.Error(err), zap.String("reason", reason))
-		}
-	case "snapshot_missing":
-		message := fmt.Sprintf("[NEWS_OVERLAY][WARN] snapshot missing\n- reason_zh: %s", gate.ReasonZH)
-		if err := p.Notifier.SendError(ctx, message); err != nil {
-			logger.Warn("news gate skip notify failed", zap.Error(err), zap.String("reason", reason))
-		}
-	}
-}
-
-func (p *Pipeline) notifyNewsGateBlocked(ctx context.Context, gate *tightenNewsGate) {
-	if p == nil || p.Notifier == nil || gate == nil {
-		return
-	}
-	logger := logging.FromContext(ctx).Named("risk")
-	message := fmt.Sprintf("[NEWS_OVERLAY][BLOCK] tighten blocked by news gate\n- window: %s\n- side: %s\n- score: %s\n- threshold: %s\n- reason_zh: %s",
-		gate.Window,
-		gate.Side,
-		formatRiskFloat(gate.Score),
-		formatRiskFloat(gate.Threshold),
-		gate.ReasonZH,
-	)
-	if err := p.Notifier.SendError(ctx, message); err != nil {
-		logger.Warn("news gate blocked notify failed", zap.Error(err))
-	}
 }
 
 func formatTightenScoreBreakdown(items []RiskPlanUpdateScoreItem) []map[string]any {

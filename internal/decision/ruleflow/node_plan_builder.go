@@ -84,10 +84,6 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	available := toFloat(account["available"])
 	baseBalance := resolveBalance(equity, available)
 	riskAmount := baseBalance * effectiveRiskPct
-	entryMultiplier := resolveEntryMultiplier(direction, toMap(root["news_overlay"]))
-	if entryMultiplier > 0 {
-		riskAmount = riskAmount * entryMultiplier
-	}
 	if stopDist > 0 && riskAmount > 0 {
 		positionSize = riskAmount / stopDist
 	}
@@ -145,31 +141,10 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 			"liquidation_price": liqPrice,
 			"mmr":               mmr,
 			"fee":               fee,
-			"entry_multiplier":  entryMultiplier,
 		},
 	}
 	root["plan"] = plan
 	respondRuleMsgJSON(ctx, msg, root)
-}
-
-func resolveEntryMultiplier(direction string, newsOverlay map[string]any) float64 {
-	if len(newsOverlay) == 0 {
-		return 1.0
-	}
-	switch strings.ToLower(strings.TrimSpace(direction)) {
-	case "short":
-		value := toFloat(newsOverlay["entry_multiplier_short"])
-		if value <= 0 {
-			return 1.0
-		}
-		return value
-	default:
-		value := toFloat(newsOverlay["entry_multiplier_long"])
-		if value <= 0 {
-			return 1.0
-		}
-		return value
-	}
 }
 
 func respondPlanInvalid(ctx types.RuleContext, msg types.RuleMsg, root map[string]any, reason string) {

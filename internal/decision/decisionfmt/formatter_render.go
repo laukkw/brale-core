@@ -479,9 +479,6 @@ func appendTightenHTMLMetrics(metrics []string, report DecisionReport) []string 
 		}
 		metrics = append(metrics, fmt.Sprintf("收紧门槛: 监控收紧=%s; |ATR变化|=%s (>=%s)", translateBoolStatus(exec.MonitorGateHit), atrChangeText, formatExecutionFloat(exec.ATRThreshold)))
 	}
-	if strings.TrimSpace(exec.NewsGateReasonZH) != "" {
-		metrics = append(metrics, fmt.Sprintf("舆情门槛: %s", exec.NewsGateReasonZH))
-	}
 	return metrics
 }
 

@@ -41,7 +41,6 @@ type RuntimeClient interface {
 	FetchPositionStatus(ctx context.Context) (botruntime.PositionStatusResponse, error)
 	FetchTradeHistory(ctx context.Context) (botruntime.TradeHistoryResponse, error)
 	FetchDecisionLatest(ctx context.Context, symbol string) (botruntime.DecisionLatestResponse, error)
-	FetchNewsOverlayLatest(ctx context.Context) (botruntime.NewsOverlayLatestResponse, error)
 	FetchObserveReport(ctx context.Context, symbol string) (botruntime.ObserveResponse, error)
 	PostScheduleToggle(ctx context.Context, enable bool) (botruntime.ScheduleResponse, error)
 	RunObserve(ctx context.Context, req botruntime.ObserveRunRequest) (botruntime.ObserveResponse, error)
@@ -261,8 +260,6 @@ func (b *Bot) processMessage(ctx context.Context, senderID, chatID, text string)
 			return
 		}
 		b.handleLatest(ctx, chatID, symbolText)
-	case "news":
-		b.handleNews(ctx, chatID)
 	default:
 		b.sendReply(ctx, chatID, helpText())
 	}
@@ -344,16 +341,6 @@ func (b *Bot) handleLatest(ctx context.Context, chatID, symbol string) {
 	}
 	b.sendChunked(ctx, chatID, text)
 }
-
-func (b *Bot) handleNews(ctx context.Context, chatID string) {
-	resp, err := b.runtime.FetchNewsOverlayLatest(ctx)
-	if err != nil {
-		b.sendReply(ctx, chatID, "news overlay failed: "+err.Error())
-		return
-	}
-	b.sendChunked(ctx, chatID, renderNews(resp))
-}
-
 func (b *Bot) sendChunked(ctx context.Context, chatID, text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -432,8 +419,6 @@ func parseCommand(input string) (string, string) {
 		return "", ""
 	case "latest", "decision":
 		return "latest", arg
-	case "news", "overlay":
-		return "news", ""
 	default:
 		return "", ""
 	}
@@ -659,34 +644,6 @@ func renderSchedule(resp botruntime.ScheduleResponse) string {
 	}
 	return strings.TrimSpace(b.String())
 }
-
-func renderNews(resp botruntime.NewsOverlayLatestResponse) string {
-	if strings.TrimSpace(resp.LLMDecisionRaw) == "" {
-		if strings.TrimSpace(resp.Summary) != "" {
-			return resp.Summary
-		}
-		return "暂无舆论信息。"
-	}
-	b := &strings.Builder{}
-	b.WriteString("舆论信息（LLM 决策）\n")
-	if strings.TrimSpace(resp.UpdatedAt) != "" {
-		b.WriteString("更新时间: ")
-		b.WriteString(resp.UpdatedAt)
-		b.WriteString("\n")
-	}
-	if resp.Stale {
-		b.WriteString("状态: 已过期")
-		if strings.TrimSpace(resp.StaleAfter) != "" {
-			b.WriteString("（超过 ")
-			b.WriteString(resp.StaleAfter)
-			b.WriteString("）")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString(resp.LLMDecisionRaw)
-	return strings.TrimSpace(b.String())
-}
-
 func latestTradeHistory(items []botruntime.TradeHistoryItem, limit int) []botruntime.TradeHistoryItem {
 	if len(items) == 0 || limit <= 0 {
 		return nil
@@ -853,7 +810,7 @@ func buildMessageCardContent(title, markdown string) (string, error) {
 		Config: cardConfig{WideScreenMode: true},
 		Header: cardHeader{Title: cardTitle{Tag: "plain_text", Content: title}, Template: "blue"},
 		Elements: []cardElement{{
-			Tag: "div",
+			Tag:  "div",
 			Text: &cardText{Tag: "lark_md", Content: markdown},
 		}},
 	}

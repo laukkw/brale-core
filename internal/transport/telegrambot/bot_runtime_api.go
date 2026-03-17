@@ -18,10 +18,6 @@ func (b *Bot) fetchDecisionLatest(ctx context.Context, symbol string) (DecisionL
 	return b.runtimeClient.FetchDecisionLatest(ctx, symbol)
 }
 
-func (b *Bot) fetchNewsOverlayLatest(ctx context.Context) (NewsOverlayLatestResponse, error) {
-	return b.runtimeClient.FetchNewsOverlayLatest(ctx)
-}
-
 func (b *Bot) fetchObserveReport(ctx context.Context, symbol string) (ObserveResponse, error) {
 	return b.runtimeClient.FetchObserveReport(ctx, symbol)
 }

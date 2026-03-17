@@ -18,27 +18,6 @@ type SystemConfig struct {
 	Webhook                 WebhookConfig             `mapstructure:"webhook"`
 	Notification            NotificationConfig        `mapstructure:"notification"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
-	NewsOverlay             NewsOverlayConfig         `mapstructure:"news_overlay"`
-}
-
-type NewsOverlayConfig struct {
-	Enabled              bool     `mapstructure:"enabled"`
-	SourceMode           string   `mapstructure:"source_mode"`
-	Interval             string   `mapstructure:"interval"`
-	SnapshotStaleAfter   string   `mapstructure:"snapshot_stale_after"`
-	MaxRecords           int      `mapstructure:"maxrecords"`
-	MinItems1H           int      `mapstructure:"min_items_1h"`
-	MinItems4H           int      `mapstructure:"min_items_4h"`
-	MinEffectiveItems1H  int      `mapstructure:"min_effective_items_1h"`
-	MinEffectiveItems4H  int      `mapstructure:"min_effective_items_4h"`
-	MaxItemsPerDomain    int      `mapstructure:"max_items_per_domain"`
-	BlockedDomains       []string `mapstructure:"blocked_domains"`
-	BlockedTitleKeywords []string `mapstructure:"blocked_title_keywords"`
-	TightenThreshold1H   float64  `mapstructure:"tighten_threshold_1h"`
-	TightenThreshold4H   float64  `mapstructure:"tighten_threshold_4h"`
-	Query                string   `mapstructure:"query"`
-	Queries              []string `mapstructure:"queries"`
-	Model                string   `mapstructure:"model"`
 }
 
 type LLMModelConfig struct {

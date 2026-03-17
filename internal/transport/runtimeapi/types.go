@@ -101,16 +101,6 @@ type DecisionLatestResponse struct {
 	RequestID      string `json:"request_id"`
 }
 
-type NewsOverlayLatestResponse struct {
-	Status         string `json:"status"`
-	UpdatedAt      string `json:"updated_at,omitempty"`
-	LLMDecisionRaw string `json:"llm_decision_raw,omitempty"`
-	Stale          bool   `json:"stale"`
-	StaleAfter     string `json:"stale_after,omitempty"`
-	Summary        string `json:"summary"`
-	RequestID      string `json:"request_id"`
-}
-
 type ConfigBundle struct {
 	Symbol   config.SymbolConfig
 	Strategy config.StrategyConfig

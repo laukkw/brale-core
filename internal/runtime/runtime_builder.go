@@ -4,19 +4,16 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
-	"brale-core/internal/decision/newsoverlay"
 	"brale-core/internal/interval"
 	"brale-core/internal/llm"
 	llmapp "brale-core/internal/llm/app"
 	"brale-core/internal/market"
 	"brale-core/internal/market/binance"
-	"brale-core/internal/news/gdelt"
 	symbolpkg "brale-core/internal/pkg/symbol"
 	"brale-core/internal/position"
 	"brale-core/internal/reconcile"
@@ -221,7 +218,6 @@ func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig) (
 		AgentIndicatorSystem:      defaults.AgentIndicator,
 		AgentStructureSystem:      defaults.AgentStructure,
 		AgentMechanicsSystem:      defaults.AgentMechanics,
-		AgentNewsOverlaySystem:    defaults.AgentNewsOverlay,
 		ProviderIndicatorSystem:   defaults.ProviderIndicator,
 		ProviderStructureSystem:   defaults.ProviderStructure,
 		ProviderMechanicsSystem:   defaults.ProviderMechanics,
@@ -261,74 +257,6 @@ func newLLMClient(sys config.SystemConfig, role config.LLMRoleConfig) *llm.OpenA
 		Temperature: temp,
 	}
 }
-
-func BuildNewsOverlayUpdater(sys config.SystemConfig, notifier notify.Notifier, monitoredSymbols []string) (*newsoverlay.Updater, error) {
-	if !sys.NewsOverlay.Enabled {
-		return nil, nil
-	}
-	modelName, err := resolveNewsOverlayModel(sys)
-	if err != nil {
-		return nil, err
-	}
-	llmClient, err := newLLMClientByModel(sys, modelName)
-	if err != nil {
-		return nil, err
-	}
-	defaults := config.DefaultPromptDefaults()
-	promptBuilder := llmapp.LLMPromptBuilder{
-		AgentNewsOverlaySystem: defaults.AgentNewsOverlay,
-		UserFormat:             llmapp.UserPromptFormatBullet,
-	}
-	return &newsoverlay.Updater{
-		Config:        sys.NewsOverlay,
-		FocusSymbols:  append([]string(nil), monitoredSymbols...),
-		Store:         newsoverlay.GlobalStore(),
-		GDELT:         &gdelt.Client{},
-		LLM:           llmClient,
-		PromptBuilder: promptBuilder,
-		Notifier:      notifier,
-	}, nil
-}
-
-func newLLMClientByModel(sys config.SystemConfig, model string) (*llm.OpenAIClient, error) {
-	model = strings.TrimSpace(model)
-	modelCfg, ok := sys.LLMModels[model]
-	if !ok {
-		return nil, fmt.Errorf("news overlay model not found: %s", model)
-	}
-	timeoutSec := 30
-	if modelCfg.TimeoutSec != nil {
-		timeoutSec = *modelCfg.TimeoutSec
-	}
-	return &llm.OpenAIClient{
-		Endpoint:    modelCfg.Endpoint,
-		Model:       model,
-		APIKey:      modelCfg.APIKey,
-		Timeout:     time.Duration(timeoutSec) * time.Second,
-		Temperature: 0,
-	}, nil
-}
-
-func resolveNewsOverlayModel(sys config.SystemConfig) (string, error) {
-	if model := strings.TrimSpace(sys.NewsOverlay.Model); model != "" {
-		return model, nil
-	}
-	if len(sys.LLMModels) == 0 {
-		return "", fmt.Errorf("llm_models is required for news overlay")
-	}
-	names := make([]string, 0, len(sys.LLMModels))
-	for name := range sys.LLMModels {
-		if strings.TrimSpace(name) != "" {
-			names = append(names, name)
-		}
-	}
-	if len(names) == 0 {
-		return "", fmt.Errorf("llm_models is required for news overlay")
-	}
-	sort.Strings(names)
-	return names[0], nil
-}
-
 func buildSnapshotFetcher(symbolCfg config.SymbolConfig, requireMechanics bool) *snapshot.Fetcher {
 	fetcher := binance.NewSnapshotFetcher(binance.SnapshotOptions{
 		RequireOI:           requireMechanics && symbolCfg.Require.OI,
@@ -397,15 +325,13 @@ func buildCompressor(metricsCtx context.Context, symbolCfg config.SymbolConfig, 
 
 func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor *decision.FeatureCompressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, symbolCfg config.SymbolConfig, bind strategy.StrategyBinding, enabledMap map[string]decision.AgentEnabled) decision.Runner {
 	return decision.Runner{
-		Snapshotter:           fetcher,
-		Compressor:            compressor,
-		Agent:                 agentSvc,
-		Provider:              providerSvc,
-		Bindings:              map[string]strategy.StrategyBinding{symbolCfg.Symbol: bind},
-		Configs:               map[string]config.SymbolConfig{symbolCfg.Symbol: symbolCfg},
-		Enabled:               enabledMap,
-		NewsOverlayEnabled:    sys.NewsOverlay.Enabled,
-		NewsOverlayStaleAfter: resolveNewsOverlayStaleAfter(sys.NewsOverlay.SnapshotStaleAfter),
+		Snapshotter: fetcher,
+		Compressor:  compressor,
+		Agent:       agentSvc,
+		Provider:    providerSvc,
+		Bindings:    map[string]strategy.StrategyBinding{symbolCfg.Symbol: bind},
+		Configs:     map[string]config.SymbolConfig{symbolCfg.Symbol: symbolCfg},
+		Enabled:     enabledMap,
 	}
 }
 
@@ -426,18 +352,6 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		TraceEnabled:  true,
 		TraceRedacted: false,
 	}
-	newsGateMin1H := sys.NewsOverlay.MinItems1H
-	if sys.NewsOverlay.MinEffectiveItems1H > 0 {
-		newsGateMin1H = sys.NewsOverlay.MinEffectiveItems1H
-	}
-	newsGateMin4H := sys.NewsOverlay.MinItems4H
-	if sys.NewsOverlay.MinEffectiveItems4H > 0 {
-		newsGateMin4H = sys.NewsOverlay.MinEffectiveItems4H
-	}
-	queryLabel := strings.TrimSpace(sys.NewsOverlay.Query)
-	if queryLabel == "" && len(sys.NewsOverlay.Queries) > 0 {
-		queryLabel = strings.Join(sys.NewsOverlay.Queries, " || ")
-	}
 	return &decision.Pipeline{
 		Runner:                  runner,
 		Store:                   st,
@@ -446,14 +360,6 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		PriceSource:             priceSource,
 		BarInterval:             barInterval,
 		ExecutionSystem:         sys.ExecutionSystem,
-		NewsOverlayEnabled:      sys.NewsOverlay.Enabled,
-		NewsOverlayStaleAfter:   resolveNewsOverlayStaleAfter(sys.NewsOverlay.SnapshotStaleAfter),
-		NewsOverlayMaxRecords:   sys.NewsOverlay.MaxRecords,
-		NewsOverlayQuery:        queryLabel,
-		NewsOverlayMinItems1H:   newsGateMin1H,
-		NewsOverlayMinItems4H:   newsGateMin4H,
-		NewsOverlayThreshold1H:  sys.NewsOverlay.TightenThreshold1H,
-		NewsOverlayThreshold4H:  sys.NewsOverlay.TightenThreshold4H,
 		States:                  stateProvider,
 		Bindings:                map[string]strategy.StrategyBinding{symbol: bind},
 		PlanCache:               positioner.PlanCache,
@@ -467,11 +373,6 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		Notifier:                notifier,
 	}, nil
 }
-
-func resolveNewsOverlayStaleAfter(raw string) time.Duration {
-	return config.ParseDurationOrDefault(raw, 4*time.Hour)
-}
-
 func toIndicatorOptions(cfg config.IndicatorConfig, indicatorEnabled bool) decision.IndicatorCompressOptions {
 	opts := decision.IndicatorCompressOptions{
 		EMAFast:    cfg.EMAFast,

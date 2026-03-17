@@ -42,28 +42,16 @@ func buildRuntimeMap(ctx context.Context, logger *zap.Logger, sys config.SystemC
 }
 
 func startScheduler(ctx context.Context, logger *zap.Logger, sys config.SystemConfig, deps coreDeps, runtimes map[string]runtime.SymbolRuntime) (*runtime.RuntimeScheduler, error) {
-	monitored := make([]string, 0, len(runtimes))
-	for symbol := range runtimes {
-		monitored = append(monitored, symbol)
-	}
-	newsUpdater, err := runtime.BuildNewsOverlayUpdater(sys, deps.notifier, monitored)
-	if err != nil {
-		return nil, fmt.Errorf("news overlay updater init failed: %w", err)
-	}
 	scheduler := &runtime.RuntimeScheduler{
-		Symbols:             runtimes,
-		Reconciler:          deps.reconciler,
-		RiskMonitor:         deps.riskMonitor,
-		AccountFetcher:      deps.freqtradeAcct,
-		SyncOrderInterval:   time.Duration(sys.Webhook.FallbackOrderPollSec) * time.Second,
-		ReconcileInterval:   time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
-		PriceTickInterval:   time.Second,
-		NewsOverlayInterval: config.ParseDurationOrDefault(sys.NewsOverlay.Interval, time.Hour),
-		Logger:              logger.Named("scheduler"),
-		PriceStream:         deps.priceSource,
-	}
-	if newsUpdater != nil {
-		scheduler.NewsOverlayUpdater = newsUpdater
+		Symbols:           runtimes,
+		Reconciler:        deps.reconciler,
+		RiskMonitor:       deps.riskMonitor,
+		AccountFetcher:    deps.freqtradeAcct,
+		SyncOrderInterval: time.Duration(sys.Webhook.FallbackOrderPollSec) * time.Second,
+		ReconcileInterval: time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
+		PriceTickInterval: time.Second,
+		Logger:            logger.Named("scheduler"),
+		PriceStream:       deps.priceSource,
 	}
 	scheduler.SetScheduledDecision(deps.scheduled)
 	if err := scheduler.Start(ctx); err != nil {
@@ -132,17 +120,16 @@ func loadSymbolConfigs(logger *zap.Logger, sys config.SystemConfig, symbolIndexP
 
 func buildRuntimeHandler(sys config.SystemConfig, deps coreDeps, scheduler *runtime.RuntimeScheduler, resolver *runtimeapi.RuntimeSymbolResolver, symbolConfigs map[string]runtimeapi.ConfigBundle) (http.Handler, error) {
 	runtimeServer := runtimeapi.Server{
-		Scheduler:             scheduler,
-		Resolver:              resolver,
-		PlanCache:             deps.positioner.PlanCache,
-		PriceSource:           deps.priceSource,
-		KlineProvider:         binance.NewFuturesMarket(),
-		AllowSymbol:           deps.allowSymbol,
-		Store:                 deps.store,
-		ExecClient:            deps.executor.Client,
-		PositionCache:         deps.positionCache,
-		SymbolConfigs:         symbolConfigs,
-		NewsOverlayStaleAfter: config.ParseDurationOrDefault(sys.NewsOverlay.SnapshotStaleAfter, 4*time.Hour),
+		Scheduler:     scheduler,
+		Resolver:      resolver,
+		PlanCache:     deps.positioner.PlanCache,
+		PriceSource:   deps.priceSource,
+		KlineProvider: binance.NewFuturesMarket(),
+		AllowSymbol:   deps.allowSymbol,
+		Store:         deps.store,
+		ExecClient:    deps.executor.Client,
+		PositionCache: deps.positionCache,
+		SymbolConfigs: symbolConfigs,
 	}
 	return runtimeServer.Handler()
 }

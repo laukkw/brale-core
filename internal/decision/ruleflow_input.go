@@ -10,13 +10,12 @@ import (
 	"brale-core/internal/strategy"
 )
 
-func buildRuleflowInput(symbol string, res SymbolResult, bind strategy.StrategyBinding, state fsm.PositionState, positionID string, exitConfirmCount int, buildPlan bool, comp features.CompressionResult, acct execution.AccountState, risk execution.RiskParams, inPos ruleflow.InPositionOutputs, position ruleflow.HardGuardPosition, newsOverlay map[string]any) ruleflow.Input {
+func buildRuleflowInput(symbol string, res SymbolResult, bind strategy.StrategyBinding, state fsm.PositionState, positionID string, exitConfirmCount int, buildPlan bool, comp features.CompressionResult, acct execution.AccountState, risk execution.RiskParams, inPos ruleflow.InPositionOutputs, position ruleflow.HardGuardPosition) ruleflow.Input {
 	structureDirection := strings.ToLower(strings.TrimSpace(res.ConsensusDirection))
 	return ruleflow.Input{
 		Symbol:             symbol,
 		Providers:          res.Providers,
 		AgentStructure:     res.AgentStructure,
-		NewsOverlay:        newsOverlay,
 		InPosition:         inPos,
 		Position:           position,
 		State:              state,

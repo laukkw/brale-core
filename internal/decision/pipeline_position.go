@@ -219,7 +219,6 @@ func (p *Pipeline) evaluateRuleflowHoldGate(ctx context.Context, symbol string, 
 		execution.RiskParams{RiskPerTradePct: bind.RiskManagement.RiskPerTradePct},
 		inPos,
 		hardGuardInput,
-		p.currentNewsOverlayPayload(),
 	)
 	rfResult, err := rfEngine.Evaluate(ctx, bind.RuleChainPath, rfInput)
 	if err != nil {

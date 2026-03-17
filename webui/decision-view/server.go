@@ -12,11 +12,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision/decisionfmt"
-	"brale-core/internal/decision/newsoverlay"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/store"
 
@@ -25,7 +23,6 @@ import (
 
 const (
 	defaultRoundLimit = 30
-	maxNewsNodes      = 80
 )
 
 //go:embed index.html styles.css main.js favicon-mask.svg vendor/*.js
@@ -696,32 +693,13 @@ type ConfigBundle struct {
 }
 
 type ConfigGraphResponse struct {
-	Symbols     []ConfigSymbolGraph `json:"symbols"`
-	NewsOverlay *NewsOverlayGraph   `json:"news_overlay,omitempty"`
+	Symbols []ConfigSymbolGraph `json:"symbols"`
 }
 
 type ConfigSymbolGraph struct {
 	ID     string       `json:"id"`
 	Label  string       `json:"label"`
 	Config ConfigDetail `json:"config"`
-}
-
-type NewsOverlayGraph struct {
-	UpdatedAt      string                 `json:"updated_at,omitempty"`
-	Stale          bool                   `json:"stale"`
-	StaleAfter     string                 `json:"stale_after,omitempty"`
-	ItemsUsedCount int                    `json:"items_used_count"`
-	LLMDecisionRaw string                 `json:"llm_decision_raw,omitempty"`
-	Items          []NewsOverlayItemGraph `json:"items,omitempty"`
-}
-
-type NewsOverlayItemGraph struct {
-	Window       string `json:"window"`
-	Title        string `json:"title"`
-	URL          string `json:"url"`
-	Domain       string `json:"domain,omitempty"`
-	SeenAt       string `json:"seen_at,omitempty"`
-	SignalSource string `json:"signal_source,omitempty"`
 }
 
 type ConfigDetail struct {
@@ -804,8 +782,7 @@ type TightenATRSummary struct {
 
 func (s Server) buildConfigGraph() ConfigGraphResponse {
 	resp := ConfigGraphResponse{
-		Symbols:     []ConfigSymbolGraph{},
-		NewsOverlay: s.buildNewsOverlayGraph(),
+		Symbols: []ConfigSymbolGraph{},
 	}
 	if len(s.SymbolConfigs) == 0 {
 		return resp
@@ -892,70 +869,4 @@ func (s Server) buildConfigGraph() ConfigGraphResponse {
 	}
 	sort.Slice(resp.Symbols, func(i, j int) bool { return resp.Symbols[i].ID < resp.Symbols[j].ID })
 	return resp
-}
-
-func (s Server) buildNewsOverlayGraph() *NewsOverlayGraph {
-	snapshot, ok := newsoverlay.GlobalStore().Load()
-	if !ok {
-		return nil
-	}
-	// 仅展示当前参与 News Overlay 决策（used）的消息，
-	// 保持与“每条正在使用的消息一个圆圈”的可视化语义一致。
-	items := snapshot.NewsItemsUsed
-	sort.SliceStable(items, func(i, j int) bool {
-		ti := items[i].SeenAt
-		tj := items[j].SeenAt
-		switch {
-		case !ti.IsZero() && !tj.IsZero() && !ti.Equal(tj):
-			return ti.After(tj)
-		case !ti.IsZero() && tj.IsZero():
-			return true
-		case ti.IsZero() && !tj.IsZero():
-			return false
-		}
-		return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
-	})
-	if len(items) > maxNewsNodes {
-		items = items[:maxNewsNodes]
-	}
-	graphItems := make([]NewsOverlayItemGraph, 0, len(items))
-	for _, item := range items {
-		entry := NewsOverlayItemGraph{
-			Window:       item.Window,
-			Title:        item.Title,
-			URL:          item.URL,
-			Domain:       item.Domain,
-			SignalSource: item.SignalSource,
-		}
-		if !item.SeenAt.IsZero() {
-			entry.SeenAt = item.SeenAt.UTC().Format(time.RFC3339)
-		}
-		graphItems = append(graphItems, entry)
-	}
-
-	staleAfter := parseNewsOverlayStaleAfter(s.SystemConfig.NewsOverlay.SnapshotStaleAfter)
-	updatedAt := ""
-	if !snapshot.UpdatedAt.IsZero() {
-		updatedAt = snapshot.UpdatedAt.UTC().Format(time.RFC3339)
-	}
-	return &NewsOverlayGraph{
-		UpdatedAt:      updatedAt,
-		Stale:          snapshot.UpdatedAt.IsZero() || time.Since(snapshot.UpdatedAt) > staleAfter,
-		StaleAfter:     staleAfter.String(),
-		ItemsUsedCount: len(snapshot.NewsItemsUsed),
-		LLMDecisionRaw: strings.TrimSpace(snapshot.LLMDecisionRaw),
-		Items:          graphItems,
-	}
-}
-
-func parseNewsOverlayStaleAfter(raw string) time.Duration {
-	text := strings.TrimSpace(raw)
-	if text == "" {
-		return 4 * time.Hour
-	}
-	val, err := time.ParseDuration(text)
-	if err != nil || val <= 0 {
-		return 4 * time.Hour
-	}
-	return val
 }

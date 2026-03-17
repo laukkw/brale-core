@@ -25,6 +25,5 @@ type PositionStatusItem = botruntime.PositionStatusItem
 type TradeHistoryResponse = botruntime.TradeHistoryResponse
 type TradeHistoryItem = botruntime.TradeHistoryItem
 type DecisionLatestResponse = botruntime.DecisionLatestResponse
-type NewsOverlayLatestResponse = botruntime.NewsOverlayLatestResponse
 type ScheduleResponse = botruntime.ScheduleResponse
 type ScheduleNextRun = botruntime.ScheduleNextRun

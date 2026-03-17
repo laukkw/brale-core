@@ -96,12 +96,6 @@ func (c *Client) FetchDecisionLatest(ctx context.Context, symbol string) (Decisi
 	return out, err
 }
 
-func (c *Client) FetchNewsOverlayLatest(ctx context.Context) (NewsOverlayLatestResponse, error) {
-	var out NewsOverlayLatestResponse
-	err := c.Do(ctx, http.MethodGet, "/api/runtime/news_overlay/latest", nil, &out)
-	return out, err
-}
-
 func (c *Client) FetchObserveReport(ctx context.Context, symbol string) (ObserveResponse, error) {
 	var out ObserveResponse
 	path := "/api/observe/report?symbol=" + url.QueryEscape(symbol)

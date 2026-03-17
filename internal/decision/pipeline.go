@@ -33,14 +33,6 @@ type Pipeline struct {
 	PriceSource             market.PriceSource
 	BarInterval             time.Duration
 	ExecutionSystem         string
-	NewsOverlayEnabled      bool
-	NewsOverlayStaleAfter   time.Duration
-	NewsOverlayMaxRecords   int
-	NewsOverlayQuery        string
-	NewsOverlayMinItems1H   int
-	NewsOverlayMinItems4H   int
-	NewsOverlayThreshold1H  float64
-	NewsOverlayThreshold4H  float64
 	States                  StateProvider
 	Bindings                map[string]strategy.StrategyBinding
 	PlanCache               *position.PlanCache

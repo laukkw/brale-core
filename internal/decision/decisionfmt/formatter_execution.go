@@ -6,22 +6,20 @@ import (
 )
 
 type executionSummary struct {
-	Action           string
-	Evaluated        bool
-	Eligible         bool
-	Executed         bool
-	BlockedBy        []string
-	ScoreTotal       float64
-	ScoreThreshold   float64
-	ScoreParseOK     bool
-	ATRChangePct     float64
-	ATRThreshold     float64
-	ATRChangePctOK   bool
-	MonitorGateHit   bool
-	DebounceSec      float64
-	DebounceRemain   float64
-	NewsGateDecision string
-	NewsGateReasonZH string
+	Action         string
+	Evaluated      bool
+	Eligible       bool
+	Executed       bool
+	BlockedBy      []string
+	ScoreTotal     float64
+	ScoreThreshold float64
+	ScoreParseOK   bool
+	ATRChangePct   float64
+	ATRThreshold   float64
+	ATRChangePctOK bool
+	MonitorGateHit bool
+	DebounceSec    float64
+	DebounceRemain float64
 }
 
 func ResolveExecutionTitle(report DecisionReport) string {
@@ -75,10 +73,6 @@ func parseExecutionSummary(derived map[string]any) *executionSummary {
 		exec.ScoreTotal = parseFloatValue(score["total"])
 		exec.ScoreThreshold = parseFloatValue(score["threshold"])
 		exec.ScoreParseOK = parseBoolValue(score["parse_ok"])
-	}
-	if newsGate := parseMapValue(raw["news_gate"]); newsGate != nil {
-		exec.NewsGateDecision = parseStringValue(newsGate["decision"])
-		exec.NewsGateReasonZH = parseStringValue(newsGate["reason_zh"])
 	}
 	return exec
 }
@@ -141,8 +135,6 @@ func translateExecutionBlockedReason(reason string) string {
 		return "未完成评估"
 	case "tighten_debounce":
 		return "收紧更新冷却中"
-	case "news_gate":
-		return "舆情门槛未通过"
 	default:
 		return ""
 	}
@@ -177,8 +169,6 @@ func translateExecutionBlockedStage(reason string) string {
 		return "收紧判定阶段"
 	case "tighten_debounce":
 		return "防抖阶段"
-	case "news_gate":
-		return "舆情门槛阶段"
 	case "risk_plan_missing", "risk_plan_disabled", "price_unavailable", "price_source_missing", "binding_missing", "atr_value_missing":
 		return "收紧执行准备阶段"
 	case "no_tighten_needed":

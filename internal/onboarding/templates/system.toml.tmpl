@@ -57,32 +57,3 @@ verification_token = "${NOTIFICATION_FEISHU_VERIFICATION_TOKEN}"
 encrypt_key = "${NOTIFICATION_FEISHU_ENCRYPT_KEY}"
 default_receive_id_type = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE}"
 default_receive_id = "${NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID}"
-
-[news_overlay]
-enabled = false
-source_mode = "doc"
-interval = "1h"
-snapshot_stale_after = "4h"
-maxrecords = 50
-min_items_1h = 2
-min_items_4h = 5
-min_effective_items_1h = 1
-min_effective_items_4h = 3
-max_items_per_domain = 4
-blocked_domains = ["tickerreport.com", "dailypolitical.com"]
-blocked_title_keywords = [
-  "shares sold by",
-  "boosts stock position in",
-  "raises stake in",
-  "largest position",
-  "stock position lifted by",
-  "shares acquired by"
-]
-tighten_threshold_1h = 80
-tighten_threshold_4h = 75
-model = "${LLM_MODEL_STRUCTURE}"
-queries = [
-  "(liquidation OR hack OR exploit OR \"funding rate\" OR \"open interest\") sourcelang:english",
-  "(\"spot bitcoin etf\" OR \"spot ethereum etf\" OR SEC OR CFTC) sourcelang:english",
-  "(bitcoin OR BTC OR ethereum OR ETH OR crypto) sourcelang:english"
-]

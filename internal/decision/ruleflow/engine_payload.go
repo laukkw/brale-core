@@ -146,9 +146,6 @@ func buildInputPayload(ctx context.Context, input Input) (string, error) {
 			"mechanics": input.InPosition.Mechanics,
 		}
 	}
-	if len(input.NewsOverlay) > 0 {
-		payload["news_overlay"] = input.NewsOverlay
-	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", err

@@ -16,7 +16,6 @@ type Input struct {
 	Symbol             string
 	Providers          fund.ProviderBundle
 	AgentStructure     agent.StructureSummary
-	NewsOverlay        map[string]any
 	InPosition         InPositionOutputs
 	Position           HardGuardPosition
 	State              fsm.PositionState
