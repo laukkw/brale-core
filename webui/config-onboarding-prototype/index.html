@@ -20,7 +20,7 @@
 
       <div class="progress">
         <div class="progress-track"><span id="progress-fill"></span></div>
-        <strong id="progress-text">步骤 1 / 7</strong>
+        <strong id="progress-text">步骤 1 / 8</strong>
       </div>
 
       <ol class="step-list" id="step-list">
@@ -31,6 +31,7 @@
         <li class="step" data-step="4"><span>05</span><div><b>通知与导出</b><small>预览输出</small></div></li>
         <li class="step" data-step="5"><span>06</span><div><b>运行启动</b><small>环境检测与一键启动</small></div></li>
         <li class="step" data-step="6"><span>07</span><div><b>监控状态</b><small>运行状态与快捷操作</small></div></li>
+        <li class="step" data-step="7"><span>08</span><div><b>配置文件查看</b><small>按目录浏览运行配置</small></div></li>
       </ol>
     </aside>
 
@@ -336,7 +337,7 @@
         <section class="wizard-step" data-step="6">
           <header>
             <h2>监控状态</h2>
-            <p>查看 brale-core / freqtrade 运行状态，并提供一键打开、一键停止、拉取 brale-core 代码并执行 make rebuild 操作。</p>
+            <p>查看 brale-core / freqtrade 运行状态，并提供服务停止、拉取后重建与整套启动操作。</p>
           </header>
 
           <div class="startup-monitor-wrap" aria-live="polite">
@@ -352,7 +353,6 @@
                 <p id="startup-brale-status" class="startup-status">未检测</p>
                 <a id="startup-brale-link" class="startup-link disabled" href="http://127.0.0.1:9991/dashboard/" target="_blank" rel="noopener noreferrer" aria-disabled="true">打开 brale-core Dashboard（9991）</a>
                 <div class="startup-action-row">
-                  <button type="button" id="startup-brale-open-btn" class="btn-secondary">一键打开</button>
                   <button type="button" id="startup-brale-stop-btn" class="btn-secondary">一键停止</button>
                 </div>
               </article>
@@ -361,13 +361,49 @@
                 <p id="startup-freqtrade-status" class="startup-status">未检测</p>
                 <a id="startup-freqtrade-link" class="startup-link disabled" href="http://127.0.0.1:8080" target="_blank" rel="noopener noreferrer" aria-disabled="true">启动成功后可跳转后台</a>
                 <div class="startup-action-row">
-                  <button type="button" id="startup-freqtrade-open-btn" class="btn-secondary">一键打开</button>
                   <button type="button" id="startup-freqtrade-stop-btn" class="btn-secondary">一键停止</button>
-                  <button type="button" id="startup-freqtrade-refresh-btn" class="btn-primary">拉取 brale-core 代码并 Rebuild</button>
                 </div>
               </article>
             </div>
             <pre id="startup-monitor-log">监控操作日志：等待操作...</pre>
+            <div class="startup-monitor-bottom-actions">
+              <div class="startup-monitor-bottom-item">
+                <p class="startup-monitor-action-note">拉取最新 brale-core 代码后执行 <code>make rebuild</code>，用于代码更新后的重建。</p>
+                <button type="button" id="startup-rebuild-btn" class="btn-primary">拉取后执行 make rebuild</button>
+              </div>
+              <div class="startup-monitor-bottom-item">
+                <p class="startup-monitor-action-note">按标准流程执行 <code>make start</code>，用于整套服务启动。</p>
+                <button type="button" id="startup-make-start-btn" class="btn-primary">执行 make start</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="wizard-step" data-step="7">
+          <header>
+            <h2>配置文件查看</h2>
+            <p>按 <code>configs/</code> 目录结构浏览当前运行配置文件，并支持查看仓库根目录 <code>.env</code>；TOML 提供可读视图。</p>
+          </header>
+
+          <div class="config-view-wrap">
+            <aside class="config-tree-panel" aria-label="配置文件目录">
+              <div class="config-tree-head">
+                <h3>configs 目录</h3>
+                <button type="button" id="config-files-refresh-btn" class="btn-secondary">刷新文件列表</button>
+              </div>
+              <p id="config-files-status" class="config-files-status" aria-live="polite">加载中...</p>
+              <div id="config-files-tree" class="config-files-tree" role="tree" aria-label="配置文件树"></div>
+            </aside>
+
+            <article class="config-file-panel" aria-label="配置文件内容">
+              <div class="config-file-head">
+                <h3 id="config-file-title">请选择左侧配置文件</h3>
+                <small id="config-file-meta">-</small>
+              </div>
+              <div id="config-file-content" class="config-file-content" aria-live="polite">
+                <p class="config-empty">选择配置文件后，将在这里展示结构化内容。</p>
+              </div>
+            </article>
           </div>
         </section>
 

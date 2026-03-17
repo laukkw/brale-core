@@ -157,6 +157,16 @@ func runStartupServiceAction(repoRoot string, req startupServiceActionRequest) s
 			out.Monitor = runStartupMonitor()
 			return out
 		}
+	case "stack":
+		switch action {
+		case "make-start":
+			args = []string{"start"}
+			timeout = 10 * time.Minute
+		default:
+			out.Error = "unsupported action"
+			out.Monitor = runStartupMonitor()
+			return out
+		}
 	default:
 		out.Error = "unsupported service"
 		out.Monitor = runStartupMonitor()

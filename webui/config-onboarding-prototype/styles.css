@@ -699,6 +699,245 @@ input[type="checkbox"] {
   padding: 8px 12px;
 }
 
+.startup-monitor-bottom-actions {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.startup-monitor-bottom-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.startup-monitor-action-note {
+  margin: 0;
+  color: var(--txt-2);
+  line-height: 1.5;
+  font-size: 12px;
+  min-height: 36px;
+}
+
+.startup-monitor-bottom-item .btn-primary {
+  width: 100%;
+}
+
+.config-view-wrap {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.7fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.config-tree-panel,
+.config-file-panel {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(170deg, rgba(10, 18, 28, 0.86), rgba(6, 12, 19, 0.9));
+  padding: 12px;
+  min-height: 420px;
+}
+
+.config-tree-head,
+.config-file-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.config-tree-head h3,
+.config-file-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.config-file-head {
+  margin-bottom: 10px;
+}
+
+.config-file-head small {
+  color: var(--txt-2);
+  font-size: 12px;
+}
+
+.config-files-status {
+  margin: 8px 0 10px;
+  font-size: 12px;
+  color: var(--txt-2);
+}
+
+.config-files-tree {
+  max-height: 350px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.config-tree-group + .config-tree-group {
+  margin-top: 12px;
+}
+
+.config-tree-group h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #9cb4d2;
+  letter-spacing: 0.04em;
+}
+
+.config-tree-list {
+  display: grid;
+  gap: 6px;
+}
+
+.config-tree-item {
+  width: 100%;
+  border: 1px solid rgba(130, 164, 194, 0.24);
+  border-radius: 10px;
+  background: rgba(12, 22, 34, 0.52);
+  color: #d9e9fb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 180ms var(--ease), background-color 180ms var(--ease), transform 180ms var(--ease);
+}
+
+.config-tree-item:hover {
+  border-color: rgba(91, 192, 255, 0.52);
+  background: rgba(20, 34, 50, 0.72);
+}
+
+.config-tree-item.active {
+  border-color: rgba(58, 214, 163, 0.58);
+  background: rgba(58, 214, 163, 0.14);
+}
+
+.config-tree-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-tree-ext {
+  font-size: 11px;
+  color: #8cdcc4;
+}
+
+.config-file-content {
+  border: 1px solid rgba(119, 170, 212, 0.22);
+  border-radius: 12px;
+  background: rgba(2, 9, 16, 0.9);
+  min-height: 350px;
+  max-height: 520px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.config-empty {
+  margin: 0;
+  color: var(--txt-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.toml-section + .toml-section {
+  margin-top: 12px;
+}
+
+.toml-section h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: #9fbedf;
+}
+
+.toml-block {
+  border: 1px solid rgba(129, 166, 199, 0.24);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.toml-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto minmax(220px, 1.6fr);
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(100, 142, 178, 0.16);
+  font-size: 12px;
+}
+
+.toml-row:last-child {
+  border-bottom: 0;
+}
+
+.toml-key {
+  color: #8bcaf5;
+  word-break: break-all;
+}
+
+.toml-eq {
+  color: #6f8eaf;
+}
+
+.toml-value {
+  color: #dff1ff;
+  word-break: break-word;
+}
+
+.toml-comment,
+.toml-raw {
+  display: block;
+  grid-template-columns: none;
+}
+
+.toml-comment {
+  color: #8da5bd;
+}
+
+.toml-raw {
+  color: #c4d8f0;
+}
+
+.config-raw-wrap {
+  display: grid;
+  gap: 2px;
+}
+
+.config-raw-line {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.config-line-no {
+  text-align: right;
+  color: #6d89a7;
+  user-select: none;
+}
+
+.config-raw-line code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #cfe4ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 pre {
   margin: 10px 0 0;
   max-height: 280px;
@@ -764,6 +1003,10 @@ pre {
   gap: 10px;
 }
 
+.actions.hidden {
+  display: none;
+}
+
 .actions button {
   flex: 1;
   font-weight: 600;
@@ -800,7 +1043,9 @@ pre {
   .symbol-picks,
   .interval-grid,
   .startup-grid,
-  .startup-monitor-grid {
+  .startup-monitor-grid,
+  .startup-monitor-bottom-actions,
+  .config-view-wrap {
     grid-template-columns: 1fr;
   }
 
@@ -818,6 +1063,30 @@ pre {
   .startup-action-row .btn-secondary,
   .startup-action-row .btn-primary {
     width: 100%;
+  }
+
+  .startup-monitor-action-note {
+    min-height: 0;
+  }
+
+  .config-tree-panel,
+  .config-file-panel {
+    min-height: 0;
+  }
+
+  .config-file-content {
+    max-height: 420px;
+  }
+
+  .toml-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .config-tree-head,
+  .config-file-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .field-help.field-help-wide::after {

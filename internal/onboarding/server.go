@@ -2,6 +2,7 @@ package onboarding
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -116,6 +117,45 @@ func (s Server) Handler() (http.Handler, error) {
 	}))
 	mux.Handle(join(base, "/api/startup/start-stream"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		streamStartup(repoRoot, runner, w, r)
+	}))
+	mux.Handle(join(base, "/api/configs/tree"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		result, err := loadConfigTree(repoRoot)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, result)
+	}))
+	mux.Handle(join(base, "/api/configs/file"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		result, err := loadConfigFile(repoRoot, r.URL.Query().Get("path"))
+		if err != nil {
+			switch {
+			case errors.Is(err, errInvalidConfigPath):
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			case os.IsNotExist(err):
+				http.Error(w, err.Error(), http.StatusNotFound)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		writeJSON(w, result)
 	}))
 
 	fs := http.FileServer(http.FS(configonboardingprototype.Assets))

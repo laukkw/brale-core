@@ -7,6 +7,7 @@ const progressFill = document.getElementById("progress-fill");
 const progressText = document.getElementById("progress-text");
 const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
+const actionsFooterEl = document.querySelector(".actions");
 const previewEl = document.getElementById("preview");
 
 const symbolTabsEl = document.getElementById("symbol-tabs");
@@ -31,14 +32,19 @@ const startupMonitorRefreshBtn = document.getElementById("startup-monitor-refres
 const startupMonitorUpdatedEl = document.getElementById("startup-monitor-updated");
 const startupBraleStatusEl = document.getElementById("startup-brale-status");
 const startupBraleLinkEl = document.getElementById("startup-brale-link");
-const startupBraleOpenBtn = document.getElementById("startup-brale-open-btn");
 const startupBraleStopBtn = document.getElementById("startup-brale-stop-btn");
 const startupFreqtradeStatusEl = document.getElementById("startup-freqtrade-status");
 const startupFreqtradeLinkEl = document.getElementById("startup-freqtrade-link");
-const startupFreqtradeOpenBtn = document.getElementById("startup-freqtrade-open-btn");
 const startupFreqtradeStopBtn = document.getElementById("startup-freqtrade-stop-btn");
-const startupFreqtradeRefreshBtn = document.getElementById("startup-freqtrade-refresh-btn");
+const startupRebuildBtn = document.getElementById("startup-rebuild-btn");
+const startupMakeStartBtn = document.getElementById("startup-make-start-btn");
 const startupMonitorLogEl = document.getElementById("startup-monitor-log");
+const configFilesRefreshBtn = document.getElementById("config-files-refresh-btn");
+const configFilesStatusEl = document.getElementById("config-files-status");
+const configFilesTreeEl = document.getElementById("config-files-tree");
+const configFileTitleEl = document.getElementById("config-file-title");
+const configFileMetaEl = document.getElementById("config-file-meta");
+const configFileContentEl = document.getElementById("config-file-content");
 
 const telegramEnabledEl = document.getElementById("telegram_enabled");
 const feishuEnabledEl = document.getElementById("feishu_enabled");
@@ -72,6 +78,9 @@ let startupMonitorPollTimer = null;
 let previewRenderScheduled = false;
 let previewRenderSeq = 0;
 let previewScriptRequestSeq = 0;
+let configFilesLoaded = false;
+let configFileList = [];
+let activeConfigPath = "";
 
 const STARTUP_LOG_MAX_LINES = 500;
 const previewScriptCache = { key: "", content: "" };
@@ -80,6 +89,7 @@ let startupMonitorLogLines = [];
 
 const startupStepIndex = stepItems.findIndex((step) => step.dataset.step === "5");
 const monitorStepIndex = stepItems.findIndex((step) => step.dataset.step === "6");
+const configViewStepIndex = stepItems.findIndex((step) => step.dataset.step === "7");
 
 const symbolSaved = {};
 const symbolDrafts = {};
@@ -415,6 +425,214 @@ function renderScript(data) {
   ].join("\n");
 }
 
+function escapeHTML(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatFileSize(size) {
+  const n = Number(size || 0);
+  if (!Number.isFinite(n) || n <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = n;
+  let idx = 0;
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024;
+    idx += 1;
+  }
+  const digits = value >= 100 || idx === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[idx]}`;
+}
+
+function formatDateTime(raw) {
+  if (!raw) {
+    return "-";
+  }
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) {
+    return String(raw);
+  }
+  return dt.toLocaleString("zh-CN", { hour12: false });
+}
+
+function parseTomlSections(content) {
+  const lines = String(content || "").split(/\r?\n/);
+  const sections = [];
+  let current = { name: "root", rows: [] };
+  sections.push(current);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed.startsWith("#")) {
+      current.rows.push({ type: "comment", text: trimmed });
+      continue;
+    }
+    const sectionMatch = trimmed.match(/^\[(.+)]$/);
+    if (sectionMatch) {
+      current = { name: sectionMatch[1], rows: [] };
+      sections.push(current);
+      continue;
+    }
+    const pairMatch = trimmed.match(/^([A-Za-z0-9_.\-"']+)\s*=\s*(.+)$/);
+    if (pairMatch) {
+      current.rows.push({ type: "pair", key: pairMatch[1], value: pairMatch[2] });
+      continue;
+    }
+    current.rows.push({ type: "raw", text: trimmed });
+  }
+  return sections.filter((item) => item.name !== "root" || item.rows.length > 0);
+}
+
+function renderTomlView(content) {
+  const sections = parseTomlSections(content);
+  if (!sections.length) {
+    return '<p class="config-empty">该文件为空。</p>';
+  }
+  return sections.map((section) => {
+    const title = section.name === "root" ? "全局参数" : section.name;
+    const rows = section.rows.map((row) => {
+      if (row.type === "comment") {
+        return `<div class="toml-row toml-comment">${escapeHTML(row.text)}</div>`;
+      }
+      if (row.type === "pair") {
+        return `<div class="toml-row toml-pair"><span class="toml-key">${escapeHTML(row.key)}</span><span class="toml-eq">=</span><span class="toml-value">${escapeHTML(row.value)}</span></div>`;
+      }
+      return `<div class="toml-row toml-raw">${escapeHTML(row.text)}</div>`;
+    }).join("");
+    return `<section class="toml-section"><h4>${escapeHTML(title)}</h4><div class="toml-block">${rows}</div></section>`;
+  }).join("");
+}
+
+function renderRawConfigContent(content) {
+  const lines = String(content || "").split(/\r?\n/);
+  if (!lines.length || (lines.length === 1 && lines[0] === "")) {
+    return '<p class="config-empty">该文件为空。</p>';
+  }
+  const html = lines.map((line, idx) => {
+    return `<div class="config-raw-line"><span class="config-line-no">${idx + 1}</span><code>${escapeHTML(line)}</code></div>`;
+  }).join("");
+  return `<div class="config-raw-wrap">${html}</div>`;
+}
+
+function renderConfigTree() {
+  if (!configFilesTreeEl) {
+    return;
+  }
+  if (!configFileList.length) {
+    configFilesTreeEl.innerHTML = '<p class="config-empty">未发现配置文件。</p>';
+    return;
+  }
+  const groups = new Map();
+  for (const item of configFileList) {
+    const dir = String(item.dir || "");
+    if (!groups.has(dir)) {
+      groups.set(dir, []);
+    }
+    groups.get(dir).push(item);
+  }
+  const dirNames = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
+  configFilesTreeEl.innerHTML = dirNames.map((dir) => {
+    const files = groups.get(dir) || [];
+    const fileButtons = files.map((file) => {
+      const active = file.path === activeConfigPath ? " active" : "";
+      const ext = String(file.ext || "").trim();
+      const lowerName = String(file.name || "").toLowerCase();
+      const lowerExt = ext.toLowerCase();
+      const showExt = lowerExt && lowerName !== `.${lowerExt}`;
+      const extHTML = showExt ? `<span class="config-tree-ext">.${escapeHTML(ext)}</span>` : "";
+      return `<button type="button" class="config-tree-item${active}" data-path="${escapeHTML(file.path)}" role="treeitem"><span class="config-tree-name">${escapeHTML(file.name)}</span>${extHTML}</button>`;
+    }).join("");
+    const title = dir || "./";
+    return `<section class="config-tree-group"><h4>${escapeHTML(title)}</h4><div class="config-tree-list">${fileButtons}</div></section>`;
+  }).join("");
+}
+
+async function loadConfigFile(pathname) {
+  const target = String(pathname || "").trim();
+  if (!target || !configFileContentEl) {
+    return;
+  }
+  activeConfigPath = target;
+  renderConfigTree();
+  configFileTitleEl.textContent = target;
+  configFileMetaEl.textContent = "加载中...";
+  configFileContentEl.innerHTML = '<p class="config-empty">正在读取配置文件...</p>';
+  try {
+    const resp = await fetch(`api/configs/file?path=${encodeURIComponent(target)}`);
+    const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+    const result = JSON.parse(text);
+    const ext = String(result?.ext || "").toLowerCase();
+    const content = String(result?.content || "");
+    const sizeText = formatFileSize(result?.size);
+    const modText = formatDateTime(result?.mod_time);
+    configFileTitleEl.textContent = result?.path || target;
+    configFileMetaEl.textContent = `${sizeText} · ${modText}`;
+    configFileContentEl.innerHTML = ext === "toml" ? renderTomlView(content) : renderRawConfigContent(content);
+  } catch (err) {
+    configFileMetaEl.textContent = "读取失败";
+    configFileContentEl.innerHTML = `<p class="config-empty">读取失败：${escapeHTML(err?.message || err)}</p>`;
+  }
+}
+
+async function loadConfigTree(force = false) {
+  if (!configFilesStatusEl || !configFilesTreeEl) {
+    return;
+  }
+  if (!force && configFilesLoaded && configFileList.length) {
+    renderConfigTree();
+    return;
+  }
+  if (configFilesRefreshBtn) {
+    configFilesRefreshBtn.disabled = true;
+  }
+  configFilesStatusEl.textContent = "正在读取 configs 目录...";
+  try {
+    const resp = await fetch("api/configs/tree");
+    const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+    const result = JSON.parse(text);
+    configFileList = Array.isArray(result?.files) ? result.files : [];
+    configFilesLoaded = true;
+    configFilesStatusEl.textContent = `已加载 ${configFileList.length} 个文件（来源：${result?.root || "configs"}）`;
+    const knownPath = configFileList.some((item) => item.path === activeConfigPath);
+    if (!knownPath) {
+      const preferred = configFileList.find((item) => String(item.ext || "").toLowerCase() === "toml") || configFileList[0] || null;
+      activeConfigPath = preferred ? String(preferred.path || "") : "";
+    }
+    renderConfigTree();
+    if (activeConfigPath) {
+      await loadConfigFile(activeConfigPath);
+    } else if (configFileContentEl) {
+      configFileTitleEl.textContent = "未找到配置文件";
+      configFileMetaEl.textContent = "-";
+      configFileContentEl.innerHTML = '<p class="config-empty">当前未读取到可展示的配置文件。</p>';
+    }
+  } catch (err) {
+    configFilesStatusEl.textContent = `读取失败：${err?.message || err}`;
+    configFilesTreeEl.innerHTML = '<p class="config-empty">配置目录读取失败，请检查服务日志。</p>';
+    configFileTitleEl.textContent = "配置读取失败";
+    configFileMetaEl.textContent = "-";
+    configFileContentEl.innerHTML = `<p class="config-empty">${escapeHTML(err?.message || err)}</p>`;
+  } finally {
+    if (configFilesRefreshBtn) {
+      configFilesRefreshBtn.disabled = false;
+    }
+  }
+}
+
 function trimLogBuffer(lines) {
   if (lines.length <= STARTUP_LOG_MAX_LINES) {
     return lines;
@@ -504,28 +722,29 @@ function applyStartupMonitor(result) {
     startupMonitorUpdatedEl.textContent = `最近刷新：${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
   }
 
-  if (startupBraleOpenBtn) startupBraleOpenBtn.disabled = !braleRunning;
   if (startupBraleStopBtn) startupBraleStopBtn.disabled = !braleRunning;
-  if (startupFreqtradeOpenBtn) startupFreqtradeOpenBtn.disabled = !freqtradeRunning;
   if (startupFreqtradeStopBtn) startupFreqtradeStopBtn.disabled = !freqtradeRunning;
 }
 
 async function runStartupServiceAction(service, action, triggerBtn) {
   if (triggerBtn) triggerBtn.disabled = true;
+  const serviceText = service === "stack" ? "整套服务" : service;
   const actionText = action === "start"
     ? "启动"
     : action === "stop"
       ? "停止"
       : action === "pull-rebuild"
         ? "拉取 brale-core 代码并 Rebuild"
+        : action === "make-start"
+          ? "执行 make start"
         : action;
   const startedAt = Date.now();
   let heartbeatTimer = null;
-  startupRunStatusEl.textContent = `执行中：${service} ${actionText}...`;
-  appendStartupLog(`[INFO] ${service} ${actionText} 已开始，可能需要几分钟...`);
+  startupRunStatusEl.textContent = `执行中：${serviceText} ${actionText}...`;
+  appendStartupLog(`[INFO] ${serviceText} ${actionText} 已开始，可能需要几分钟...`);
   heartbeatTimer = setInterval(() => {
     const elapsed = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
-    appendStartupLog(`[INFO] ${service} ${actionText} 执行中，已耗时 ${elapsed}s`);
+    appendStartupLog(`[INFO] ${serviceText} ${actionText} 执行中，已耗时 ${elapsed}s`);
   }, 15000);
   try {
     const resp = await fetch("api/startup/service-action", {
@@ -548,19 +767,19 @@ async function runStartupServiceAction(service, action, triggerBtn) {
     }
     const outputText = result?.output ? String(result.output).trim() : "";
     if (outputText) {
-      appendStartupLog(`[${service}] ${outputText}`);
+      appendStartupLog(`[${serviceText}] ${outputText}`);
     } else {
-      appendStartupLog(`[INFO] ${service} ${actionText} 已完成（命令输出为空）`);
+      appendStartupLog(`[INFO] ${serviceText} ${actionText} 已完成（命令输出为空）`);
     }
     if (result?.monitor) {
       applyStartupMonitor(result.monitor);
     } else {
       await refreshStartupMonitor(true);
     }
-    startupRunStatusEl.textContent = `${service} ${actionText}完成`;
+    startupRunStatusEl.textContent = `${serviceText} ${actionText}完成`;
   } catch (err) {
     startupRunStatusEl.textContent = `操作失败: ${err?.message || err}`;
-    appendStartupLog(`[ERR] ${service} ${action} 失败: ${err?.message || err}`);
+    appendStartupLog(`[ERR] ${serviceText} ${action} 失败: ${err?.message || err}`);
     await refreshStartupMonitor(true);
   } finally {
     if (heartbeatTimer) {
@@ -855,19 +1074,21 @@ function syncStepUI() {
   progressText.textContent = `步骤 ${currentStep + 1} / ${steps.length}`;
 
   const isLastStep = currentStep === steps.length - 1;
+  const inMonitorStep = currentStep === monitorStepIndex;
   prevBtn.disabled = currentStep === 0;
-  if (isLastStep) {
-    nextBtn.textContent = "一键运行启动";
-    nextBtn.disabled = startupStartBtn.disabled || Boolean(startupEventSource);
-  } else {
-    nextBtn.textContent = "下一步";
-    nextBtn.disabled = false;
+  nextBtn.textContent = "下一步";
+  nextBtn.disabled = isLastStep;
+  if (actionsFooterEl) {
+    actionsFooterEl.classList.toggle("hidden", inMonitorStep);
   }
   if (currentStep === startupStepIndex && startupRunStatusEl.textContent === "等待检测") {
     checkStartup();
   }
   if (currentStep === monitorStepIndex) {
     void refreshStartupMonitor(true);
+  }
+  if (currentStep === configViewStepIndex) {
+    void loadConfigTree(false);
   }
 
   void renderPreview();
@@ -879,8 +1100,7 @@ prevBtn.addEventListener("click", () => {
 });
 
 nextBtn.addEventListener("click", () => {
-  if (currentStep === steps.length - 1) {
-    startStartup();
+  if (currentStep >= steps.length - 1) {
     return;
   }
   currentStep += 1;
@@ -951,23 +1171,9 @@ if (startupMonitorRefreshBtn) {
     void refreshStartupMonitor(false);
   });
 }
-if (startupBraleOpenBtn) {
-  startupBraleOpenBtn.addEventListener("click", () => {
-    if (startupBraleLinkEl && !startupBraleLinkEl.classList.contains("disabled")) {
-      window.open(startupBraleLinkEl.href, "_blank", "noopener,noreferrer");
-    }
-  });
-}
 if (startupBraleStopBtn) {
   startupBraleStopBtn.addEventListener("click", () => {
     void runStartupServiceAction("brale", "stop", startupBraleStopBtn);
-  });
-}
-if (startupFreqtradeOpenBtn) {
-  startupFreqtradeOpenBtn.addEventListener("click", () => {
-    if (startupFreqtradeLinkEl && !startupFreqtradeLinkEl.classList.contains("disabled")) {
-      window.open(startupFreqtradeLinkEl.href, "_blank", "noopener,noreferrer");
-    }
   });
 }
 if (startupFreqtradeStopBtn) {
@@ -975,9 +1181,36 @@ if (startupFreqtradeStopBtn) {
     void runStartupServiceAction("freqtrade", "stop", startupFreqtradeStopBtn);
   });
 }
-if (startupFreqtradeRefreshBtn) {
-  startupFreqtradeRefreshBtn.addEventListener("click", () => {
-    void runStartupServiceAction("brale", "pull-rebuild", startupFreqtradeRefreshBtn);
+if (startupRebuildBtn) {
+  startupRebuildBtn.addEventListener("click", () => {
+    void runStartupServiceAction("brale", "pull-rebuild", startupRebuildBtn);
+  });
+}
+if (startupMakeStartBtn) {
+  startupMakeStartBtn.addEventListener("click", () => {
+    void runStartupServiceAction("stack", "make-start", startupMakeStartBtn);
+  });
+}
+if (configFilesRefreshBtn) {
+  configFilesRefreshBtn.addEventListener("click", () => {
+    void loadConfigTree(true);
+  });
+}
+if (configFilesTreeEl) {
+  configFilesTreeEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const item = target.closest(".config-tree-item");
+    if (!item) {
+      return;
+    }
+    const path = item.getAttribute("data-path") || "";
+    if (!path) {
+      return;
+    }
+    void loadConfigFile(path);
   });
 }
 
