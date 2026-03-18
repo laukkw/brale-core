@@ -17,9 +17,10 @@ ONBOARDING_LOG_FILE ?= $(FREQTRADE_RUNTIME_ROOT)/logs/onboarding.log
 ONBOARDING_BIN ?= $(BRALE_DATA_ROOT)/bin/onboarding
 
 COMPOSE = docker compose -p "$(PROJECT_NAME)" -f "$(COMPOSE_FILE)" --env-file ".env"
+INIT_COMPOSE = docker compose -p "$(PROJECT_NAME)" -f "$(COMPOSE_FILE)"
 STACK_ENV = BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" BRALE_SYSTEM_FILE="$(BRALE_SYSTEM_FILE)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
 
-.PHONY: init init-stop init-status init-logs check prepare start onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale stop-freqtrade stop-brale stop restart rebuild down status logs
+.PHONY: init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale stop-freqtrade stop-brale stop restart rebuild down status logs
 
 init:
 	@set -e; \
@@ -41,7 +42,7 @@ init:
 		exit 1; \
 	fi; \
 	status_json="$$(curl -fsS "$(ONBOARDING_URL)/api/status" 2>/dev/null || true)"; \
-	if [ -n "$$status_json" ] && printf '%s' "$$status_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if isinstance(d, dict) and "ready" in d else 1)' >/dev/null 2>&1; then \
+	if [ -n "$$status_json" ]; then \
 		echo "[OK] Onboarding already running at $(ONBOARDING_URL)"; \
 		echo "[OPEN] $(ONBOARDING_URL)"; \
 		exit 0; \
@@ -57,46 +58,36 @@ init:
 	mkdir -p "$(dir $(ONBOARDING_PID_FILE))" "$(dir $(ONBOARDING_LOG_FILE))"; \
 	mkdir -p "$(dir $(ONBOARDING_BIN))"; \
 	echo "[OK] Docker is ready"; \
-	echo "[INFO] Starting onboarding server at $(ONBOARDING_URL)"; \
-	echo "[INFO] Running in foreground. Press Ctrl+C to stop."; \
-	echo "[OPEN] $(ONBOARDING_URL)"; \
-	go build -o "$(ONBOARDING_BIN)" ./cmd/onboarding; \
-	exec "$(ONBOARDING_BIN)" -addr $(ONBOARDING_ADDR)
+	echo "[INFO] Starting onboarding container at $(ONBOARDING_URL)"; \
+	HOST_REPO_ROOT="$(CURDIR)" $(INIT_COMPOSE) up -d --build onboarding; \
+	for i in $$(seq 1 60); do \
+		if curl -fsS "$(ONBOARDING_URL)/api/status" >/dev/null 2>&1; then \
+			echo "[OK] onboarding running at $(ONBOARDING_URL)"; \
+			echo "[OPEN] $(ONBOARDING_URL)"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "[ERR] onboarding did not become ready in time"; \
+	$(INIT_COMPOSE) logs --tail=200 onboarding; \
+	exit 1
 
 init-stop:
 	@set -e; \
-	if [ ! -f "$(ONBOARDING_PID_FILE)" ]; then \
-		echo "[OK] onboarding is not running (pid file not found)"; \
-		exit 0; \
-	fi; \
-	pid="$$(cat "$(ONBOARDING_PID_FILE)" 2>/dev/null || true)"; \
-	if [ -n "$$pid" ] && kill -0 "$$pid" >/dev/null 2>&1; then \
-		kill "$$pid"; \
-		sleep 1; \
-		if kill -0 "$$pid" >/dev/null 2>&1; then kill -9 "$$pid" >/dev/null 2>&1 || true; fi; \
-		echo "[OK] stopped onboarding (pid=$$pid)"; \
-	else \
-		echo "[WARN] stale onboarding pid file"; \
-	fi; \
-	rm -f "$(ONBOARDING_PID_FILE)"
+	$(INIT_COMPOSE) stop onboarding >/dev/null 2>&1 || true; \
+	echo "[OK] stopped onboarding container"
 
 init-status:
 	@set -e; \
 	if curl -fsS "$(ONBOARDING_URL)/api/status" >/dev/null 2>&1; then \
 		echo "[OK] onboarding running at $(ONBOARDING_URL)"; \
-		if [ -f "$(ONBOARDING_PID_FILE)" ]; then \
-			echo "[PID] $$(cat "$(ONBOARDING_PID_FILE)" 2>/dev/null || true)"; \
-		fi; \
+		$(INIT_COMPOSE) ps onboarding; \
 		exit 0; \
 	fi; \
 	echo "[INFO] onboarding not running"
 
 init-logs:
-	@mkdir -p "$(dir $(ONBOARDING_LOG_FILE))"
-	@if [ ! -f "$(ONBOARDING_LOG_FILE)" ]; then \
-		touch "$(ONBOARDING_LOG_FILE)"; \
-	fi
-	@tail -f "$(ONBOARDING_LOG_FILE)"
+	@$(INIT_COMPOSE) logs -f --tail=200 onboarding
 
 check:
 	@if [ ! -f ".env" ]; then \
@@ -144,7 +135,9 @@ prepare:
 
 start: check prepare start-freqtrade wait-freqtrade start-brale
 
-onboarding-start: check prepare onboarding-pull start-freqtrade wait-freqtrade start-brale
+apply-config: check prepare stop start-freqtrade wait-freqtrade start-brale
+
+onboarding-start: apply-config
 
 onboarding-pull:
 	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) pull freqtrade

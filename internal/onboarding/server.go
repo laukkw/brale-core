@@ -14,8 +14,9 @@ import (
 )
 
 type Server struct {
-	RepoRoot string
-	BasePath string
+	RepoRoot         string
+	BasePath         string
+	AllowNonLoopback bool
 }
 
 func (s Server) Handler() (http.Handler, error) {
@@ -30,6 +31,7 @@ func (s Server) Handler() (http.Handler, error) {
 	}
 	gen := NewGenerator(repoRoot)
 	runner := &startupRunner{}
+	allowNonLoopback := s.AllowNonLoopback
 
 	mux := http.NewServeMux()
 	mux.Handle(join(base, "/api/status"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +77,7 @@ func (s Server) Handler() (http.Handler, error) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !isLoopbackRequest(r) {
+		if !requestAllowed(r, allowNonLoopback) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -86,7 +88,7 @@ func (s Server) Handler() (http.Handler, error) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !isLoopbackRequest(r) {
+		if !requestAllowed(r, allowNonLoopback) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -97,7 +99,7 @@ func (s Server) Handler() (http.Handler, error) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !isLoopbackRequest(r) {
+		if !requestAllowed(r, allowNonLoopback) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -116,14 +118,14 @@ func (s Server) Handler() (http.Handler, error) {
 		writeJSON(w, result)
 	}))
 	mux.Handle(join(base, "/api/startup/start-stream"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		streamStartup(repoRoot, runner, w, r)
+		streamStartup(repoRoot, runner, allowNonLoopback, w, r)
 	}))
 	mux.Handle(join(base, "/api/configs/tree"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !isLoopbackRequest(r) {
+		if !requestAllowed(r, allowNonLoopback) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -139,7 +141,7 @@ func (s Server) Handler() (http.Handler, error) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !isLoopbackRequest(r) {
+		if !requestAllowed(r, allowNonLoopback) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

@@ -38,8 +38,9 @@ In code, this is reflected by:
 ### Prerequisites
 
 - Docker ≥ 24 + Docker Compose V2
-- Python 3.10+ (for the `prepare_stack.py` config generation script)
-- GNU Make
+- Git
+
+For manual CLI operations after onboarding, the host still needs Python 3.10+ and GNU Make.
 
 ### Directory Layout
 
@@ -64,11 +65,22 @@ brale-core/
 ### First-Time Deployment
 
 ```bash
-# 1. Copy and fill in environment variables
-cp .env.example .env
-# Edit .env — add Binance API Key, Freqtrade password, etc.
+# Recommended: thin bootstrap (clone/update repo -> start onboarding container -> open page)
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/main/scripts/bootstrap.sh | bash
 
-# 2. One-command start (auto prepare → start freqtrade → wait healthy → start brale)
+# Or if you already cloned the repo locally
+make init
+```
+
+`make init` now starts the dedicated onboarding container on `http://127.0.0.1:9992`.
+Complete the setup in the onboarding page, then use the page's "Apply config and restart services"
+action to run the equivalent of `make stop && make start`.
+
+### Manual CLI Deployment After Onboarding
+
+Once onboarding has generated `.env` and the `configs/` files, you can manage the stack directly:
+
+```bash
 make start
 ```
 
@@ -76,7 +88,11 @@ make start
 
 | Command | Description |
 |---|---|
+| `make init` | Build/start the onboarding container on `127.0.0.1:9992` |
+| `make init-stop` | Stop the onboarding container |
+| `make init-logs` | Tail onboarding container logs |
 | `make start` | First-time / full start (freqtrade → brale) |
+| `make apply-config` | Re-prepare config and restart the stack with latest files |
 | `make stop` | Stop all services (containers and data preserved) |
 | `make restart` | Same as `make start` (runs check + prepare first) |
 | `make rebuild` | Rebuild brale image after code changes and restart |
@@ -104,6 +120,8 @@ make stop && make start
 
 - Changed Go source code → use `make rebuild`.
 
+The onboarding UI uses this same `stop + start` semantics when you apply updated config.
+
 ### Data Persistence
 
 | Host Path | Container Path | Description |
@@ -118,6 +136,7 @@ All runtime data is stored on the host under `data/`. Neither `make down` nor co
 
 | Service | Port | Description |
 |---|---|---|
+| Onboarding | `127.0.0.1:9992` | Local setup UI and stack control plane |
 | Brale | `127.0.0.1:9991` | Runtime API + Decision View |
 | Freqtrade | `127.0.0.1:8080` | Freqtrade REST API |
 

@@ -1,9 +1,48 @@
 services:
+  onboarding:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: onboarding-runtime
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,brale,freqtrade}
+    restart: unless-stopped
+    working_dir: ${HOST_REPO_ROOT:-/workspace}
+    environment:
+      HOST_REPO_ROOT: ${HOST_REPO_ROOT:-/workspace}
+      TZ: Asia/Shanghai
+    command:
+      - "-addr"
+      - "0.0.0.0:9992"
+      - "-repo"
+      - ${HOST_REPO_ROOT:-/workspace}
+      - "-allow-non-loopback"
+    ports:
+      - "127.0.0.1:9992:9992"
+    volumes:
+      - type: bind
+        source: .
+        target: ${HOST_REPO_ROOT:-/workspace}
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9992/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   freqtrade:
     image: freqtradeorg/freqtrade:stable
     restart: unless-stopped
     env_file:
-      - ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+      - path: ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+        required: false
     environment:
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,brale,freqtrade}
     command:
@@ -45,8 +84,10 @@ services:
         NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,brale,freqtrade}
     restart: unless-stopped
     env_file:
-      - .env
-      - ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+      - path: .env
+        required: false
+      - path: ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+        required: false
     environment:
       TZ: Asia/Shanghai
     command:
