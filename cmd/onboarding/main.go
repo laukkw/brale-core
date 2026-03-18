@@ -14,6 +14,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:9992", "http listen addr")
 	repo := flag.String("repo", ".", "repository root")
 	basePath := flag.String("base", "/", "http base path")
+	allowNonLoopback := flag.Bool("allow-non-loopback", false, "allow non-loopback requests for trusted containerized deployments")
 	flag.Parse()
 
 	repoRoot, err := filepath.Abs(*repo)
@@ -22,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler, err := onboarding.Server{RepoRoot: repoRoot, BasePath: *basePath}.Handler()
+	handler, err := onboarding.Server{RepoRoot: repoRoot, BasePath: *basePath, AllowNonLoopback: *allowNonLoopback}.Handler()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init onboarding server: %v\n", err)
 		os.Exit(1)

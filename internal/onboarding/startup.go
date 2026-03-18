@@ -9,6 +9,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -80,6 +81,16 @@ const (
 	freqtradeURL       = "http://127.0.0.1:8080"
 )
 
+var startupHTTPClient = &http.Client{
+	Timeout: 700 * time.Millisecond,
+	Transport: &http.Transport{
+		Proxy: nil,
+		DialContext: (&net.Dialer{
+			Timeout: 700 * time.Millisecond,
+		}).DialContext,
+	},
+}
+
 func runStartupCheck(repoRoot string) startupCheckResult {
 	out := startupCheckResult{}
 	if _, err := exec.LookPath("docker"); err == nil {
@@ -114,9 +125,9 @@ func runStartupCheck(repoRoot string) startupCheckResult {
 
 func runStartupMonitor() startupMonitorResult {
 	return startupMonitorResult{
-		BraleRunning:     isTCPReachable(braleDashboardAddr, 700*time.Millisecond),
+		BraleRunning:     probeReachable([]string{"http://127.0.0.1:9991/healthz", "http://brale:9991/healthz"}),
 		BraleURL:         braleDashboardURL,
-		FreqtradeRunning: isTCPReachable(freqtradeAddr, 700*time.Millisecond),
+		FreqtradeRunning: probeReachable([]string{"http://127.0.0.1:8080/api/v1/ping", "http://freqtrade:8080/api/v1/ping"}),
 		FreqtradeURL:     freqtradeURL,
 	}
 }
@@ -160,7 +171,10 @@ func runStartupServiceAction(repoRoot string, req startupServiceActionRequest) s
 	case "stack":
 		switch action {
 		case "make-start":
-			args = []string{"start"}
+			args = []string{"apply-config"}
+			timeout = 10 * time.Minute
+		case "apply-config":
+			args = []string{"apply-config"}
 			timeout = 10 * time.Minute
 		default:
 			out.Error = "unsupported action"
@@ -204,6 +218,46 @@ func isTCPReachable(addr string, timeout time.Duration) bool {
 	return true
 }
 
+func probeReachable(targets []string) bool {
+	for _, target := range targets {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			continue
+		}
+		if looksLikeURL(target) {
+			if isHTTPReachable(target) {
+				return true
+			}
+			continue
+		}
+		if isTCPReachable(target, 700*time.Millisecond) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeURL(target string) bool {
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	return u.Scheme != "" && u.Host != ""
+}
+
+func isHTTPReachable(target string) bool {
+	req, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := startupHTTPClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 400
+}
+
 func runCommandWithTimeout(repoRoot string, timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -224,12 +278,12 @@ func firstLine(in string) string {
 	return line
 }
 
-func streamStartup(repoRoot string, runner *startupRunner, w http.ResponseWriter, r *http.Request) {
+func streamStartup(repoRoot string, runner *startupRunner, allowNonLoopback bool, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackRequest(r) {
+	if !requestAllowed(r, allowNonLoopback) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -254,7 +308,7 @@ func streamStartup(repoRoot string, runner *startupRunner, w http.ResponseWriter
 
 	cmdCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cmd := exec.CommandContext(cmdCtx, "make", "onboarding-start")
+	cmd := exec.CommandContext(cmdCtx, "make", "apply-config")
 	cmd.Dir = repoRoot
 
 	stdout, err := cmd.StdoutPipe()
@@ -276,7 +330,7 @@ func streamStartup(repoRoot string, runner *startupRunner, w http.ResponseWriter
 		return
 	}
 
-	_ = writeSSE(w, "status", map[string]any{"status": "running", "message": "已启动 make onboarding-start"})
+	_ = writeSSE(w, "status", map[string]any{"status": "running", "message": "已启动 make apply-config"})
 	flusher.Flush()
 
 	lines := make(chan string, 256)
@@ -374,6 +428,13 @@ func writeSSE(w io.Writer, event string, payload any) error {
 func writeSSEComment(w io.Writer, message string) error {
 	_, err := fmt.Fprintf(w, ": %s\n\n", message)
 	return err
+}
+
+func requestAllowed(r *http.Request, allowNonLoopback bool) bool {
+	if allowNonLoopback {
+		return true
+	}
+	return isLoopbackRequest(r)
 }
 
 func isLoopbackRequest(r *http.Request) bool {

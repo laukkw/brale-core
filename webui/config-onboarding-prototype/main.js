@@ -735,9 +735,11 @@ async function runStartupServiceAction(service, action, triggerBtn) {
       ? "停止"
       : action === "pull-rebuild"
         ? "拉取 brale-core 代码并 Rebuild"
+        : action === "apply-config"
+          ? "应用配置并重启服务"
         : action === "make-start"
-          ? "执行 make start"
-        : action;
+          ? "应用配置并重启服务"
+          : action;
   const startedAt = Date.now();
   let heartbeatTimer = null;
   startupRunStatusEl.textContent = `执行中：${serviceText} ${actionText}...`;
@@ -844,7 +846,7 @@ async function checkStartup() {
     startupConfigDetailEl.textContent = (result.config_detail || "-").slice(0, 180);
     applyStartupMonitor(result);
     startupStartBtn.disabled = !Boolean(result.ready);
-    startupRunStatusEl.textContent = result.ready ? "检测通过，可一键运行启动" : "检测未通过，请先修复环境或配置";
+    startupRunStatusEl.textContent = result.ready ? "检测通过，可应用配置并启动服务" : "检测未通过，请先修复环境或配置";
   } catch (err) {
     startupRunStatusEl.textContent = `检测失败: ${err?.message || err}`;
     startupStartBtn.disabled = true;
@@ -914,14 +916,14 @@ function startStartup() {
     try {
       const data = JSON.parse(event.data || "{}");
       if (data.ok) {
-        startupRunStatusEl.textContent = "启动完成";
-        appendStartupLog("[OK] 启动完成");
+        startupRunStatusEl.textContent = "配置应用完成";
+        appendStartupLog("[OK] 配置应用完成");
       } else {
-        startupRunStatusEl.textContent = `启动失败: ${data.error || "未知错误"}`;
-        appendStartupLog(`[ERR] ${data.error || "启动失败"}`);
+        startupRunStatusEl.textContent = `配置应用失败: ${data.error || "未知错误"}`;
+        appendStartupLog(`[ERR] ${data.error || "配置应用失败"}`);
       }
     } catch {
-      startupRunStatusEl.textContent = "启动结束";
+      startupRunStatusEl.textContent = "配置应用结束";
     }
     stopStartupStream();
     startupStartBtn.disabled = false;
@@ -932,8 +934,8 @@ function startStartup() {
   });
 
   es.onerror = () => {
-    appendStartupLog("[ERR] 启动流连接中断");
-    startupRunStatusEl.textContent = "启动流中断，请查看日志并重试";
+    appendStartupLog("[ERR] 配置应用流连接中断");
+    startupRunStatusEl.textContent = "配置应用流中断，请查看日志并重试";
     stopStartupStream();
     startupStartBtn.disabled = false;
     if (currentStep === monitorStepIndex) {
@@ -958,7 +960,7 @@ async function generateConfigs() {
     }
     const result = JSON.parse(text);
     const files = Array.isArray(result.files) ? result.files.length : 0;
-    generateStatusEl.textContent = `已生成 ${files} 个文件，可直接 make start`;
+    generateStatusEl.textContent = `已生成 ${files} 个文件，可在下一步应用配置并启动服务`;
   } catch (err) {
     generateStatusEl.textContent = `生成失败: ${err?.message || err}`;
   } finally {
@@ -1216,7 +1218,7 @@ if (configFilesTreeEl) {
 
 renderSymbolTabs();
 syncNotifyFields();
-resetStartupLogs("等待启动...", "监控操作日志：等待操作...");
+  resetStartupLogs("等待应用配置...", "监控操作日志：等待操作...");
 resetStartupProgress();
 void refreshStartupMonitor(true);
 syncStepUI();

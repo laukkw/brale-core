@@ -29,7 +29,7 @@
         <li class="step" data-step="2"><span>03</span><div><b>LLM 模型</b><small>三路模型参数</small></div></li>
         <li class="step" data-step="3"><span>04</span><div><b>策略风控</b><small>按币种编辑保存</small></div></li>
         <li class="step" data-step="4"><span>05</span><div><b>通知与导出</b><small>预览输出</small></div></li>
-        <li class="step" data-step="5"><span>06</span><div><b>运行启动</b><small>环境检测与一键启动</small></div></li>
+        <li class="step" data-step="5"><span>06</span><div><b>运行启动</b><small>环境检测与应用配置</small></div></li>
         <li class="step" data-step="6"><span>07</span><div><b>监控状态</b><small>运行状态与快捷操作</small></div></li>
         <li class="step" data-step="7"><span>08</span><div><b>配置文件查看</b><small>按目录浏览运行配置</small></div></li>
       </ol>
@@ -296,7 +296,7 @@
         <section class="wizard-step" data-step="5">
           <header>
             <h2>运行启动</h2>
-            <p>检测 Docker / Docker Compose 与配置有效性，并实时展示首次拉取镜像进度。</p>
+            <p>检测 Docker / Docker Compose 与配置有效性，并通过标准 stop + start 流程应用最新配置。</p>
           </header>
 
           <div class="startup-grid">
@@ -319,7 +319,7 @@
 
           <div class="save-bar" style="margin-top: 10px;">
             <button type="button" id="startup-check-btn" class="btn-secondary">检测环境与配置</button>
-            <button type="button" id="startup-start-btn" class="btn-primary" disabled>一键运行启动</button>
+            <button type="button" id="startup-start-btn" class="btn-primary" disabled>应用配置并启动服务</button>
             <span id="startup-run-status" aria-live="polite">等待检测</span>
           </div>
 
@@ -331,13 +331,13 @@
             </div>
           </div>
 
-          <pre id="startup-log">等待启动...</pre>
+          <pre id="startup-log">等待应用配置...</pre>
         </section>
 
         <section class="wizard-step" data-step="6">
           <header>
             <h2>监控状态</h2>
-            <p>查看 brale-core / freqtrade 运行状态，并提供服务停止、拉取后重建与整套启动操作。</p>
+            <p>查看 brale-core / freqtrade 运行状态，并提供服务停止、拉取后重建与配置应用操作。</p>
           </header>
 
           <div class="startup-monitor-wrap" aria-live="polite">
@@ -372,8 +372,8 @@
                 <button type="button" id="startup-rebuild-btn" class="btn-primary">拉取后执行 make rebuild</button>
               </div>
               <div class="startup-monitor-bottom-item">
-                <p class="startup-monitor-action-note">按标准流程执行 <code>make start</code>，用于整套服务启动。</p>
-                <button type="button" id="startup-make-start-btn" class="btn-primary">执行 make start</button>
+                <p class="startup-monitor-action-note">按标准流程执行 <code>make stop && make start</code> 等价流程，确保最新配置被重新读取。</p>
+                <button type="button" id="startup-make-start-btn" class="btn-primary">应用配置并重启服务</button>
               </div>
             </div>
           </div>

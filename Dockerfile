@@ -19,6 +19,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 go build -o /out/onboarding ./cmd/onboarding
 RUN go build -o /out/brale-core ./cmd/brale-core
 
 FROM debian:bookworm-slim
@@ -45,3 +46,15 @@ COPY --from=builder /out/brale-core /usr/local/bin/brale-core
 
 ENTRYPOINT ["brale-core"]
 CMD ["-system", "configs/system.toml", "-symbols", "configs/symbols-index.toml"]
+
+FROM docker:28-cli AS onboarding-runtime
+
+ENV TZ=Asia/Shanghai
+
+RUN apk add --no-cache bash curl git make python3 tzdata
+
+WORKDIR /workspace
+COPY --from=builder /out/onboarding /usr/local/bin/onboarding
+
+ENTRYPOINT ["onboarding"]
+CMD ["-addr", "0.0.0.0:9992", "-repo", "/workspace"]
