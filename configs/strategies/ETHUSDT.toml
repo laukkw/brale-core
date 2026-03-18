@@ -92,7 +92,7 @@ stop_atr_multiplier = 2
 # 最小止损距离百分比。例：0.008 = 入场价的 0.8%
 stop_min_distance_pct = 0.008
 # 止盈 R 倍数数组。例：[1.0, 2.0] => TP1=1R, TP2=2R
-take_profit_rr = [1, 2]
+take_profit_rr = [2, 2.5]
 # [可选] 分批止盈比例，长度需与 take_profit_rr 一致；会自动归一化
 # 例：[0.5, 0.5] => 两档各平 50%
 take_profit_ratios = [0.6, 0.4]
@@ -114,9 +114,9 @@ slippage_buffer_pct = 0.0005
 # ------------------------------
 [risk_management.tighten_atr]
 # 结构受损/支撑测试 -> 1.5 ATR
-structure_threatened = 1.2
-tp1_atr = 0.8
-tp2_atr = 1.5
+structure_threatened = 1.5
+tp1_atr = 1.5
+tp2_atr = 2
 min_tp_distance_pct = 0.006
 min_tp_gap_pct = 0.005
 
