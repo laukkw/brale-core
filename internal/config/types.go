@@ -13,11 +13,16 @@ type SystemConfig struct {
 	ExecAPIKey              string                    `mapstructure:"exec_api_key"`
 	ExecAPISecret           string                    `mapstructure:"exec_api_secret"`
 	ExecAuth                string                    `mapstructure:"exec_auth"`
+	LLM                     SystemLLMConfig           `mapstructure:"llm"`
 	LLMMinInterval          string                    `mapstructure:"llm_min_interval"`
 	LLMModels               map[string]LLMModelConfig `mapstructure:"llm_models"`
 	Webhook                 WebhookConfig             `mapstructure:"webhook"`
 	Notification            NotificationConfig        `mapstructure:"notification"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
+}
+
+type SystemLLMConfig struct {
+	SessionMode string `mapstructure:"session_mode"`
 }
 
 type LLMModelConfig struct {
@@ -135,8 +140,9 @@ type CooldownConfig struct {
 }
 
 type SymbolLLMConfig struct {
-	Agent    LLMRoleSet `mapstructure:"agent"`
-	Provider LLMRoleSet `mapstructure:"provider"`
+	SessionMode string     `mapstructure:"session_mode"`
+	Agent       LLMRoleSet `mapstructure:"agent"`
+	Provider    LLMRoleSet `mapstructure:"provider"`
 }
 
 type LLMRoleSet struct {

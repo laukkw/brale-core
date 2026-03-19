@@ -56,10 +56,15 @@ type systemHashInput struct {
 	ExecAPIKey              string          `json:"exec_api_key,omitempty"`
 	ExecAPISecret           string          `json:"exec_api_secret,omitempty"`
 	ExecAuth                string          `json:"exec_auth,omitempty"`
+	LLM                     systemLLMHash   `json:"llm,omitempty"`
 	LLMMinInterval          string          `json:"llm_min_interval,omitempty"`
 	LLMModels               []llmModelEntry `json:"llm_models,omitempty"`
 	Webhook                 webhookHash     `json:"webhook,omitempty"`
 	EnableScheduledDecision bool            `json:"enable_scheduled_decision,omitempty"`
+}
+
+type systemLLMHash struct {
+	SessionMode string `json:"session_mode,omitempty"`
 }
 
 type llmModelEntry struct {
@@ -94,8 +99,9 @@ type symbolHashInput struct {
 }
 
 type symbolLLMHashInput struct {
-	Agent    llmRoleSetHash `json:"agent,omitempty"`
-	Provider llmRoleSetHash `json:"provider,omitempty"`
+	SessionMode string         `json:"session_mode,omitempty"`
+	Agent       llmRoleSetHash `json:"agent,omitempty"`
+	Provider    llmRoleSetHash `json:"provider,omitempty"`
 }
 
 type symbolAgentHash struct {
@@ -134,6 +140,7 @@ func buildSystemHashInput(cfg SystemConfig) systemHashInput {
 		ExecAPIKey:              cfg.ExecAPIKey,
 		ExecAPISecret:           cfg.ExecAPISecret,
 		ExecAuth:                cfg.ExecAuth,
+		LLM:                     systemLLMHash{SessionMode: cfg.LLM.SessionMode},
 		LLMMinInterval:          cfg.LLMMinInterval,
 		LLMModels:               sortedLLMModels(cfg.LLMModels),
 		Webhook:                 buildWebhookHash(cfg.Webhook),
@@ -157,8 +164,9 @@ func buildSymbolHashInput(cfg SymbolConfig) symbolHashInput {
 
 func buildSymbolLLMHashInput(cfg SymbolLLMConfig) symbolLLMHashInput {
 	return symbolLLMHashInput{
-		Agent:    buildRoleSetHash(cfg.Agent),
-		Provider: buildRoleSetHash(cfg.Provider),
+		SessionMode: cfg.SessionMode,
+		Agent:       buildRoleSetHash(cfg.Agent),
+		Provider:    buildRoleSetHash(cfg.Provider),
 	}
 }
 

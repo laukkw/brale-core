@@ -26,6 +26,7 @@ func LoadSystemConfig(path string) (SystemConfig, error) {
 		defaultOn := true
 		cfg.EnableScheduledDecision = &defaultOn
 	}
+	applySystemDefaults(&cfg)
 	applyWebhookDefaults(&cfg.Webhook)
 	cfg.PersistMode = normalizePersistMode(cfg.PersistMode)
 	if err := ValidateSystemConfig(cfg); err != nil {

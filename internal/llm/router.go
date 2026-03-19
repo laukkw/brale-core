@@ -53,6 +53,40 @@ func (r RoutedProvider) Call(ctx context.Context, system, user string) (string, 
 	}
 }
 
+func (r RoutedProvider) CallWithSession(ctx context.Context, sessionID, system, user string) (string, error) {
+	provider, err := r.providerFor(system)
+	if err != nil {
+		return "", err
+	}
+	return CallWithOptionalSession(ctx, provider, sessionID, system, user)
+}
+
+func (r RoutedProvider) providerFor(system string) (Provider, error) {
+	if r.Detect == nil {
+		return nil, fmt.Errorf("stage detector is required")
+	}
+	stage := r.Detect(system)
+	switch stage {
+	case "indicator":
+		if r.Indicator == nil {
+			return nil, fmt.Errorf("indicator provider is required")
+		}
+		return r.Indicator, nil
+	case "structure":
+		if r.Structure == nil {
+			return nil, fmt.Errorf("structure provider is required")
+		}
+		return r.Structure, nil
+	case "mechanics":
+		if r.Mechanics == nil {
+			return nil, fmt.Errorf("mechanics provider is required")
+		}
+		return r.Mechanics, nil
+	default:
+		return nil, fmt.Errorf("unknown stage: %s", stage)
+	}
+}
+
 func truncate(s string, max int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= max {

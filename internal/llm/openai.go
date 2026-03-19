@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"brale-core/internal/pkg/httpclient"
@@ -47,7 +49,68 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
+type openAISessionState struct {
+	mu    sync.Mutex
+	turns []chatMessage
+}
+
+var openAISessionStates = struct {
+	mu    sync.Mutex
+	items map[string]*openAISessionState
+}{items: map[string]*openAISessionState{}}
+
 func (c *OpenAIClient) Call(ctx context.Context, system, user string) (string, error) {
+	return c.callWithMessages(ctx, []chatMessage{{Role: "system", Content: system}, {Role: "user", Content: user}})
+}
+
+func (c *OpenAIClient) CallWithSession(ctx context.Context, sessionID, system, user string) (string, error) {
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	if trimmedSessionID == "" {
+		return "", NewSessionCapabilityError(SessionCapabilityCreateFailed, errors.New("session id is required"))
+	}
+	state := getOrCreateOpenAISessionState(trimmedSessionID)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	messages := make([]chatMessage, 0, len(state.turns)+2)
+	messages = append(messages, chatMessage{Role: "system", Content: system})
+	messages = append(messages, state.turns...)
+	messages = append(messages, chatMessage{Role: "user", Content: user})
+
+	out, err := c.callWithMessages(ctx, messages)
+	if err != nil {
+		return "", err
+	}
+	state.turns = append(state.turns,
+		chatMessage{Role: "user", Content: user},
+		chatMessage{Role: "assistant", Content: out},
+	)
+	return out, nil
+}
+
+func CleanupOpenAISession(sessionID string) error {
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	if trimmedSessionID == "" {
+		return nil
+	}
+	openAISessionStates.mu.Lock()
+	delete(openAISessionStates.items, trimmedSessionID)
+	openAISessionStates.mu.Unlock()
+	return nil
+}
+
+func getOrCreateOpenAISessionState(sessionID string) *openAISessionState {
+	openAISessionStates.mu.Lock()
+	defer openAISessionStates.mu.Unlock()
+	if state, ok := openAISessionStates.items[sessionID]; ok {
+		return state
+	}
+	state := &openAISessionState{}
+	openAISessionStates.items[sessionID] = state
+	return state
+}
+
+func (c *OpenAIClient) callWithMessages(ctx context.Context, messages []chatMessage) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -66,17 +129,11 @@ func (c *OpenAIClient) Call(ctx context.Context, system, user string) (string, e
 	}
 	defer release()
 
-	logger.Debug("llm request",
-		zap.String("system", system),
-		zap.String("user", user),
-	)
+	logger.Debug("llm request", zap.Int("messages", len(messages)))
 	url := endpoint + "/chat/completions"
 	payload := chatRequest{
-		Model: c.Model,
-		Messages: []chatMessage{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
+		Model:          c.Model,
+		Messages:       messages,
 		MaxTokens:      4096,
 		Temperature:    c.Temperature,
 		ResponseFormat: map[string]string{"type": "json_object"},

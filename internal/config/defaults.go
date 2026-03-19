@@ -4,6 +4,8 @@ package config
 import (
 	"sort"
 	"strings"
+
+	"brale-core/internal/llm"
 )
 
 func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) {
@@ -39,6 +41,7 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 		},
 		Cooldown: CooldownConfig{Enabled: false},
 		LLM: SymbolLLMConfig{
+			SessionMode: defaultSessionModeString(),
 			Agent: LLMRoleSet{
 				Indicator: LLMRoleConfig{Model: "", Temperature: &indicatorTemp},
 				Structure: LLMRoleConfig{Model: "", Temperature: &structureTemp},
@@ -71,7 +74,30 @@ func ApplyDecisionDefaults(cfg *SymbolConfig, defaults SymbolConfig) {
 	if cfg.Consensus.ConfidenceThreshold == 0 {
 		cfg.Consensus.ConfidenceThreshold = defaults.Consensus.ConfidenceThreshold
 	}
+	if strings.TrimSpace(cfg.LLM.SessionMode) == "" {
+		cfg.LLM.SessionMode = defaults.LLM.SessionMode
+	}
 	applyCooldownDefaults(&cfg.Cooldown, defaults.Cooldown)
+}
+
+func applySystemDefaults(cfg *SystemConfig) {
+	if cfg == nil {
+		return
+	}
+	if strings.TrimSpace(cfg.LLM.SessionMode) == "" {
+		cfg.LLM.SessionMode = defaultSessionModeString()
+	}
+}
+
+func ResolveSessionMode(sys SystemConfig, symbolCfg SymbolConfig) (llm.SessionMode, error) {
+	raw := strings.TrimSpace(symbolCfg.LLM.SessionMode)
+	if raw == "" {
+		raw = strings.TrimSpace(sys.LLM.SessionMode)
+	}
+	if raw == "" {
+		raw = defaultSessionModeString()
+	}
+	return llm.NewSessionMode(raw)
 }
 
 func ApplyStrategyDefaults(cfg *StrategyConfig, defaults StrategyConfig) {
@@ -164,6 +190,10 @@ func applyDefaultLLMModels(sys SystemConfig, cfg *SymbolConfig) error {
 
 func boolPtr(v bool) *bool {
 	return &v
+}
+
+func defaultSessionModeString() string {
+	return llm.SessionModeSession.String()
 }
 
 func cloneMapAny(src map[string]any) map[string]any {
