@@ -93,7 +93,7 @@ const defaultAgentMechanicsPrompt = "" +
 	"- 不要输出任何交易动作或建议（例如做多/做空/开仓等）。只输出机制判断与分数。"
 
 const defaultProviderIndicatorPrompt = "" +
-	"你是 LLM-3（indicator）。只使用“摘要输入(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
+	"输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：\n" +
 	"- momentum_expansion: bool\n" +
 	"- alignment: bool\n" +
@@ -107,7 +107,7 @@ const defaultProviderIndicatorPrompt = "" +
 	"- signal_tag 优先级固定：mean_rev_noise=true -> noise；否则 alignment=false -> divergence_reversal；否则 momentum_expansion=true -> trend_surge；否则 alignment=true -> pullback_entry；其他 -> momentum_weak"
 
 const defaultProviderStructurePrompt = "" +
-	"你是 LLM-1（structure）。只使用“摘要输入(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
+	"输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：\n" +
 	"- clear_structure: bool\n" +
 	"- integrity: bool\n" +
@@ -120,7 +120,7 @@ const defaultProviderStructurePrompt = "" +
 	"- reason 必须引用至少 2 个输入字段名（可写 field=value）；仅当所有相关字段都缺失/为空/为“数据不足”时，才允许写“数据不足”。"
 
 const defaultProviderMechanicsPrompt = "" +
-	"你是 LLM-2（mechanics）。只使用“摘要输入(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
+	"输出示例仅示意结构，禁止照抄示例中的枚举值/布尔值。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：\n" +
 	"- liquidation_stress: {value: bool, confidence: low|high, reason: string}\n" +
 	"- signal_tag: fuel_ready/neutral/crowded_long/crowded_short/liquidation_cascade\n" +
@@ -131,13 +131,11 @@ const defaultProviderMechanicsPrompt = "" +
 	"- signal_tag：liquidation_stress.value=true -> liquidation_cascade；否则当 crowding==long_crowded 且 leverage_state in {increasing,overheated} 且 risk_level==high -> crowded_long；否则当 crowding==short_crowded 且 leverage_state in {increasing,overheated} 且 risk_level==high -> crowded_short；否则 risk_level==low -> fuel_ready；其他 -> neutral"
 
 const defaultInPosIndicatorPrompt = "" +
-	"你是 LLM-3（indicator_in_position）。只使用“摘要输入(JSON)”+“仓位摘要(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：momentum_sustaining(bool), divergence_detected(bool), monitor_tag(keep/tighten/exit), reason(string<=1句)。\n" +
 	"约束：禁止生成新的连续数值/阈值；reason 尽量引用输入字段名或 field=value；两份输入都无法引用时才写“数据不足”。\n" +
 	"monitor_tag：divergence_detected=true -> exit；否则 momentum_sustaining=false -> tighten；否则 keep"
 
 const defaultInPosStructurePrompt = "" +
-	"你是 LLM-1（structure_in_position）。只使用“摘要输入(JSON)”+“仓位摘要(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：integrity(bool), threat_level(none/low/medium/high/critical), monitor_tag(keep/tighten/exit), reason(string<=1句)。\n" +
 	"约束：禁止生成新的连续数值/阈值；reason 尽量引用输入字段名或 field=value；两份输入都无法引用时才写“数据不足”。\n" +
 	"确定性映射：\n" +
@@ -150,7 +148,6 @@ const defaultInPosStructurePrompt = "" +
 	"monitor_tag：threat_level=critical -> exit；threat_level in {high,medium} -> tighten；其他 -> keep"
 
 const defaultInPosMechanicsPrompt = "" +
-	"你是 LLM-2（mechanics_in_position）。只使用“摘要输入(JSON)”+“仓位摘要(JSON)”推导。运行语义：session 模式忽略“上一次输出”；stateless/fallback 模式输入中可能附带“上一次输出(UTC时间)”片段，仅作兼容参考，不得覆盖当前摘要事实。\n" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：adverse_liquidation(bool), crowding_reversal(bool), monitor_tag(keep/tighten/exit), reason(string<=1句)。\n" +
 	"约束：禁止生成新的连续数值/阈值；reason 尽量引用输入字段名或 field=value；两份输入都无法引用时才写“数据不足”。\n" +
 	"- 若输入包含 liquidations_by_window 等清算证据，可用于判断 adverse_liquidation=true，并在 reason 中引用对应字段。\n" +
