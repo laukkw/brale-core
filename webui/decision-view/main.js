@@ -1548,6 +1548,9 @@ function renderStageHTML(stage) {
   if (stageType === "gate") return renderGateHTML(stage, ts);
 
   const [sysPrompt, userPrompt] = extractPrompts(stage.input);
+  const hasRawOutput =
+    stage.meta && Object.prototype.hasOwnProperty.call(stage.meta, "raw_output");
+  const outputValue = hasRawOutput ? stage.meta.raw_output : stage.output;
   return `
     <div class="note-title">${escapeHTML(stage.title || stage.stage || "Stage")}</div>
     <div class="note-meta">
@@ -1555,11 +1558,11 @@ function renderStageHTML(stage) {
       <span class="tag">时间 ${escapeHTML(ts)}</span>
     </div>
     <div class="block"><strong>LLM 输入</strong>
-      <div class="code-block"><strong>System</strong>\n${escapeHTML(sysPrompt)}</div>
-      <div class="code-block"><strong>User</strong>\n${escapeHTML(userPrompt)}</div>
+      <div class="code-block"><strong>System</strong>\n${escapeHTML(formatRawData(sysPrompt))}</div>
+      <div class="code-block"><strong>User</strong>\n${escapeHTML(formatRawData(userPrompt))}</div>
     </div>
     <div class="block"><strong>LLM 输出</strong><div class="code-block">${escapeHTML(
-      formatData(stage.output)
+      formatRawData(outputValue)
     )}</div></div>
     <div class="block"><strong>指纹</strong> ${escapeHTML(
       stage.meta?.fingerprint || "—"
@@ -1675,9 +1678,19 @@ function extractPrompts(input) {
   if (typeof input === "object") {
     const sys = input.system_prompt || input.system || input.systemPrompt || "—";
     const user = input.user_prompt || input.user || input.prompt || input.userPrompt || "—";
-    return [formatData(sys), formatData(user)];
+    return [sys, user];
   }
   return ["—", "—"];
+}
+
+function formatRawData(value) {
+  if (value === undefined || value === null) return "—";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (err) {
+    return String(value);
+  }
 }
 
 function gateRoleLabel(role) {
