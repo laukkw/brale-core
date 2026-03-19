@@ -201,15 +201,7 @@ func buildAgentStageData(records []store.AgentEventRecord) []dashboardFlowStageD
 func buildStageTrace(items []dashboardFlowStageData) []DashboardFlowStageValues {
 	out := make([]DashboardFlowStageValues, 0, len(items))
 	for _, item := range items {
-		out = append(out, DashboardFlowStageValues{
-			Stage:   item.Stage,
-			Mode:    item.Mode,
-			Source:  item.Source,
-			Status:  item.Status,
-			Reason:  item.Reason,
-			Summary: item.Summary,
-			Values:  item.Values,
-		})
+		out = append(out, DashboardFlowStageValues(item))
 	}
 	return out
 }
@@ -228,14 +220,6 @@ func firstBlockingFieldReason(fields []DashboardFlowValueField) string {
 		}
 	}
 	return ""
-}
-
-func extractTraceFields(raw json.RawMessage) []DashboardFlowValueField {
-	obj := decodeJSONObject(raw)
-	if len(obj) == 0 {
-		return nil
-	}
-	return extractTraceFieldsFromObject(obj)
 }
 
 func extractTraceFieldsFromObject(obj map[string]any) []DashboardFlowValueField {
@@ -607,11 +591,6 @@ func analyzeFlowOutput(raw json.RawMessage) dashboardFlowOutputMeta {
 	}
 }
 
-func readMonitorTagAndReason(raw json.RawMessage) (string, string) {
-	meta := analyzeFlowOutput(raw)
-	return meta.MonitorTag, meta.Reason
-}
-
 func summarizeGateOutcome(gate store.GateEventRecord) string {
 	decisionText := strings.TrimSpace(decisionfmt.GateDecisionText(gate.DecisionAction, gate.GateReason))
 	parts := []string{
@@ -663,10 +642,6 @@ func summarizeTerminalOutcome(gate store.GateEventRecord, tighten *DashboardTigh
 		return "tighten blocked"
 	}
 	if !gate.GlobalTradeable {
-		reason := strings.TrimSpace(gate.GateReason)
-		if reason == "" {
-			reason = "gate_blocked"
-		}
 		return "blocked"
 	}
 	if shouldRenderPlanNode(gate, tighten) {

@@ -70,14 +70,7 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 	}
 	return nil
 }
-func validateNoEmptyItems(items []string, errMsg string) error {
-	for _, item := range items {
-		if strings.TrimSpace(item) == "" {
-			return validationErrorf("%s", errMsg)
-		}
-	}
-	return nil
-}
+
 func normalizePersistMode(raw string) string {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	switch mode {

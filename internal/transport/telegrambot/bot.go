@@ -275,7 +275,7 @@ func (b *Bot) handleCallback(ctx context.Context, cb *callbackQuery) {
 }
 
 func (b *Bot) runObserve(ctx context.Context, req ObserveRequest) (ObserveResponse, error) {
-	out, err := b.runtimeClient.RunObserve(ctx, botruntime.ObserveRunRequest{Symbol: req.Symbol})
+	out, err := b.runtimeClient.RunObserve(ctx, botruntime.ObserveRunRequest(req))
 	if err != nil {
 		return ObserveResponse{}, err
 	}
@@ -293,16 +293,6 @@ func (b *Bot) runObserve(ctx context.Context, req ObserveRequest) (ObserveRespon
 
 func (b *Bot) sendText(ctx context.Context, chatID int64, text string) {
 	_, _ = b.sendMessage(ctx, chatID, text, "", nil)
-}
-
-func (b *Bot) sendLongText(ctx context.Context, chatID int64, text string) {
-	chunks := splitMessageChunks(text, 3500)
-	if len(chunks) == 0 {
-		return
-	}
-	for _, chunk := range chunks {
-		b.sendText(ctx, chatID, chunk)
-	}
 }
 
 func (b *Bot) sendTextWithReply(ctx context.Context, chatID int64, text string) {

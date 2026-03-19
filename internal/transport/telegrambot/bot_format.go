@@ -145,54 +145,6 @@ func formatScheduleResponse(resp ScheduleResponse) string {
 	}
 	return strings.TrimSpace(b.String())
 }
-func splitMessageChunks(text string, maxRunes int) []string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-	if maxRunes <= 0 {
-		maxRunes = 3500
-	}
-	lines := strings.Split(text, "\n")
-	chunks := make([]string, 0, len(lines)/8+1)
-	current := &strings.Builder{}
-	currentLen := 0
-	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
-		lineLen := len([]rune(line))
-		extra := lineLen
-		if currentLen > 0 {
-			extra++
-		}
-		if currentLen > 0 && currentLen+extra > maxRunes {
-			chunks = append(chunks, current.String())
-			current.Reset()
-			currentLen = 0
-		}
-		if lineLen > maxRunes {
-			runes := []rune(line)
-			for len(runes) > maxRunes {
-				chunks = append(chunks, string(runes[:maxRunes]))
-				runes = runes[maxRunes:]
-			}
-			if len(runes) > 0 {
-				current.WriteString(string(runes))
-				currentLen = len(runes)
-			}
-			continue
-		}
-		if currentLen > 0 {
-			current.WriteString("\n")
-			currentLen++
-		}
-		current.WriteString(line)
-		currentLen += lineLen
-	}
-	if currentLen > 0 {
-		chunks = append(chunks, current.String())
-	}
-	return chunks
-}
 
 func formatTime(t time.Time) string {
 	if t.IsZero() {

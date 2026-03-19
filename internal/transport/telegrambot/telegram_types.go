@@ -82,9 +82,3 @@ type inlineKeyboardMarkup struct {
 func (k inlineKeyboard) toMarkup() inlineKeyboardMarkup {
 	return inlineKeyboardMarkup{InlineKeyboard: k.Buttons}
 }
-
-type errorResponse struct {
-	Code    string `json:"code"`
-	Msg     string `json:"msg"`
-	Details any    `json:"details,omitempty"`
-}

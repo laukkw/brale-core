@@ -92,7 +92,7 @@ func insertTomlKey(content string, section string, key string, value string) (st
 	lines := strings.Split(content, "\n")
 
 	insert := fmt.Sprintf("%s = %s", key, value)
-	start, end, hasSection := tomlSectionBounds(lines, section)
+	_, end, hasSection := tomlSectionBounds(lines, section)
 	if !hasSection {
 		if section == "" {
 			lines = append(lines, insert)
@@ -102,9 +102,6 @@ func insertTomlKey(content string, section string, key string, value string) (st
 		return strings.Join(lines, "\n"), nil
 	}
 	if section == "" {
-		if start < 0 {
-			start = 0
-		}
 		lines = append(lines[:end], append([]string{insert}, lines[end:]...)...)
 		return strings.Join(lines, "\n"), nil
 	}

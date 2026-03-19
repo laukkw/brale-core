@@ -534,30 +534,6 @@ func renderHTMLMetricsBlock(metrics []string) string {
 	return fmt.Sprintf("<b>关键仪表</b>\n%s", wrapPre(strings.Join(lines, "\n")))
 }
 
-func renderHTMLSignals(report DecisionReport) string {
-	items := make([]string, 0, 4)
-	for _, p := range report.Gate.Providers {
-		label := providerRoleLabel(p.Role)
-		if strings.TrimSpace(label) == "" {
-			label = p.Role
-		}
-		entry := fmt.Sprintf("%s: %s", label, p.TradeableText)
-		if p.Tradeable {
-			items = append(items, fmt.Sprintf("🟢 %s", entry))
-			continue
-		}
-		items = append(items, fmt.Sprintf("🔴 %s", entry))
-	}
-	if len(items) == 0 {
-		items = append(items, collectStageSummaries(report)...)
-	}
-	content := formatBulletLines(items)
-	if strings.TrimSpace(content) == "" {
-		return ""
-	}
-	return fmt.Sprintf("<b>多空博弈</b>\n%s", wrapPre(content))
-}
-
 func renderHTMLRiskDetail(report DecisionReport) string {
 	if !shouldRenderRiskDetail(report) {
 		return ""
@@ -912,38 +888,6 @@ func splitNarrativeSections(summary string) map[string]string {
 func isPlaceholderValue(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	return trimmed == "" || trimmed == "—" || trimmed == "-"
-}
-
-func collectStageSummaries(report DecisionReport) []string {
-	items := make([]string, 0, len(report.Agents)+len(report.Providers))
-	for _, stage := range report.Agents {
-		if strings.TrimSpace(stage.Summary) != "" {
-			items = append(items, stage.Summary)
-		}
-	}
-	for _, stage := range report.Providers {
-		if strings.TrimSpace(stage.Summary) != "" {
-			items = append(items, stage.Summary)
-		}
-	}
-	return items
-}
-
-func formatBulletLines(lines []string) string {
-	output := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		trimmed = strings.TrimPrefix(trimmed, "- ")
-		trimmed = strings.TrimPrefix(trimmed, "• ")
-		if trimmed == "" || trimmed == "-" || trimmed == "—" {
-			continue
-		}
-		output = append(output, fmt.Sprintf("• %s", escapeHTML(trimmed)))
-	}
-	if len(output) == 0 {
-		return ""
-	}
-	return strings.Join(output, "\n")
 }
 
 func wrapPre(content string) string {
