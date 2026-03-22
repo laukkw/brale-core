@@ -149,6 +149,7 @@
           </div>
 
           <div class="grid two">
+            <div class="fixed-box span-2">默认使用 llm 获取开仓与持仓收紧阶段的止盈止损，无需再手动选择原生 TP/SL 策略。</div>
             <label><span class="label-title">单笔风险占比（账户权益占比）<span class="field-help" tabindex="0" data-tip="开仓时先算风险金额：risk_amount = base_balance × effective_risk_pct × entry_multiplier。&#10;其中 effective_risk_pct = risk_per_trade_pct × grade_factor × sieve_size_factor。&#10;再按止损距离定仓位：position_size = risk_amount / |entry - stop_loss|。" aria-label="单笔风险占比说明">?</span></span>
               <input id="risk_per_trade_pct" type="number" step="0.1" placeholder="例如 0.5" />
             </label>
@@ -180,14 +181,7 @@
               </select>
             </label>
 
-            <label>C. 出场模式（Exit / TP-SL）
-              <select id="exit_policy">
-                <option value="" selected disabled>请选择出场模式</option>
-                <option value="atr_structure_v1">atr_structure_v1</option>
-                <option value="fixed_rr_v1">fixed_rr_v1</option>
-                <option value="structure_tp_v1">structure_tp_v1</option>
-              </select>
-            </label>
+            <div class="fixed-box">止盈止损模式固定为 llm，由模型自动生成。</div>
 
             <label>持仓风控最小更新间隔（秒）
               <input id="tighten_min_update_interval_sec" type="number" min="0" step="1" placeholder="0 表示关闭防抖" />

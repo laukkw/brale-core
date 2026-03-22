@@ -51,12 +51,13 @@ const feishuEnabledEl = document.getElementById("feishu_enabled");
 const telegramFieldsEl = document.getElementById("telegram-fields");
 const feishuFieldsEl = document.getElementById("feishu-fields");
 
+const DEFAULT_RISK_STRATEGY_MODE = "llm";
+
 const strategyInputs = {
   risk_per_trade_pct: document.getElementById("risk_per_trade_pct"),
   max_invest_pct: document.getElementById("max_invest_pct"),
   max_leverage: document.getElementById("max_leverage"),
   entry_mode: document.getElementById("entry_mode"),
-  exit_policy: document.getElementById("exit_policy"),
   tighten_min_update_interval_sec: document.getElementById("tighten_min_update_interval_sec"),
   ema_fast: document.getElementById("ema_fast"),
   ema_mid: document.getElementById("ema_mid"),
@@ -137,7 +138,6 @@ function defaultSymbolConfig() {
     max_leverage: 3,
     intervals: ["1h", "4h", "1d"],
     entry_mode: "orderbook",
-    exit_policy: "atr_structure_v1",
     tighten_min_update_interval_sec: 300,
     ema_fast: 21,
     ema_mid: 50,
@@ -158,7 +158,6 @@ function collectStrategyForm() {
     max_leverage: toInteger(String(strategyInputs.max_leverage.value || "").trim(), 3),
     intervals: intervals.length ? intervals : ["1h", "4h", "1d"],
     entry_mode: String(strategyInputs.entry_mode.value || "").trim() || "orderbook",
-    exit_policy: String(strategyInputs.exit_policy.value || "").trim() || "atr_structure_v1",
     tighten_min_update_interval_sec: toInteger(String(strategyInputs.tighten_min_update_interval_sec.value || "").trim(), 300),
     ema_fast: toInteger(String(strategyInputs.ema_fast.value || "").trim(), 21),
     ema_mid: toInteger(String(strategyInputs.ema_mid.value || "").trim(), 50),
@@ -176,7 +175,6 @@ function fillStrategyForm(cfg) {
   strategyInputs.max_invest_pct.value = cfg?.max_invest_pct ?? "";
   strategyInputs.max_leverage.value = cfg?.max_leverage ?? "";
   strategyInputs.entry_mode.value = cfg?.entry_mode ?? "";
-  strategyInputs.exit_policy.value = cfg?.exit_policy ?? "";
   strategyInputs.tighten_min_update_interval_sec.value = cfg?.tighten_min_update_interval_sec ?? "";
   strategyInputs.ema_fast.value = cfg?.ema_fast ?? "";
   strategyInputs.ema_mid.value = cfg?.ema_mid ?? "";
@@ -404,8 +402,8 @@ function renderSymbolConfig(data) {
         `max_leverage = ${cfg.max_leverage}`,
         `entry_mode = "${cfg.entry_mode}"`,
         "",
-        `[risk_management.initial_exit]`,
-        `policy = "${cfg.exit_policy}"`,
+        `[risk_management.risk_strategy]`,
+        `mode = "${DEFAULT_RISK_STRATEGY_MODE}"`,
         "",
         `[risk_management.tighten_atr]`,
         `min_update_interval_sec = ${cfg.tighten_min_update_interval_sec}`
