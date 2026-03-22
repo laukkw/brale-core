@@ -88,6 +88,27 @@ func TestPreviewNotificationEnabledWhenAnyChannelSelected(t *testing.T) {
 	}
 }
 
+func TestPreviewStrategyFilesUseLLMRiskModeByDefault(t *testing.T) {
+	g := NewGenerator(t.TempDir())
+	result, err := g.Preview(basePreviewRequest())
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+
+	defaultStrategy := generatedFileContent(t, result, "configs/strategies/default.toml")
+	if !strings.Contains(defaultStrategy, "[risk_management.risk_strategy]\nmode = \"llm\"") {
+		t.Fatalf("default strategy missing llm risk mode:\n%s", defaultStrategy)
+	}
+
+	symbolStrategy := generatedFileContent(t, result, "configs/strategies/ETHUSDT.toml")
+	if !strings.Contains(symbolStrategy, "[risk_management.risk_strategy]\nmode = \"llm\"") {
+		t.Fatalf("symbol strategy missing llm risk mode:\n%s", symbolStrategy)
+	}
+	if !strings.Contains(symbolStrategy, "[risk_management.initial_exit]\npolicy = \"atr_structure_v1\"") {
+		t.Fatalf("symbol strategy missing compatibility initial_exit policy:\n%s", symbolStrategy)
+	}
+}
+
 func basePreviewRequest() Request {
 	return Request{
 		Symbols:              []string{"ETHUSDT"},

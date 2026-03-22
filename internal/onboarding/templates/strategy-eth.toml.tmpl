@@ -15,8 +15,11 @@ entry_offset_atr = 0.1
 breakeven_fee_pct = 0.0
 slippage_buffer_pct = 0.0005
 
+[risk_management.risk_strategy]
+mode = "llm"
+
 [risk_management.initial_exit]
-policy = "{{ .ExitPolicy }}"
+policy = "atr_structure_v1"
 structure_interval = "1h"
 
 [risk_management.initial_exit.params]
