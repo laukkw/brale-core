@@ -14,6 +14,7 @@ import (
 	"brale-core/internal/decision"
 	"brale-core/internal/decision/agent"
 	"brale-core/internal/decision/features"
+	"brale-core/internal/decision/fund"
 	"brale-core/internal/decision/provider"
 	"brale-core/internal/prompt/positionprompt"
 )
@@ -28,7 +29,103 @@ type LLMPromptBuilder struct {
 	ProviderInPosIndicatorSys string
 	ProviderInPosStructureSys string
 	ProviderInPosMechanicsSys string
+	RiskFlatInitSystem        string
 	UserFormat                UserPromptFormat
+}
+
+type FlatRiskPromptInput struct {
+	Symbol               string
+	Direction            string
+	Entry                float64
+	RiskPct              float64
+	Consensus            map[string]any
+	Structure            map[string]any
+	OtherProviderSummary map[string]any
+	RiskContext          FlatRiskContext
+}
+
+type FlatRiskContext struct {
+	ATR          float64 `json:"atr"`
+	MaxInvestPct float64 `json:"max_invest_pct"`
+	MaxInvestAmt float64 `json:"max_invest_amt"`
+	MaxLeverage  float64 `json:"max_leverage"`
+}
+
+type TightenRiskPromptInput struct {
+	Symbol              string
+	Direction           string
+	Entry               float64
+	MarkPrice           float64
+	ATR                 float64
+	CurrentStopLoss     float64
+	CurrentTakeProfits  []float64
+	Gate                fund.GateDecision
+	InPositionIndicator provider.InPositionIndicatorOut
+	InPositionStructure provider.InPositionStructureOut
+	InPositionMechanics provider.InPositionMechanicsOut
+}
+
+func (b LLMPromptBuilder) FlatRiskInitPrompt(input FlatRiskPromptInput) (string, string, error) {
+	system, err := requirePrompt("prompts.risk.flat_init", b.RiskFlatInitSystem)
+	if err != nil {
+		return "", "", err
+	}
+	if err := validateFlatRiskPromptInput(input); err != nil {
+		return "", "", err
+	}
+	contextRaw, _ := json.Marshal(map[string]any{
+		"symbol":    strings.ToUpper(strings.TrimSpace(input.Symbol)),
+		"direction": strings.ToLower(strings.TrimSpace(input.Direction)),
+		"entry":     input.Entry,
+		"risk_pct":  input.RiskPct,
+	})
+	consensusRaw, _ := json.Marshal(input.Consensus)
+	structureRaw, _ := json.Marshal(input.Structure)
+	providerRaw, _ := json.Marshal(input.OtherProviderSummary)
+	riskContextRaw, _ := json.Marshal(input.RiskContext)
+	user := formatPayloads(
+		b.UserFormat,
+		payloadBlock{label: "交易上下文(必填):", payload: string(contextRaw)},
+		payloadBlock{label: "共识摘要(必填):", payload: string(consensusRaw)},
+		payloadBlock{label: "结构摘要(必填):", payload: string(structureRaw)},
+		payloadBlock{label: "其他 Provider 摘要(必填):", payload: string(providerRaw)},
+		payloadBlock{label: "风控约束上下文(必填):", payload: string(riskContextRaw)},
+		payloadBlock{label: "输出要求:", payload: `{"entry":0.0,"stop_loss":0.0,"take_profits":[0.0],"take_profit_ratios":[0.0]}。必须输出完整开仓入场价与止损止盈结构，不允许省略任一字段。`},
+	)
+	return system, user, nil
+}
+
+func (b LLMPromptBuilder) TightenRiskUpdatePrompt(input TightenRiskPromptInput) (string, string, error) {
+	system, err := requirePrompt("prompts.risk.flat_init", b.RiskFlatInitSystem)
+	if err != nil {
+		return "", "", err
+	}
+	if err := validateTightenRiskPromptInput(input); err != nil {
+		return "", "", err
+	}
+	contextRaw, _ := json.Marshal(map[string]any{
+		"symbol":               strings.ToUpper(strings.TrimSpace(input.Symbol)),
+		"direction":            strings.ToLower(strings.TrimSpace(input.Direction)),
+		"entry":                input.Entry,
+		"mark_price":           input.MarkPrice,
+		"atr":                  input.ATR,
+		"current_stop_loss":    input.CurrentStopLoss,
+		"current_take_profits": append([]float64(nil), input.CurrentTakeProfits...),
+	})
+	gateRaw, _ := json.Marshal(input.Gate)
+	inPosRaw, _ := json.Marshal(map[string]any{
+		"indicator": input.InPositionIndicator,
+		"structure": input.InPositionStructure,
+		"mechanics": input.InPositionMechanics,
+	})
+	user := formatPayloads(
+		b.UserFormat,
+		payloadBlock{label: "仓位风控上下文(必填):", payload: string(contextRaw)},
+		payloadBlock{label: "Gate 摘要(必填):", payload: string(gateRaw)},
+		payloadBlock{label: "In-position 评估(必填):", payload: string(inPosRaw)},
+		payloadBlock{label: "输出要求:", payload: `{"stop_loss":0.0,"take_profits":[0.0]}。必须输出完整新止损与止盈列表，不允许省略任一字段。`},
+	)
+	return system, user, nil
 }
 
 func (b LLMPromptBuilder) AgentIndicatorPrompt(ind features.IndicatorJSON) (string, string, error) {
@@ -339,6 +436,65 @@ func requirePrompt(name string, value string) (string, error) {
 		return "", fmt.Errorf("%s is required", name)
 	}
 	return prompt, nil
+}
+
+func validateFlatRiskPromptInput(input FlatRiskPromptInput) error {
+	if strings.TrimSpace(input.Symbol) == "" {
+		return fmt.Errorf("flat_risk.symbol is required")
+	}
+	direction := strings.ToLower(strings.TrimSpace(input.Direction))
+	if direction != "long" && direction != "short" {
+		return fmt.Errorf("flat_risk.direction must be long/short")
+	}
+	if input.Entry <= 0 {
+		return fmt.Errorf("flat_risk.entry is required")
+	}
+	if input.RiskPct <= 0 {
+		return fmt.Errorf("flat_risk.risk_pct is required")
+	}
+	if err := requireNonEmptyMap("flat_risk.consensus", input.Consensus); err != nil {
+		return err
+	}
+	if err := requireNonEmptyMap("flat_risk.structure", input.Structure); err != nil {
+		return err
+	}
+	if err := requireNonEmptyMap("flat_risk.other_provider_summary", input.OtherProviderSummary); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateTightenRiskPromptInput(input TightenRiskPromptInput) error {
+	if strings.TrimSpace(input.Symbol) == "" {
+		return fmt.Errorf("tighten_risk.symbol is required")
+	}
+	direction := strings.ToLower(strings.TrimSpace(input.Direction))
+	if direction != "long" && direction != "short" {
+		return fmt.Errorf("tighten_risk.direction must be long/short")
+	}
+	if input.Entry <= 0 {
+		return fmt.Errorf("tighten_risk.entry is required")
+	}
+	if input.MarkPrice <= 0 {
+		return fmt.Errorf("tighten_risk.mark_price is required")
+	}
+	if input.ATR <= 0 {
+		return fmt.Errorf("tighten_risk.atr is required")
+	}
+	if input.CurrentStopLoss <= 0 {
+		return fmt.Errorf("tighten_risk.current_stop_loss is required")
+	}
+	if len(input.CurrentTakeProfits) == 0 {
+		return fmt.Errorf("tighten_risk.current_take_profits is required")
+	}
+	return nil
+}
+
+func requireNonEmptyMap(name string, value map[string]any) error {
+	if len(value) == 0 {
+		return fmt.Errorf("%s is required", name)
+	}
+	return nil
 }
 
 type UserPromptFormat string

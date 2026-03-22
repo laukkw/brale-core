@@ -176,9 +176,14 @@ type RiskManagementConfig struct {
 	OrderbookDepth    int                       `mapstructure:"orderbook_depth"`
 	BreakevenFeePct   float64                   `mapstructure:"breakeven_fee_pct"`
 	SlippageBufferPct float64                   `mapstructure:"slippage_buffer_pct"`
+	RiskStrategy      RiskStrategyConfig        `mapstructure:"risk_strategy"`
 	InitialExit       InitialExitConfig         `mapstructure:"initial_exit"`
 	TightenATR        TightenATRConfig          `mapstructure:"tighten_atr"`
 	Sieve             RiskManagementSieveConfig `mapstructure:"sieve"`
+}
+
+type RiskStrategyConfig struct {
+	Mode string `mapstructure:"mode"`
 }
 
 type InitialExitConfig struct {

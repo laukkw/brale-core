@@ -53,26 +53,37 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	prevHigh, prevLow := resolvePrevHighLow(trend)
 	entryOffsetATR := toFloat(riskMgmt["entry_offset_atr"])
 	entryMode := strings.ToLower(strings.TrimSpace(toString(riskMgmt["entry_mode"])))
+	riskStrategyMode := resolveRiskStrategyMode(toString(riskMgmt["risk_strategy_mode"]))
+	llmRiskMode := riskStrategyMode == "llm"
 	orderbookDepth := resolveOrderbookDepth(toInt(riskMgmt["orderbook_depth"]))
 	entry := resolveEntryPrice(direction, closePrice, atr, prevHigh, prevLow, entryOffsetATR, entryMode, toMap(root["orderbook"]), orderbookDepth)
-	policyName, params := resolveInitialExitConfig(riskMgmt)
-	initialOut, err := initexit.BuildInitial(context.Background(), policyName, initexit.BuildInput{
-		Symbol:    toString(root["symbol"]),
-		Direction: direction,
-		Entry:     entry,
-		ATR:       atr,
-		Trend: initexit.TrendInput{
-			StructureCandidates: toStructureCandidates(trend),
-		},
-		Params: params,
-	})
-	if err != nil {
-		respondPlanInvalid(ctx, msg, root, "PLAN_INITIAL_EXIT_INVALID")
-		return
+	stop := 0.0
+	takeProfits := []float64(nil)
+	takeProfitRatios := []float64(nil)
+	stopSource := ""
+	stopReason := ""
+	if !llmRiskMode {
+		policyName, params := resolveInitialExitConfig(riskMgmt)
+		initialOut, buildErr := initexit.BuildInitial(context.Background(), policyName, initexit.BuildInput{
+			Symbol:    toString(root["symbol"]),
+			Direction: direction,
+			Entry:     entry,
+			ATR:       atr,
+			Trend: initexit.TrendInput{
+				StructureCandidates: toStructureCandidates(trend),
+			},
+			Params: params,
+		})
+		if buildErr != nil {
+			respondPlanInvalid(ctx, msg, root, "PLAN_INITIAL_EXIT_INVALID")
+			return
+		}
+		stop = initialOut.StopLoss
+		takeProfits = initialOut.TakeProfits
+		takeProfitRatios = initialOut.TakeProfitRatios
+		stopSource = initialOut.StopSource
+		stopReason = initialOut.StopReason
 	}
-	stop := initialOut.StopLoss
-	takeProfits := initialOut.TakeProfits
-	takeProfitRatios := initialOut.TakeProfitRatios
 	stopDist := numutil.AbsFloat(entry - stop)
 	grade := toInt(gate["grade"])
 	derived := toMap(gate["derived"])
@@ -84,26 +95,36 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	available := toFloat(account["available"])
 	baseBalance := resolveBalance(equity, available)
 	riskAmount := baseBalance * effectiveRiskPct
-	if stopDist > 0 && riskAmount > 0 {
+	if !llmRiskMode && stopDist > 0 && riskAmount > 0 {
 		positionSize = riskAmount / stopDist
 	}
 	maxInvestPct := toFloat(riskMgmt["max_invest_pct"])
 	maxInvestAmt := resolveMaxInvestAmount(equity, available, maxInvestPct)
 	maxLeverage := toFloat(riskMgmt["max_leverage"])
-	leverageResult := riskcalc.ResolveLeverageAndLiquidation(entry, positionSize, maxInvestAmt, maxLeverage, direction)
-	positionSize = leverageResult.PositionSize
-	leverage := leverageResult.Leverage
-	liqPrice := leverageResult.LiquidationPrice
-	mmr := leverageResult.MMR
-	fee := leverageResult.Fee
-	if entry <= 0 || stopDist <= 0 || positionSize <= 0 {
+	leverage := 0.0
+	liqPrice := 0.0
+	mmr := 0.0
+	fee := 0.0
+	if !llmRiskMode {
+		leverageResult := riskcalc.ResolveLeverageAndLiquidation(entry, positionSize, maxInvestAmt, maxLeverage, direction)
+		positionSize = leverageResult.PositionSize
+		leverage = leverageResult.Leverage
+		liqPrice = leverageResult.LiquidationPrice
+		mmr = leverageResult.MMR
+		fee = leverageResult.Fee
+	}
+	if entry <= 0 || (!llmRiskMode && (stopDist <= 0 || positionSize <= 0)) {
 		respondPlanInvalid(ctx, msg, root, "PLAN_INPUT_INVALID")
 		return
 	}
 
-	if riskcalc.IsStopBeyondLiquidation(direction, stop, liqPrice) {
+	if !llmRiskMode && riskcalc.IsStopBeyondLiquidation(direction, stop, liqPrice) {
 		respondPlanInvalid(ctx, msg, root, "PLAN_STOP_BEYOND_LIQUIDATION")
 		return
+	}
+	planSource := "go"
+	if llmRiskMode {
+		planSource = "llm"
 	}
 
 	plan := map[string]any{
@@ -117,6 +138,7 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 		"leverage":             leverage,
 		"r_multiple":           1.0,
 		"template":             "rulego_plan",
+		"plan_source":          planSource,
 		"take_profits":         takeProfits,
 		"take_profit_ratios":   takeProfitRatios,
 		"position_id":          toString(root["position_id"]),
@@ -125,8 +147,8 @@ func (n *PlanBuilderNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 		"strategy_config_hash": toString(binding["strategy_hash"]),
 		"symbol":               toString(root["symbol"]),
 		"risk_annotations": map[string]any{
-			"stop_source":       initialOut.StopSource,
-			"stop_reason":       initialOut.StopReason,
+			"stop_source":       stopSource,
+			"stop_reason":       stopReason,
 			"risk_distance":     stopDist,
 			"atr":               atr,
 			"buffer_atr":        0.0,
@@ -289,5 +311,14 @@ func resolveGradeFactor(grade int, riskMgmt map[string]any) float64 {
 		return toFloat(riskMgmt["grade_3_factor"])
 	default:
 		return 0
+	}
+}
+
+func resolveRiskStrategyMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "llm":
+		return "llm"
+	default:
+		return "native"
 	}
 }

@@ -4,6 +4,7 @@ package decision
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -23,6 +24,8 @@ import (
 	"brale-core/internal/execution"
 	"brale-core/internal/llm"
 	"brale-core/internal/pkg/logging"
+	riskcalc "brale-core/internal/risk"
+	"brale-core/internal/risk/initexit"
 	"brale-core/internal/snapshot"
 	"brale-core/internal/strategy"
 
@@ -30,21 +33,53 @@ import (
 )
 
 type Runner struct {
-	Snapshotter Snapshotter
-	Compressor  Compressor
-	Agent       AgentService
-	Provider    ProviderService
-	Bindings    map[string]strategy.StrategyBinding
-	Configs     map[string]config.SymbolConfig
-	Enabled     map[string]AgentEnabled
-	Ruleflow    ruleflow.Evaluator
-	mu          sync.Mutex
+	Snapshotter     Snapshotter
+	Compressor      Compressor
+	Agent           AgentService
+	Provider        ProviderService
+	FlatRiskInitLLM FlatRiskInitLLM
+	TightenRiskLLM  TightenRiskUpdateLLM
+	Bindings        map[string]strategy.StrategyBinding
+	Configs         map[string]config.SymbolConfig
+	Enabled         map[string]AgentEnabled
+	Ruleflow        ruleflow.Evaluator
+	mu              sync.Mutex
 }
 
 type RunOptions struct {
-	BuildPlan    bool
-	ModeBySymbol map[string]decisionmode.Mode
+	BuildPlan                bool
+	ModeBySymbol             map[string]decisionmode.Mode
+	RiskStrategyModeBySymbol map[string]string
 }
+
+type FlatRiskInitInput struct {
+	Symbol string
+	Gate   fund.GateDecision
+	Plan   execution.ExecutionPlan
+}
+
+type FlatRiskInitLLM func(ctx context.Context, input FlatRiskInitInput) (*initexit.BuildPatch, error)
+
+type TightenRiskUpdateInput struct {
+	Symbol              string
+	Gate                fund.GateDecision
+	Side                string
+	Entry               float64
+	MarkPrice           float64
+	ATR                 float64
+	CurrentStopLoss     float64
+	CurrentTakeProfits  []float64
+	InPositionIndicator provider.InPositionIndicatorOut
+	InPositionStructure provider.InPositionStructureOut
+	InPositionMechanics provider.InPositionMechanicsOut
+}
+
+type TightenRiskUpdatePatch struct {
+	StopLoss    *float64
+	TakeProfits []float64
+}
+
+type TightenRiskUpdateLLM func(ctx context.Context, input TightenRiskUpdateInput) (*TightenRiskUpdatePatch, error)
 
 func (r *Runner) RunOnce(ctx context.Context, symbols, intervals []string, limit int, acct execution.AccountState, risk execution.RiskParams) ([]SymbolResult, snapshot.MarketSnapshot, features.CompressionResult, error) {
 	return r.RunOnceWithOptions(ctx, symbols, intervals, limit, acct, risk, RunOptions{BuildPlan: true})
@@ -174,9 +209,36 @@ func (r *Runner) runSymbol(ctx context.Context, symbol string, comp features.Com
 	}
 	res.Gate.Derived["direction_consensus"] = buildDirectionConsensusDerived(enabled, res, scoreThreshold, confThreshold)
 	res.Plan = rfResult.Plan
+	if res.Plan != nil {
+		planSource := strings.ToLower(strings.TrimSpace(res.Plan.PlanSource))
+		if planSource != execution.PlanSourceLLM {
+			planSource = execution.PlanSourceGo
+		}
+		if planSource == execution.PlanSourceGo && isLLMRiskMode(opts, symbol) {
+			planSource = execution.PlanSourceLLM
+		}
+		res.Plan.PlanSource = planSource
+	}
 	res.FSMNext = rfResult.FSMNext
 	res.FSMActions = rfResult.FSMActions
 	res.FSMRuleHit = rfResult.FSMRuleHit
+	llmRiskMode := res.Plan != nil && strings.EqualFold(strings.TrimSpace(res.Plan.PlanSource), execution.PlanSourceLLM)
+	if !llmRiskMode {
+		llmRiskMode = isLLMRiskMode(opts, symbol)
+	}
+	if state == fsm.StateFlat && shouldRunFlatLLMRiskInit(res, llmRiskMode) {
+		if err := r.applyFlatLLMRiskInit(ctx, symbol, &res, bind, acct); err != nil {
+			logger.Error("flat llm risk-init failed", zap.Error(err))
+			res.Err = err
+			if reasonCode, ok := llmRiskFailureReasonCode(err); ok {
+				res.Gate = gateError(reasonCode)
+			} else {
+				res.Gate = gateError("LLM_RISK_INIT_ERROR")
+			}
+			return res
+		}
+	}
+	appendPlanDerived(&res.Gate, res.Plan)
 	if !res.Gate.GlobalTradeable {
 		logger.Info("gate blocked trade", zap.String("gate_reason", res.Gate.GateReason))
 	}
@@ -198,11 +260,284 @@ func shouldSkipProvider(opts RunOptions, symbol string) bool {
 	return isInPositionMode(opts, symbol)
 }
 
+func shouldRunFlatLLMRiskInit(res SymbolResult, llmRiskMode bool) bool {
+	if !llmRiskMode {
+		return false
+	}
+	if !res.Gate.GlobalTradeable || res.Plan == nil || !res.Plan.Valid {
+		return false
+	}
+	return hasFSMAction(res.FSMActions, fsm.ActionOpen)
+}
+
 func isInPositionMode(opts RunOptions, symbol string) bool {
 	if opts.ModeBySymbol == nil {
 		return false
 	}
 	return opts.ModeBySymbol[symbol] == decisionmode.ModeInPosition
+}
+
+func isLLMRiskMode(opts RunOptions, symbol string) bool {
+	if opts.RiskStrategyModeBySymbol == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(opts.RiskStrategyModeBySymbol[symbol]), execution.PlanSourceLLM)
+}
+
+func (r *Runner) applyFlatLLMRiskInit(ctx context.Context, symbol string, res *SymbolResult, bind strategy.StrategyBinding, acct execution.AccountState) error {
+	if r == nil || res == nil || res.Plan == nil {
+		return nil
+	}
+	if r.FlatRiskInitLLM == nil {
+		return wrapLLMRiskFailure(symbol, llmRiskStageFlatInit, llmRiskReasonTransportFailure, fmt.Errorf("flat risk init llm callback is required"))
+	}
+	patch, err := r.FlatRiskInitLLM(ctx, FlatRiskInitInput{Symbol: symbol, Gate: res.Gate, Plan: *res.Plan})
+	if err != nil {
+		return wrapLLMRiskFailure(symbol, llmRiskStageFlatInit, llmRiskReasonTransportFailure, err)
+	}
+	if err := applyFlatRiskInitPatch(res.Plan, patch); err != nil {
+		return wrapLLMRiskFailure(symbol, llmRiskStageFlatInit, classifyFlatRiskInitPatchError(err), err)
+	}
+	if err := rescaleFlatPlan(res.Plan, bind, acct); err != nil {
+		return wrapLLMRiskFailure(symbol, llmRiskStageFlatInit, llmRiskReasonSchemaFailure, err)
+	}
+	return nil
+}
+
+func appendPlanDerived(gate *fund.GateDecision, plan *execution.ExecutionPlan) {
+	if gate == nil || plan == nil {
+		return
+	}
+	if gate.Derived == nil {
+		gate.Derived = map[string]any{}
+	}
+	planSource := strings.TrimSpace(plan.PlanSource)
+	if planSource == "" {
+		planSource = execution.PlanSourceGo
+	}
+	gate.Derived["plan"] = map[string]any{
+		"direction":          plan.Direction,
+		"entry":              plan.Entry,
+		"stop_loss":          plan.StopLoss,
+		"risk_pct":           plan.RiskPct,
+		"position_size":      plan.PositionSize,
+		"leverage":           plan.Leverage,
+		"take_profits":       append([]float64(nil), plan.TakeProfits...),
+		"take_profit_ratios": append([]float64(nil), plan.TakeProfitRatios...),
+		"plan_source":        planSource,
+	}
+}
+
+const (
+	llmRiskStageFlatInit          = "flat_init"
+	llmRiskReasonTransportFailure = "LLM_RISK_INIT_TRANSPORT_FAILURE"
+	llmRiskReasonSchemaFailure    = "LLM_RISK_INIT_SCHEMA_FAILURE"
+	llmRiskReasonRatioFailure     = "LLM_RISK_INIT_RATIO_FAILURE"
+	llmRiskReasonDirectionFailure = "LLM_RISK_INIT_DIRECTION_FAILURE"
+)
+
+var (
+	errFlatRiskPatchMissing     = errors.New("flat risk patch missing")
+	errFlatRiskEntryMissing     = errors.New("flat risk entry missing")
+	errFlatRiskEntryInvalid     = errors.New("flat risk entry invalid")
+	errFlatRiskStopMissing      = errors.New("flat risk stop_loss missing")
+	errFlatRiskTPMissing        = errors.New("flat risk take_profits missing")
+	errFlatRiskRatioMissing     = errors.New("flat risk take_profit_ratios missing")
+	errFlatRiskRatioInvalid     = errors.New("flat risk ratios invalid")
+	errFlatRiskDirectionInvalid = errors.New("flat risk direction invalid")
+)
+
+type llmRiskFailure struct {
+	Symbol string
+	Stage  string
+	Reason string
+	Err    error
+}
+
+func (e *llmRiskFailure) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Err == nil {
+		return fmt.Sprintf("llm risk failed: symbol=%s stage=%s reason=%s", strings.TrimSpace(e.Symbol), strings.TrimSpace(e.Stage), strings.TrimSpace(e.Reason))
+	}
+	return fmt.Sprintf("llm risk failed: symbol=%s stage=%s reason=%s: %v", strings.TrimSpace(e.Symbol), strings.TrimSpace(e.Stage), strings.TrimSpace(e.Reason), e.Err)
+}
+
+func (e *llmRiskFailure) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func wrapLLMRiskFailure(symbol, stage, reason string, err error) error {
+	r := strings.TrimSpace(reason)
+	if r == "" {
+		r = llmRiskReasonSchemaFailure
+	}
+	return &llmRiskFailure{
+		Symbol: strings.TrimSpace(symbol),
+		Stage:  strings.TrimSpace(stage),
+		Reason: r,
+		Err:    err,
+	}
+}
+
+func llmRiskFailureReasonCode(err error) (string, bool) {
+	var target *llmRiskFailure
+	if !errors.As(err, &target) || target == nil {
+		return "", false
+	}
+	r := strings.TrimSpace(target.Reason)
+	if r == "" {
+		return "", false
+	}
+	return r, true
+}
+
+func classifyFlatRiskInitPatchError(err error) string {
+	switch {
+	case errors.Is(err, errFlatRiskRatioInvalid):
+		return llmRiskReasonRatioFailure
+	case errors.Is(err, errFlatRiskDirectionInvalid):
+		return llmRiskReasonDirectionFailure
+	default:
+		return llmRiskReasonSchemaFailure
+	}
+}
+
+func applyFlatRiskInitPatch(plan *execution.ExecutionPlan, patch *initexit.BuildPatch) error {
+	if patch == nil {
+		return errFlatRiskPatchMissing
+	}
+	if patch.Entry == nil {
+		return errFlatRiskEntryMissing
+	}
+	entry := *patch.Entry
+	if entry <= 0 {
+		return errFlatRiskEntryInvalid
+	}
+	if patch.StopLoss == nil {
+		return errFlatRiskStopMissing
+	}
+	if len(patch.TakeProfits) == 0 {
+		return errFlatRiskTPMissing
+	}
+	if len(patch.TakeProfitRatios) == 0 {
+		return errFlatRiskRatioMissing
+	}
+	if len(patch.TakeProfits) != len(patch.TakeProfitRatios) {
+		return errFlatRiskRatioInvalid
+	}
+
+	direction := strings.ToLower(strings.TrimSpace(plan.Direction))
+	stop := *patch.StopLoss
+	if direction == "long" {
+		if !(stop < entry) {
+			return errFlatRiskDirectionInvalid
+		}
+		last := entry
+		for _, tp := range patch.TakeProfits {
+			if tp <= entry || tp <= last {
+				return errFlatRiskDirectionInvalid
+			}
+			last = tp
+		}
+	} else if direction == "short" {
+		if !(stop > entry) {
+			return errFlatRiskDirectionInvalid
+		}
+		last := entry
+		for _, tp := range patch.TakeProfits {
+			if tp >= entry || tp >= last {
+				return errFlatRiskDirectionInvalid
+			}
+			last = tp
+		}
+	} else {
+		return errFlatRiskDirectionInvalid
+	}
+
+	ratioSum := 0.0
+	for _, ratio := range patch.TakeProfitRatios {
+		if ratio <= 0 {
+			return errFlatRiskRatioInvalid
+		}
+		ratioSum += ratio
+	}
+	if math.Abs(ratioSum-1.0) > 1e-6 {
+		return errFlatRiskRatioInvalid
+	}
+
+	plan.StopLoss = stop
+	plan.Entry = entry
+	plan.TakeProfits = append([]float64(nil), patch.TakeProfits...)
+	plan.TakeProfitRatios = append([]float64(nil), patch.TakeProfitRatios...)
+	plan.PlanSource = execution.PlanSourceLLM
+	return nil
+}
+
+func rescaleFlatPlan(plan *execution.ExecutionPlan, bind strategy.StrategyBinding, acct execution.AccountState) error {
+	if plan == nil {
+		return fmt.Errorf("plan is nil")
+	}
+	if plan.Entry <= 0 || plan.StopLoss <= 0 {
+		return fmt.Errorf("entry/stop_loss must be > 0")
+	}
+	if plan.RiskPct <= 0 {
+		return fmt.Errorf("risk_pct must be > 0")
+	}
+	stopDist := math.Abs(plan.Entry - plan.StopLoss)
+	if stopDist <= 0 {
+		return fmt.Errorf("stop distance must be > 0")
+	}
+
+	baseBalance := acct.Available
+	if baseBalance <= 0 {
+		baseBalance = acct.Equity
+	}
+	if baseBalance <= 0 {
+		return fmt.Errorf("account equity/available must be > 0")
+	}
+	riskAmount := baseBalance * plan.RiskPct
+	if riskAmount <= 0 {
+		return fmt.Errorf("risk amount must be > 0")
+	}
+	positionSize := riskAmount / stopDist
+	if positionSize <= 0 {
+		return fmt.Errorf("position size must be > 0")
+	}
+
+	maxInvestPct := bind.RiskManagement.MaxInvestPct
+	if maxInvestPct <= 0 {
+		maxInvestPct = 1.0
+	}
+	maxInvestAmt := baseBalance * maxInvestPct
+	if maxInvestAmt <= 0 {
+		maxInvestAmt = baseBalance
+	}
+	leverageResult := riskcalc.ResolveLeverageAndLiquidation(plan.Entry, positionSize, maxInvestAmt, bind.RiskManagement.MaxLeverage, plan.Direction)
+	if leverageResult.PositionSize <= 0 {
+		return fmt.Errorf("position size invalid after leverage resolution")
+	}
+	if riskcalc.IsStopBeyondLiquidation(plan.Direction, plan.StopLoss, leverageResult.LiquidationPrice) {
+		return fmt.Errorf("stop beyond liquidation")
+	}
+
+	plan.PositionSize = leverageResult.PositionSize
+	plan.Leverage = leverageResult.Leverage
+	plan.RiskAnnotations.RiskDistance = stopDist
+	plan.RiskAnnotations.StopSource = "llm-flat"
+	plan.RiskAnnotations.StopReason = "llm-generated"
+	plan.RiskAnnotations.MaxInvestPct = maxInvestPct
+	plan.RiskAnnotations.MaxInvestAmt = maxInvestAmt
+	plan.RiskAnnotations.MaxLeverage = bind.RiskManagement.MaxLeverage
+	plan.RiskAnnotations.LiqPrice = leverageResult.LiquidationPrice
+	plan.RiskAnnotations.MMR = leverageResult.MMR
+	plan.RiskAnnotations.Fee = leverageResult.Fee
+	plan.PlanSource = execution.PlanSourceLLM
+	return nil
 }
 
 func pickCurrentPrice(comp features.CompressionResult, symbol string) (float64, bool) {

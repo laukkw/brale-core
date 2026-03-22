@@ -267,6 +267,9 @@ func ValidateStrategyConfig(cfg StrategyConfig) error {
 }
 
 func validateRiskManagement(cfg RiskManagementConfig) error {
+	if err := validateRiskStrategyMode("risk_management.risk_strategy.mode", cfg.RiskStrategy.Mode); err != nil {
+		return err
+	}
 	if err := validateRiskManagementValues(cfg); err != nil {
 		return err
 	}
@@ -280,6 +283,19 @@ func validateRiskManagement(cfg RiskManagementConfig) error {
 		return err
 	}
 	return validateSieveConfig(cfg.Sieve)
+}
+
+func validateRiskStrategyMode(field, mode string) error {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	if normalized == "" {
+		return nil
+	}
+	switch normalized {
+	case "llm", "native":
+		return nil
+	default:
+		return validationErrorf("%s must be llm/native", field)
+	}
 }
 
 func validateRiskManagementValues(cfg RiskManagementConfig) error {

@@ -49,6 +49,7 @@ type Pipeline struct {
 	SessionMode             llm.SessionMode
 	SessionCleanup          llm.SessionCleanup
 	RoundIDFactory          func() (llm.RoundID, error)
+	TightenRiskLLM          TightenRiskUpdateLLM
 }
 
 type PersistResult struct {

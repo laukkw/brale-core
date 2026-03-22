@@ -80,7 +80,7 @@ func buildSymbolRuntimeFromConfig(metricsCtx context.Context, sys config.SystemC
 	fetcher := buildSnapshotFetcher(symbolCfg, requireMechanics)
 	compressor := buildCompressor(metricsCtx, symbolCfg, enabledCfg, enabledMap)
 	exitConfirmCache := decision.NewExitConfirmCache()
-	runner := buildRunner(sys, fetcher, compressor, agentSvc, providerSvc, symbolCfg, bind, enabledMap)
+	runner := buildRunner(sys, fetcher, compressor, agentSvc, providerSvc, symbolCfg, bind, enabledMap, sessionManager, sessionMode)
 	pipeline, err := buildPipeline(sys, st, stateProvider, positioner, riskPlanSvc, priceSource, barInterval, symbolCfg.Symbol, bind, symbolCfg, stratCfg, &runner, exitConfirmCache, sessionManager, sessionMode)
 	if err != nil {
 		return SymbolRuntime{}, err
@@ -231,6 +231,7 @@ func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig, s
 		ProviderInPosIndicatorSys: defaults.ProviderInPositionIndicator,
 		ProviderInPosStructureSys: defaults.ProviderInPositionStructure,
 		ProviderInPosMechanicsSys: defaults.ProviderInPositionMechanics,
+		RiskFlatInitSystem:        defaults.RiskFlatInit,
 		UserFormat:                llmapp.UserPromptFormatBullet,
 	}
 	agentRunner := &decision.AgentRunner{
@@ -330,15 +331,28 @@ func buildCompressor(metricsCtx context.Context, symbolCfg config.SymbolConfig, 
 	}
 }
 
-func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor *decision.FeatureCompressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, symbolCfg config.SymbolConfig, bind strategy.StrategyBinding, enabledMap map[string]decision.AgentEnabled) decision.Runner {
+func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor *decision.FeatureCompressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, symbolCfg config.SymbolConfig, bind strategy.StrategyBinding, enabledMap map[string]decision.AgentEnabled, sessionManager *llm.RoundSessionManager, sessionMode llm.SessionMode) decision.Runner {
+	defaults := config.DefaultPromptDefaults()
+	riskPrompts := llmapp.LLMPromptBuilder{
+		RiskFlatInitSystem: defaults.RiskFlatInit,
+		UserFormat:         llmapp.UserPromptFormatBullet,
+	}
+	riskSvc := llmapp.LLMRiskService{
+		Provider:       newLLMClient(sys, symbolCfg.LLM.Provider.Structure),
+		Prompts:        riskPrompts,
+		SessionManager: sessionManager,
+		SessionMode:    sessionMode,
+	}
 	return decision.Runner{
-		Snapshotter: fetcher,
-		Compressor:  compressor,
-		Agent:       agentSvc,
-		Provider:    providerSvc,
-		Bindings:    map[string]strategy.StrategyBinding{symbolCfg.Symbol: bind},
-		Configs:     map[string]config.SymbolConfig{symbolCfg.Symbol: symbolCfg},
-		Enabled:     enabledMap,
+		Snapshotter:     fetcher,
+		Compressor:      compressor,
+		Agent:           agentSvc,
+		Provider:        providerSvc,
+		FlatRiskInitLLM: riskSvc.FlatRiskInitLLM(),
+		TightenRiskLLM:  riskSvc.TightenRiskLLM(),
+		Bindings:        map[string]strategy.StrategyBinding{symbolCfg.Symbol: bind},
+		Configs:         map[string]config.SymbolConfig{symbolCfg.Symbol: symbolCfg},
+		Enabled:         enabledMap,
 	}
 }
 
@@ -381,6 +395,7 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		SessionManager:          sessionManager,
 		SessionCleanup:          llm.CleanupOpenAISession,
 		SessionMode:             sessionMode,
+		TightenRiskLLM:          runner.TightenRiskLLM,
 	}, nil
 }
 func toIndicatorOptions(cfg config.IndicatorConfig, indicatorEnabled bool) decision.IndicatorCompressOptions {

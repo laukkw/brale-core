@@ -67,6 +67,7 @@ func parsePlan(data map[string]any) *execution.ExecutionPlan {
 		Leverage:           toFloat(planMap["leverage"]),
 		RMultiple:          toFloat(planMap["r_multiple"]),
 		Template:           toString(planMap["template"]),
+		PlanSource:         toString(planMap["plan_source"]),
 		PositionID:         toString(planMap["position_id"]),
 		StrategyID:         toString(planMap["strategy_id"]),
 		SystemConfigHash:   toString(planMap["system_config_hash"]),

@@ -1117,8 +1117,33 @@ function renderFlow(flow) {
     return fields.map((field) => {
       const stateValue = String(field && field.state || "");
       const stateClass = stateValue === "block" ? "block" : (stateValue === "pass" ? "pass" : "");
-      return `<span class="flow-chip ${stateClass}">${escapeHtml(String(field && field.key || ""))}:${escapeHtml(String(field && field.value || ""))}</span>`;
+      const keyText = formatFlowFieldKey(field && field.key);
+      const valueText = formatFlowFieldValue(field && field.key, field && field.value);
+      return `<span class="flow-chip ${stateClass}">${escapeHtml(keyText)}:${escapeHtml(valueText)}</span>`;
     }).join("");
+  }
+
+  function formatFlowFieldKey(key) {
+    const normalized = String(key || "").trim().toLowerCase();
+    if (normalized === "plan_source") {
+      return "plan来源";
+    }
+    return String(key || "");
+  }
+
+  function formatFlowFieldValue(key, value) {
+    const normalizedKey = String(key || "").trim().toLowerCase();
+    const text = String(value || "");
+    if (normalizedKey === "plan_source") {
+      const source = text.trim().toLowerCase();
+      if (source === "llm") {
+        return "llm自动生成";
+      }
+      if (source === "go") {
+        return "go计算得到";
+      }
+    }
+    return text;
   }
 
   function stageTypeLabel(stageType) {

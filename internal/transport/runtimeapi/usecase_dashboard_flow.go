@@ -424,6 +424,12 @@ func summarizePlanReason(gate store.GateEventRecord, tighten *DashboardTightenIn
 	if action == "TIGHTEN" && tighten != nil {
 		return strings.TrimSpace(tighten.Reason)
 	}
+	if label := planSourceLabel(resolvePlanSource(gate, tighten)); label != "" {
+		if direction := strings.TrimSpace(gate.Direction); direction != "" {
+			return "direction=" + direction + " | " + label
+		}
+		return label
+	}
 	if direction := strings.TrimSpace(gate.Direction); direction != "" {
 		return "direction=" + direction
 	}
@@ -625,12 +631,12 @@ func shouldRenderPlanNode(gate store.GateEventRecord, tighten *DashboardTightenI
 func summarizePlanOutcome(gate store.GateEventRecord, tighten *DashboardTightenInfo) string {
 	action := strings.ToUpper(strings.TrimSpace(gate.DecisionAction))
 	if action == "TIGHTEN" && tighten != nil {
-		return "tighten risk plan prepared"
+		return appendPlanSourceOutcome("tighten risk plan prepared", resolvePlanSource(gate, tighten))
 	}
 	if strings.TrimSpace(gate.Direction) != "" {
-		return "open plan ready | direction=" + strings.TrimSpace(gate.Direction)
+		return appendPlanSourceOutcome("open plan ready | direction="+strings.TrimSpace(gate.Direction), resolvePlanSource(gate, tighten))
 	}
-	return "open plan ready"
+	return appendPlanSourceOutcome("open plan ready", resolvePlanSource(gate, tighten))
 }
 
 func summarizeTerminalOutcome(gate store.GateEventRecord, tighten *DashboardTightenInfo) string {
@@ -645,9 +651,59 @@ func summarizeTerminalOutcome(gate store.GateEventRecord, tighten *DashboardTigh
 		return "blocked"
 	}
 	if shouldRenderPlanNode(gate, tighten) {
-		return "plan emitted"
+		return appendPlanSourceOutcome("plan emitted", resolvePlanSource(gate, tighten))
 	}
 	return "gate passed"
+}
+
+func appendPlanSourceOutcome(base, source string) string {
+	label := planSourceLabel(source)
+	if label == "" {
+		return base
+	}
+	return base + " | " + label
+}
+
+func planSourceLabel(source string) string {
+	switch normalizePlanSource(source) {
+	case "llm":
+		return "llm自动生成"
+	case "go":
+		return "go计算得到"
+	default:
+		return ""
+	}
+}
+
+func resolvePlanSource(gate store.GateEventRecord, tighten *DashboardTightenInfo) string {
+	derived := decodeJSONObject(json.RawMessage(gate.DerivedJSON))
+	if len(derived) == 0 {
+		return ""
+	}
+	action := strings.ToUpper(strings.TrimSpace(gate.DecisionAction))
+	if action == "TIGHTEN" && tighten != nil {
+		execRaw, ok := derived["execution"].(map[string]any)
+		if !ok {
+			return ""
+		}
+		return normalizePlanSource(fmt.Sprint(execRaw["plan_source"]))
+	}
+	planRaw, ok := derived["plan"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return normalizePlanSource(fmt.Sprint(planRaw["plan_source"]))
+}
+
+func normalizePlanSource(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "llm":
+		return "llm"
+	case "go":
+		return "go"
+	default:
+		return ""
+	}
 }
 
 func summarizeResultFields(gate store.GateEventRecord, tighten *DashboardTightenInfo) []DashboardFlowValueField {
@@ -667,7 +723,7 @@ func summarizePlanResultFields(derived map[string]any) []DashboardFlowValueField
 	if !ok || len(plan) == 0 {
 		return nil
 	}
-	fields := make([]DashboardFlowValueField, 0, 7)
+	fields := make([]DashboardFlowValueField, 0, 8)
 	appendFlowField := func(key string, value any) {
 		if field, ok := traceFieldFromValue(key, value); ok {
 			fields = append(fields, field)
@@ -679,6 +735,7 @@ func summarizePlanResultFields(derived map[string]any) []DashboardFlowValueField
 	appendFlowField("risk_pct", plan["risk_pct"])
 	appendFlowField("position_size", plan["position_size"])
 	appendFlowField("leverage", plan["leverage"])
+	appendFlowField("plan_source", plan["plan_source"])
 	if takeProfits, ok := plan["take_profits"].([]any); ok && len(takeProfits) > 0 {
 		appendFlowField("tp1", takeProfits[0])
 	}
@@ -701,7 +758,12 @@ func summarizeTightenResultFields(derived map[string]any, tighten *DashboardTigh
 	}
 	appendFlowField("executed", execRaw["executed"])
 	appendFlowField("eligible", execRaw["eligible"])
+	appendFlowField("plan_source", execRaw["plan_source"])
+	appendFlowField("stop_loss", execRaw["stop_loss"])
 	appendFlowField("tp_tightened", execRaw["tp_tightened"])
+	if tps, ok := execRaw["take_profits"].([]any); ok && len(tps) > 0 {
+		appendFlowField("tp1", tps[0])
+	}
 	if blockedBy, ok := execRaw["blocked_by"].([]any); ok && len(blockedBy) > 0 {
 		appendFlowField("blocked_by", blockedBy[0])
 	}

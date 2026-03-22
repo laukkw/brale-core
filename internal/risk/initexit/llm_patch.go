@@ -1,8 +1,8 @@
 package initexit
 
 // BuildPatch is a narrow patch surface reserved for LLM post-processing.
-// It is intentionally limited to TP/SL fields and can be applied before final validation.
 type BuildPatch struct {
+	Entry            *float64
 	StopLoss         *float64
 	TakeProfits      []float64
 	TakeProfitRatios []float64

@@ -104,6 +104,9 @@ func ApplyStrategyDefaults(cfg *StrategyConfig, defaults StrategyConfig) {
 	if cfg == nil {
 		return
 	}
+	if strings.TrimSpace(cfg.RiskManagement.RiskStrategy.Mode) == "" {
+		cfg.RiskManagement.RiskStrategy.Mode = defaults.RiskManagement.RiskStrategy.Mode
+	}
 	if strings.TrimSpace(cfg.RiskManagement.EntryMode) == "" {
 		cfg.RiskManagement.EntryMode = defaults.RiskManagement.EntryMode
 	}
@@ -144,6 +147,9 @@ func DefaultStrategyConfig(symbol string) StrategyConfig {
 			OrderbookDepth:    5,
 			BreakevenFeePct:   0.0,
 			SlippageBufferPct: 0.0005,
+			RiskStrategy: RiskStrategyConfig{
+				Mode: "llm",
+			},
 			InitialExit: InitialExitConfig{
 				Policy:            "atr_structure_v1",
 				StructureInterval: "auto",

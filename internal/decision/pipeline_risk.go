@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"brale-core/internal/decision/features"
+	"brale-core/internal/decision/fund"
+	"brale-core/internal/decision/provider"
 	"brale-core/internal/execution"
+	"brale-core/internal/llm"
 	"brale-core/internal/market"
 	"brale-core/internal/pkg/errclass"
 	"brale-core/internal/pkg/logging"
@@ -58,13 +61,16 @@ func (p *Pipeline) applyRiskPlanUpdate(ctx context.Context, res SymbolResult, co
 		exec.addBlocked(reason)
 		return exec, nil
 	}
-	executed, tpTightened, exitConfirmHit, err := p.applyTightenUpdate(ctx, pos, plan, updateCtx)
+	executed, tpTightened, exitConfirmHit, planSource, stopLoss, takeProfits, err := p.applyTightenUpdate(ctx, pos, plan, updateCtx)
 	if err != nil {
 		return exec, err
 	}
 	exec.Executed = executed
 	exec.TPTightened = tpTightened
 	exec.ExitConfirmHit = exitConfirmHit
+	exec.PlanSource = planSource
+	exec.StopLoss = stopLoss
+	exec.TakeProfits = append([]float64(nil), takeProfits...)
 	if !executed {
 		exec.addBlocked(tightenBlockNoTightenNeeded)
 	}
@@ -73,6 +79,10 @@ func (p *Pipeline) applyRiskPlanUpdate(ctx context.Context, res SymbolResult, co
 
 type tightenContext struct {
 	Binding        strategy.StrategyBinding
+	Gate           fund.GateDecision
+	InPosIndicator provider.InPositionIndicatorOut
+	InPosStructure provider.InPositionStructureOut
+	InPosMechanics provider.InPositionMechanicsOut
 	MarkPrice      float64
 	ATR            float64
 	ATRChangePct   float64
@@ -103,6 +113,9 @@ type tightenExecution struct {
 	ScoreBreakdown []RiskPlanUpdateScoreItem
 	TPTightened    bool
 	ExitConfirmHit bool
+	PlanSource     string
+	StopLoss       float64
+	TakeProfits    []float64
 }
 
 const (
@@ -177,6 +190,15 @@ func (e tightenExecution) toMap() map[string]any {
 		"eligible":     e.Eligible,
 		"executed":     e.Executed,
 		"tp_tightened": e.TPTightened,
+	}
+	if src := strings.TrimSpace(e.PlanSource); src != "" {
+		out["plan_source"] = strings.ToLower(src)
+	}
+	if e.StopLoss > 0 {
+		out["stop_loss"] = e.StopLoss
+	}
+	if len(e.TakeProfits) > 0 {
+		out["take_profits"] = append([]float64(nil), e.TakeProfits...)
 	}
 	if e.ExitConfirmHit {
 		out["exit_confirm_requested"] = true
@@ -317,6 +339,10 @@ func (p *Pipeline) buildTightenContext(ctx context.Context, res SymbolResult, co
 	}
 	return tightenContext{
 		Binding:        bind,
+		Gate:           res.Gate,
+		InPosIndicator: res.InPositionIndicator,
+		InPosStructure: res.InPositionStructure,
+		InPosMechanics: res.InPositionMechanics,
 		MarkPrice:      markPrice,
 		ATR:            atr,
 		ATRChangePct:   exec.ATRChangePct,
@@ -330,38 +356,38 @@ func (p *Pipeline) buildTightenContext(ctx context.Context, res SymbolResult, co
 	}, "", nil
 }
 
-func (p *Pipeline) applyTightenUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, updateCtx tightenContext) (bool, bool, bool, error) {
+func (p *Pipeline) applyTightenUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, updateCtx tightenContext) (bool, bool, bool, string, float64, []float64, error) {
 	oldStop := plan.StopPrice
 	plan, watermarksUpdated := updateWatermarks(plan, pos.Side, pos.AvgEntry, updateCtx.MarkPrice)
 	if tp1Hit(plan) {
-		executed, tpTightened, err := p.applyBreakevenUpdate(ctx, pos, plan, oldStop, updateCtx, watermarksUpdated)
-		return executed, tpTightened, false, err
+		executed, tpTightened, planSource, stopLoss, takeProfits, err := p.applyBreakevenUpdate(ctx, pos, plan, oldStop, updateCtx, watermarksUpdated)
+		return executed, tpTightened, false, planSource, stopLoss, takeProfits, err
 	}
 	return p.applyStructureTighten(ctx, pos, plan, oldStop, updateCtx, watermarksUpdated)
 }
 
-func (p *Pipeline) applyBreakevenUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, updateCtx tightenContext, watermarksUpdated bool) (bool, bool, error) {
+func (p *Pipeline) applyBreakevenUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, updateCtx tightenContext, watermarksUpdated bool) (bool, bool, string, float64, []float64, error) {
 	plan.StopPrice = computeBreakevenStop(pos.Side, pos.AvgEntry, updateCtx.Binding.RiskManagement.BreakevenFeePct)
 	if plan.StopPrice <= 0 {
-		return false, false, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-breakeven", watermarksUpdated)
+		return false, false, execution.PlanSourceGo, plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-breakeven", watermarksUpdated)
 	}
 	_, err := p.RiskPlans.ApplyUpdate(ctx, pos.PositionID, plan, "monitor-breakeven")
 	executed := err == nil && plan.StopPrice != oldStop
 	if executed {
 		p.logRiskPlanUpdate(ctx, pos, plan, oldStop, "monitor-breakeven", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-breakeven", false)
 	}
-	return executed, false, err
+	return executed, false, execution.PlanSourceGo, plan.StopPrice, riskPlanTakeProfits(plan), err
 }
 
-func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, updateCtx tightenContext, watermarksUpdated bool) (bool, bool, bool, error) {
+func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, updateCtx tightenContext, watermarksUpdated bool) (bool, bool, bool, string, float64, []float64, error) {
 	tightenMultiplier := updateCtx.Binding.RiskManagement.TightenATR.StructureThreatened
 	if tightenMultiplier <= 0 {
-		return false, false, false, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
+		return false, false, false, resolveTightenPlanSource(updateCtx.Binding), plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
 	}
 	anchor := resolveTightenAnchor(plan, pos.Side, updateCtx.MarkPrice)
 	newStop := computeTightenStop(pos.Side, anchor, updateCtx.ATR, tightenMultiplier, updateCtx.Binding.RiskManagement.SlippageBufferPct)
 	if newStop <= 0 {
-		return false, false, false, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
+		return false, false, false, resolveTightenPlanSource(updateCtx.Binding), plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
 	}
 	if !isStopImproved(pos.Side, plan.StopPrice, newStop, updateCtx.MarkPrice) {
 		crossed := isStopCrossed(pos.Side, newStop, updateCtx.MarkPrice)
@@ -371,17 +397,58 @@ func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.Position
 				newStop = fallbackStop
 			} else {
 				if updateCtx.CriticalExit {
-					return false, false, true, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
+					return false, false, true, resolveTightenPlanSource(updateCtx.Binding), plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
 				}
-				return false, false, false, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
+				return false, false, false, resolveTightenPlanSource(updateCtx.Binding), plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
 			}
 		} else {
-			return false, false, false, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
+			return false, false, false, resolveTightenPlanSource(updateCtx.Binding), plan.StopPrice, riskPlanTakeProfits(plan), p.applyWatermarkUpdate(ctx, pos, plan, "monitor-tighten", watermarksUpdated)
 		}
 	}
-	plan.StopPrice = newStop
-	plan, tpTightened := risk.TightenTPLevels(
-		plan,
+	planSource := resolveTightenPlanSource(updateCtx.Binding)
+	tightenPlan, tpTightened, err := p.buildTightenPlan(ctx, pos, plan, updateCtx, newStop)
+	if err != nil {
+		return false, false, false, planSource, plan.StopPrice, riskPlanTakeProfits(plan), err
+	}
+	plan = tightenPlan
+	_, err = p.RiskPlans.ApplyUpdate(ctx, pos.PositionID, plan, "monitor-tighten")
+	executed := err == nil && plan.StopPrice != oldStop
+	if executed {
+		p.logRiskPlanUpdate(ctx, pos, plan, oldStop, "monitor-tighten", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-tighten", tpTightened)
+	}
+	return executed, tpTightened, false, planSource, plan.StopPrice, riskPlanTakeProfits(plan), err
+}
+
+func (p *Pipeline) buildTightenPlan(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, updateCtx tightenContext, newStop float64) (risk.RiskPlan, bool, error) {
+	planSource := resolveTightenPlanSource(updateCtx.Binding)
+	tightenPlan := plan
+	tightenPlan.StopPrice = newStop
+	if planSource == execution.PlanSourceLLM {
+		if p.TightenRiskLLM == nil {
+			return plan, false, fmt.Errorf("tighten risk llm callback is required")
+		}
+		runCtx := llm.WithSessionSymbol(ctx, pos.Symbol)
+		runCtx = llm.WithSessionFlow(runCtx, llm.LLMFlowInPosition)
+		patch, err := p.TightenRiskLLM(runCtx, TightenRiskUpdateInput{
+			Symbol:              pos.Symbol,
+			Gate:                updateCtx.Gate,
+			Side:                pos.Side,
+			Entry:               pos.AvgEntry,
+			MarkPrice:           updateCtx.MarkPrice,
+			ATR:                 updateCtx.ATR,
+			CurrentStopLoss:     plan.StopPrice,
+			CurrentTakeProfits:  riskPlanTakeProfits(plan),
+			InPositionIndicator: updateCtx.InPosIndicator,
+			InPositionStructure: updateCtx.InPosStructure,
+			InPositionMechanics: updateCtx.InPosMechanics,
+		})
+		if err != nil {
+			return plan, false, err
+		}
+		return applyTightenRiskPatch(tightenPlan, pos.Side, pos.AvgEntry, updateCtx.MarkPrice, patch)
+	}
+	tightenPlan, tpTightened := risk.TightenTPLevels(
+		tightenPlan,
 		pos.Side,
 		pos.AvgEntry,
 		updateCtx.ATR,
@@ -390,12 +457,7 @@ func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.Position
 		updateCtx.Binding.RiskManagement.TightenATR.MinTPDistancePct,
 		updateCtx.Binding.RiskManagement.TightenATR.MinTPGapPct,
 	)
-	_, err := p.RiskPlans.ApplyUpdate(ctx, pos.PositionID, plan, "monitor-tighten")
-	executed := err == nil && plan.StopPrice != oldStop
-	if executed {
-		p.logRiskPlanUpdate(ctx, pos, plan, oldStop, "monitor-tighten", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-tighten", tpTightened)
-	}
-	return executed, tpTightened, false, err
+	return tightenPlan, tpTightened, nil
 }
 
 func (p *Pipeline) applyWatermarkUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, source string, updated bool) error {
@@ -688,6 +750,72 @@ func tp1Hit(plan risk.RiskPlan) bool {
 		return false
 	}
 	return plan.TPLevels[0].Hit
+}
+
+func resolveTightenPlanSource(bind strategy.StrategyBinding) string {
+	if strings.EqualFold(strings.TrimSpace(bind.RiskManagement.RiskStrategy.Mode), execution.PlanSourceLLM) {
+		return execution.PlanSourceLLM
+	}
+	return execution.PlanSourceGo
+}
+
+func riskPlanTakeProfits(plan risk.RiskPlan) []float64 {
+	out := make([]float64, 0, len(plan.TPLevels))
+	for _, level := range plan.TPLevels {
+		if level.Price > 0 {
+			out = append(out, level.Price)
+		}
+	}
+	return out
+}
+
+func applyTightenRiskPatch(plan risk.RiskPlan, side string, entry float64, markPrice float64, patch *TightenRiskUpdatePatch) (risk.RiskPlan, bool, error) {
+	if patch == nil || patch.StopLoss == nil {
+		return plan, false, fmt.Errorf("tighten llm patch stop_loss is required")
+	}
+	if len(patch.TakeProfits) == 0 {
+		return plan, false, fmt.Errorf("tighten llm patch take_profits is required")
+	}
+	stop := *patch.StopLoss
+	if stop <= 0 {
+		return plan, false, fmt.Errorf("tighten llm patch stop_loss must be > 0")
+	}
+	direction := strings.ToLower(strings.TrimSpace(side))
+	if direction != "long" && direction != "short" {
+		return plan, false, fmt.Errorf("tighten llm patch side must be long/short")
+	}
+	if !isStopImproved(direction, plan.StopPrice, stop, markPrice) {
+		return plan, false, fmt.Errorf("tighten llm patch stop_loss is not improved")
+	}
+	last := entry
+	for _, tp := range patch.TakeProfits {
+		if tp <= 0 {
+			return plan, false, fmt.Errorf("tighten llm patch take_profit must be > 0")
+		}
+		if direction == "long" {
+			if tp <= last {
+				return plan, false, fmt.Errorf("tighten llm patch take_profits must be strictly increasing")
+			}
+		} else {
+			if tp >= last {
+				return plan, false, fmt.Errorf("tighten llm patch take_profits must be strictly decreasing")
+			}
+		}
+		last = tp
+	}
+	plan.StopPrice = stop
+	tpTightened := false
+	for idx := range plan.TPLevels {
+		if idx >= len(patch.TakeProfits) {
+			break
+		}
+		next := patch.TakeProfits[idx]
+		if plan.TPLevels[idx].Price != next {
+			plan.TPLevels[idx].Price = next
+			tpTightened = true
+		}
+	}
+	return plan, tpTightened, nil
 }
 
 func computeBreakevenStop(side string, entry float64, feePct float64) float64 {

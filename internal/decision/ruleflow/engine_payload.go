@@ -66,6 +66,7 @@ func buildInputPayload(ctx context.Context, input Input) (string, error) {
 		},
 		"risk_management": map[string]any{
 			"risk_per_trade_pct": input.Binding.RiskManagement.RiskPerTradePct,
+			"risk_strategy_mode": resolvePayloadRiskStrategyMode(input.Binding.RiskManagement.RiskStrategy.Mode),
 			"max_invest_pct":     input.Binding.RiskManagement.MaxInvestPct,
 			"max_leverage":       input.Binding.RiskManagement.MaxLeverage,
 			"grade_1_factor":     input.Binding.RiskManagement.Grade1Factor,
@@ -170,4 +171,13 @@ func loadTrend(comp features.CompressionResult, symbol, preferredInterval string
 		return features.TrendCompressedInput{}, fmt.Errorf("trend json unmarshal failed: %w", err)
 	}
 	return trend, nil
+}
+
+func resolvePayloadRiskStrategyMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "llm":
+		return "llm"
+	default:
+		return "native"
+	}
 }

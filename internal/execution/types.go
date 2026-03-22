@@ -3,6 +3,11 @@ package execution
 // 本文件主要内容：定义执行计划与风险标注结构。
 import "time"
 
+const (
+	PlanSourceGo  = "go"
+	PlanSourceLLM = "llm"
+)
+
 type RiskAnnotations struct {
 	StopSource   string
 	StopReason   string
@@ -31,6 +36,7 @@ type ExecutionPlan struct {
 	Leverage           float64
 	RMultiple          float64
 	Template           string
+	PlanSource         string
 	StrategyID         string
 	SystemConfigHash   string
 	StrategyConfigHash string

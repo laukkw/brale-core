@@ -42,6 +42,9 @@ entry_offset_atr = 0.1
 # TP1 后保本使用的手续费偏移
 breakeven_fee_pct = 0.0
 
+[risk_management.risk_strategy]
+mode = "llm"
+
 # ------------------------------
 # C1. 初始止盈止损（Initial TP/SL）
 # ------------------------------
