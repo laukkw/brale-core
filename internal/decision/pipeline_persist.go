@@ -8,6 +8,7 @@ import (
 	"brale-core/internal/decision/fsm"
 	"brale-core/internal/decision/provider"
 	"brale-core/internal/execution"
+	"brale-core/internal/pkg/errclass"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/snapshot"
 
@@ -17,7 +18,6 @@ import (
 func (p *Pipeline) handlePlan(ctx context.Context, out PersistResult, res SymbolResult, posID string, state fsm.PositionState) (PersistResult, error) {
 	planCtx, planLogger, err := p.preparePlanContext(ctx, res.Plan, posID, state)
 	if err != nil {
-		p.notifyError(ctx, err)
 		out.Err = err
 		return out, err
 	}
@@ -157,4 +157,17 @@ func (p *Pipeline) preparePlanContext(ctx context.Context, plan *execution.Execu
 		zap.Time("expires_at", plan.ExpiresAt),
 	)
 	return ctx, logger, nil
+}
+
+const planValidationScope errclass.Scope = "decision"
+const planValidationReason = "invalid_plan"
+
+func validatePlan(plan execution.ExecutionPlan) error {
+	if plan.PositionID == "" {
+		return errclass.ValidationErrorf(planValidationScope, planValidationReason, "plan position_id is required")
+	}
+	if plan.CreatedAt.IsZero() {
+		return errclass.ValidationErrorf(planValidationScope, planValidationReason, "plan created_at is required")
+	}
+	return nil
 }

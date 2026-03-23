@@ -180,16 +180,7 @@ func newFreqtradeAccountFetcher(executor *execution.FreqtradeAdapter) func(conte
 		if err != nil {
 			return execution.AccountState{}, err
 		}
-		equity, ok := execution.ExtractUSDTBalance(quote)
-		if !ok || equity <= 0 {
-			return execution.AccountState{}, fmt.Errorf("balance not available")
-		}
-		available, ok := execution.ExtractUSDTAvailable(quote)
-		if !ok || available <= 0 {
-			available = equity
-		}
-		currency := execution.ResolveStakeCurrency(quote)
-		return execution.AccountState{Equity: equity, Available: available, Currency: currency}, nil
+		return execution.AccountStateFromBalance(quote)
 	}
 }
 

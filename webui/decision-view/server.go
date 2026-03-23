@@ -29,11 +29,16 @@ const (
 var content embed.FS
 
 type Server struct {
-	Store         store.Store
+	Store         decisionViewStore
 	BasePath      string
 	RoundLimit    int
 	SystemConfig  config.SystemConfig
 	SymbolConfigs map[string]ConfigBundle
+}
+
+type decisionViewStore interface {
+	store.SymbolCatalogQueryStore
+	store.TimelineQueryStore
 }
 
 func (s Server) Handler() (http.Handler, error) {
@@ -187,7 +192,7 @@ type roundAccumulator struct {
 	rounds map[uint]*roundBuf
 }
 
-func buildResponse(ctx context.Context, st store.Store, symbols []string, limit int) (Response, error) {
+func buildResponse(ctx context.Context, st decisionViewStore, symbols []string, limit int) (Response, error) {
 	out := Response{Symbols: make([]SymbolChain, 0, len(symbols))}
 	for _, sym := range symbols {
 		if strings.TrimSpace(sym) == "" {
@@ -202,7 +207,7 @@ func buildResponse(ctx context.Context, st store.Store, symbols []string, limit 
 	return out, nil
 }
 
-func buildSymbolChain(ctx context.Context, st store.Store, symbol string, limit int) (SymbolChain, error) {
+func buildSymbolChain(ctx context.Context, st decisionViewStore, symbol string, limit int) (SymbolChain, error) {
 	logger := logging.FromContext(ctx).Named("decision-view").With(zap.String("symbol", symbol))
 	df := decisionfmt.New()
 	events, err := loadSymbolEvents(ctx, st, symbol, limit)
@@ -217,7 +222,7 @@ func buildSymbolChain(ctx context.Context, st store.Store, symbol string, limit 
 	return buildSymbolChainFromRounds(df, symbol, roundList), nil
 }
 
-func loadSymbolEvents(ctx context.Context, st store.Store, symbol string, limit int) (symbolEvents, error) {
+func loadSymbolEvents(ctx context.Context, st store.TimelineQueryStore, symbol string, limit int) (symbolEvents, error) {
 	providers, err := st.ListProviderEvents(ctx, symbol, limit*4)
 	if err != nil {
 		return symbolEvents{}, err

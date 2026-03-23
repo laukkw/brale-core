@@ -17,9 +17,14 @@ import (
 )
 
 type dashboardHistoryUsecase struct {
-	store       store.Store
+	store       dashboardHistoryStore
 	allowSymbol func(string) bool
 	configs     map[string]ConfigBundle
+}
+
+type dashboardHistoryStore interface {
+	store.TimelineQueryStore
+	store.PositionQueryStore
 }
 
 func newDashboardHistoryUsecase(s *Server) dashboardHistoryUsecase {
@@ -115,22 +120,15 @@ func mapHistoryItems(gates []store.GateEventRecord) []DashboardDecisionHistoryIt
 	return out
 }
 
-func buildDecisionDetail(ctx context.Context, st store.Store, configs map[string]ConfigBundle, symbol string, snapshotID uint) (*DashboardDecisionDetail, *usecaseError) {
+func buildDecisionDetail(ctx context.Context, st dashboardHistoryStore, configs map[string]ConfigBundle, symbol string, snapshotID uint) (*DashboardDecisionDetail, *usecaseError) {
 	if snapshotID == 0 {
 		return nil, &usecaseError{Status: 400, Code: "invalid_snapshot_id", Message: "snapshot_id 非法"}
 	}
-	gates, err := st.ListGateEvents(ctx, symbol, dashboardDecisionFlowGateScanLimit)
+	selected, ok, err := st.FindGateEventBySnapshot(ctx, symbol, snapshotID)
 	if err != nil {
 		return nil, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: err.Error()}
 	}
-	var selected *store.GateEventRecord
-	for idx := range gates {
-		if gates[idx].SnapshotID == snapshotID {
-			selected = &gates[idx]
-			break
-		}
-	}
-	if selected == nil {
+	if !ok {
 		return nil, &usecaseError{Status: 404, Code: "snapshot_not_found", Message: "snapshot_id 对应决策不存在", Details: snapshotID}
 	}
 
@@ -288,7 +286,7 @@ func buildDecisionPlanContext(configs map[string]ConfigBundle, symbol string) *D
 	}
 }
 
-func buildDecisionPlanSummary(ctx context.Context, st store.Store, symbol string) *DashboardDecisionPlanSummary {
+func buildDecisionPlanSummary(ctx context.Context, st store.PositionQueryStore, symbol string) *DashboardDecisionPlanSummary {
 	if st == nil {
 		return nil
 	}
