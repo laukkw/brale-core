@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+data/
+secrets/
+.opencode/
+.sisyphus/
+.agents/
+.agent/
+.claude/
+bin/
+dist/
+*.out
+webui/og-card-demo/node_modules/
+docs/
