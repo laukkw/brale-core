@@ -12,9 +12,6 @@ enable_scheduled_decision = true
 
 llm_min_interval = "5s"
 
-[llm]
-session_mode = "session"
-
 [llm_models.'${LLM_MODEL_INDICATOR}']
 endpoint = "${LLM_INDICATOR_ENDPOINT}"
 api_key = "${LLM_INDICATOR_API_KEY}"

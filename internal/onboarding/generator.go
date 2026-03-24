@@ -179,7 +179,6 @@ func (g *Generator) buildFiles(req Request) (GenerateResult, error) {
 		return GenerateResult{}, err
 	}
 	files = append(files, GeneratedFile{Path: "data/freqtrade/user_data/config.json", Content: freqtradeConfig})
-
 	files = append(files, GeneratedFile{Path: "data/freqtrade/proxy.env", Content: renderProxyEnv(req)})
 
 	freqtradeBaseBytes, err := templatesFS.ReadFile("templates/freqtrade-config.base.json")

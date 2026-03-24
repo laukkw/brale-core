@@ -7,18 +7,18 @@ symbol = "DEFAULT"
 # A. 基础风险参数（Base Risk）
 # ==============================
 # 单笔风险占比（账户权益占比）
-risk_per_trade_pct = 0.0
+risk_per_trade_pct = 0.1
 
 # 最大可用资金占比
-max_invest_pct = 0.0
+max_invest_pct = 1
 
 # 最大有效杠杆
-max_leverage = 1.0
+max_leverage = 10
 
 # 信号评分映射（Grade -> 风险系数）
-grade_3_factor = 0.0
-grade_2_factor = 0.0
-grade_1_factor = 0.0
+grade_3_factor = 1.0
+grade_2_factor = 0.70
+grade_1_factor = 0.40
 
 # ==============================
 # B. 入场模式（Entry Mode）

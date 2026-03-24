@@ -18,9 +18,10 @@ ONBOARDING_PID_FILE ?= $(BRALE_DATA_ROOT)/onboarding.pid
 ONBOARDING_LOG_FILE ?= $(FREQTRADE_RUNTIME_ROOT)/logs/onboarding.log
 ONBOARDING_BIN ?= $(BRALE_DATA_ROOT)/bin/onboarding
 
-COMPOSE = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" docker compose -f "$(COMPOSE_FILE)" --env-file ".env"
+COMPOSE = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" docker compose -f "$(COMPOSE_FILE)"
 INIT_COMPOSE = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" docker compose -f "$(COMPOSE_FILE)"
 STACK_ENV = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" BRALE_SYSTEM_FILE="$(BRALE_SYSTEM_FILE)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
+ONBOARDING_PREPARE = $(STACK_ENV) $(COMPOSE) run --rm --no-deps onboarding prepare-stack
 
 .PHONY: init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale stop-freqtrade stop-brale stop restart rebuild down status logs
 
@@ -52,7 +53,7 @@ init:
 	host="$(ONBOARDING_ADDR)"; host="$${host%:*}"; \
 	port="$(ONBOARDING_ADDR)"; port="$${port##*:}"; \
 	if [ -z "$$host" ]; then host="127.0.0.1"; fi; \
-	if python3 -c 'import socket,sys; h=sys.argv[1]; p=int(sys.argv[2]); s=socket.socket(); s.settimeout(0.5); rc=s.connect_ex((h,p)); s.close(); sys.exit(0 if rc==0 else 1)' "$$host" "$$port"; then \
+	if (echo >"/dev/tcp/$$host/$$port") >/dev/null 2>&1; then \
 		echo "[ERR] port $$host:$$port is already in use by another process"; \
 		echo "[TIP] free this port or run: make init ONBOARDING_ADDR=127.0.0.1:9993"; \
 		exit 1; \
@@ -116,7 +117,7 @@ check:
 		echo "[ERR] strategy file not found: $(FREQTRADE_CONFIG_ROOT)/brale_shared_strategy.py"; \
 		exit 1; \
 	fi
-	@python3 scripts/prepare_stack.py --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml" --system-out "$(BRALE_SYSTEM_FILE)" --check-only
+	@$(ONBOARDING_PREPARE) --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml" --system-out "$(BRALE_SYSTEM_FILE)" --check-only
 
 prepare:
 	@mkdir -p "$(BRALE_DATA_ROOT)" \
@@ -132,7 +133,7 @@ prepare:
 		"$(FREQTRADE_RUNTIME_ROOT)/strategies" \
 		"$(dir $(FREQTRADE_CONFIG_FILE))" \
 		"$(dir $(STACK_PROXY_ENV_FILE))"
-	@python3 scripts/prepare_stack.py --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml" --system-out "$(BRALE_SYSTEM_FILE)"
+	@$(ONBOARDING_PREPARE) --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml" --system-out "$(BRALE_SYSTEM_FILE)"
 	@cp -f "$(FREQTRADE_CONFIG_ROOT)/brale_shared_strategy.py" "$(FREQTRADE_RUNTIME_ROOT)/strategies/BraleSharedStrategy.py"
 	@if [ "$$(id -u)" = "0" ] && [ -n "$(HOST_UID)" ] && [ -n "$(HOST_GID)" ]; then \
 		chown -R "$(HOST_UID):$(HOST_GID)" "$(BRALE_DATA_ROOT)" "$(FREQTRADE_RUNTIME_ROOT)" "$(dir $(STACK_PROXY_ENV_FILE))"; \
@@ -145,7 +146,7 @@ apply-config: check prepare stop start-freqtrade wait-freqtrade start-brale
 onboarding-start: apply-config
 
 onboarding-pull:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) pull freqtrade
+	@$(STACK_ENV) $(COMPOSE) pull freqtrade
 
 onboarding-refresh-brale:
 	@echo "[INFO] onboarding-refresh-brale: start"
@@ -161,10 +162,10 @@ onboarding-refresh-brale:
 	@echo "[OK] onboarding-refresh-brale: done"
 
 start-freqtrade:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) up -d freqtrade
+	@$(STACK_ENV) $(COMPOSE) up -d freqtrade
 
 wait-freqtrade:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; \
+	@ \
 	cid=$$($(STACK_ENV) $(COMPOSE) ps -q freqtrade); \
 	if [ -z "$$cid" ]; then \
 		echo "[ERR] freqtrade container id not found"; \
@@ -183,27 +184,27 @@ wait-freqtrade:
 	exit 1
 
 start-brale:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) up -d brale
+	@$(STACK_ENV) $(COMPOSE) up -d brale
 
 stop-freqtrade:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) stop freqtrade
+	@$(STACK_ENV) $(COMPOSE) stop freqtrade
 
 stop-brale:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) stop brale
+	@$(STACK_ENV) $(COMPOSE) stop brale
 
 rebuild: check prepare
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) up -d --build brale
+	@$(STACK_ENV) $(COMPOSE) up -d --build brale
 
 stop:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) stop brale freqtrade
+	@$(STACK_ENV) $(COMPOSE) stop brale freqtrade
 
 restart: start
 
 down:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) down --remove-orphans
+	@$(STACK_ENV) $(COMPOSE) down --remove-orphans
 
 status:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) ps
+	@$(STACK_ENV) $(COMPOSE) ps
 
 logs:
-	@set -a; if [ -f "$(STACK_PROXY_ENV_FILE)" ]; then . "$(STACK_PROXY_ENV_FILE)"; fi; set +a; $(STACK_ENV) $(COMPOSE) logs -f --tail=200 freqtrade brale
+	@$(STACK_ENV) $(COMPOSE) logs -f --tail=200 freqtrade brale

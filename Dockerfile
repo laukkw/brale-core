@@ -4,23 +4,16 @@ FROM golang:1.25-bookworm AS builder
 
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
 ENV GOPROXY=${GOPROXY}
 ENV GOSUMDB=${GOSUMDB}
-ENV HTTP_PROXY=${HTTP_PROXY}
-ENV HTTPS_PROXY=${HTTPS_PROXY}
-ENV NO_PROXY=${NO_PROXY}
-ENV http_proxy=${HTTP_PROXY}
-ENV https_proxy=${HTTPS_PROXY}
-ENV no_proxy=${NO_PROXY}
 
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
+COPY cmd ./cmd
+COPY internal ./internal
+COPY webui ./webui
 COPY --from=node-runtime /usr/local/ /usr/local/
 RUN npm ci --prefix /src/webui/og-card-demo
 RUN CGO_ENABLED=0 go build -o /out/onboarding ./cmd/onboarding
@@ -28,15 +21,6 @@ RUN go build -o /out/brale-core ./cmd/brale-core
 
 FROM debian:bookworm-slim AS brale-runtime
 
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
-ENV HTTP_PROXY=${HTTP_PROXY}
-ENV HTTPS_PROXY=${HTTPS_PROXY}
-ENV NO_PROXY=${NO_PROXY}
-ENV http_proxy=${HTTP_PROXY}
-ENV https_proxy=${HTTPS_PROXY}
-ENV no_proxy=${NO_PROXY}
 ENV TZ=Asia/Shanghai
 ENV BRALE_NOTIFY_OG_SCRIPT=/app/webui/og-card-demo/render.mjs
 
@@ -58,10 +42,10 @@ FROM docker:28-cli AS onboarding-runtime
 
 ENV TZ=Asia/Shanghai
 
-RUN apk add --no-cache bash curl git make python3 tzdata
+RUN apk add --no-cache bash curl git make tzdata
 
 WORKDIR /workspace
 COPY --from=builder /out/onboarding /usr/local/bin/onboarding
 
 ENTRYPOINT ["onboarding"]
-CMD ["-addr", "0.0.0.0:9992", "-repo", "/workspace"]
+CMD ["serve", "-addr", "0.0.0.0:9992", "-repo", "/workspace"]

@@ -162,7 +162,7 @@ func resolveTomlEnvPlaceholders(configPath string, data []byte) ([]byte, error) 
 			return token
 		}
 		key := matches[1]
-		if val, ok := lookupEnvValue(key, dotEnvVars); ok {
+		if val, ok := lookupEnvValue(configPath, key, dotEnvVars); ok {
 			return val
 		}
 		missing[key] = struct{}{}
@@ -179,11 +179,14 @@ func resolveTomlEnvPlaceholders(configPath string, data []byte) ([]byte, error) 
 	return []byte(expanded), nil
 }
 
-func lookupEnvValue(key string, dotEnvVars map[string]string) (string, bool) {
+func lookupEnvValue(configPath string, key string, dotEnvVars map[string]string) (string, bool) {
 	if val, ok := dotEnvVars[key]; ok {
 		return val, true
 	}
-	return os.LookupEnv(key)
+	if val, ok := os.LookupEnv(key); ok {
+		return val, true
+	}
+	return "", false
 }
 
 func loadNearestDotEnv(configPath string) (map[string]string, error) {

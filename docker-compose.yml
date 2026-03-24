@@ -9,9 +9,6 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,brale,freqtrade}
     restart: unless-stopped
     working_dir: ${HOST_REPO_ROOT:-/workspace}
     environment:
@@ -20,6 +17,7 @@ services:
       HOST_GID: ${HOST_GID:-1000}
       TZ: Asia/Shanghai
     command:
+      - "serve"
       - "-addr"
       - "0.0.0.0:9992"
       - "-repo"
@@ -85,9 +83,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,brale,freqtrade}
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     restart: unless-stopped
     env_file:
       - path: .env

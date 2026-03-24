@@ -42,6 +42,12 @@ entry_offset_atr = 0.1
 # TP1 后保本使用的手续费偏移
 breakeven_fee_pct = 0.0
 
+# mode 可选：
+# - llm: 开仓与持仓收紧的 TP/SL 交给 LLM 生成
+# - native: 使用 Go 内置规则计算
+[risk_management.risk_strategy]
+mode = "llm"
+
 # ------------------------------
 # C1. 初始止盈止损（Initial TP/SL）
 # ------------------------------

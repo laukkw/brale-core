@@ -40,13 +40,13 @@ In code, this is reflected by:
 - Docker ≥ 24 + Docker Compose V2
 - Git
 
-For manual CLI operations after onboarding, the host still needs Python 3.10+ and GNU Make.
+For manual CLI operations after onboarding, the host needs GNU Make and Docker Compose V2.
 
 ### Directory Layout
 
 ```
 brale-core/
-├── .env                          # Environment variables (API keys, proxy, etc.)
+├── .env                          # Environment variables and secrets
 ├── configs/
 │   ├── system.toml               # System-level config (execution, notifications, LLM)
 │   ├── symbols-index.toml        # Symbol index (symbol → config/strategy mapping)
@@ -75,6 +75,7 @@ make init
 `make init` starts the always-on onboarding service on `http://127.0.0.1:9992` inside the same Compose project as `brale` and `freqtrade`.
 Complete the setup in the onboarding page, then use the page's "Apply config and restart services"
 action to run the equivalent of `make stop && make start`.
+`make init` is the step that builds the onboarding image; later `make check` / `make prepare` reuse it instead of rebuilding on every run.
 
 ### Manual CLI Deployment After Onboarding
 
@@ -112,7 +113,7 @@ Since `data/brale` and `configs/` are bind-mounted, rebuilding never loses runti
 
 ### Restart After Config Changes
 
-- After modifying `.env` or files under `configs/`, **no rebuild is needed**:
+- After modifying `.env` or files under `configs/`, **no rebuild is needed**.
 
 ```bash
 make stop && make start

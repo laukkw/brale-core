@@ -88,6 +88,22 @@ func TestPreviewNotificationEnabledWhenAnyChannelSelected(t *testing.T) {
 	}
 }
 
+func TestPreviewWritesSecretsToSeparateFiles(t *testing.T) {
+	g := NewGenerator(t.TempDir())
+	result, err := g.Preview(basePreviewRequest())
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+
+	envContent := generatedFileContent(t, result, ".env")
+	if !strings.Contains(envContent, "EXEC_SECRET=secret") {
+		t.Fatalf(".env should contain exec secret:\n%s", envContent)
+	}
+	if !strings.Contains(envContent, "LLM_INDICATOR_API_KEY=indicator-key") {
+		t.Fatalf(".env should contain llm indicator key:\n%s", envContent)
+	}
+}
+
 func TestPreviewStrategyFilesUseLLMRiskModeByDefault(t *testing.T) {
 	g := NewGenerator(t.TempDir())
 	result, err := g.Preview(basePreviewRequest())

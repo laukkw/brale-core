@@ -1,50 +1,5 @@
 #+title: 部署命令复制文档
 
-* 更换ubuntu源
-#+begin_src shell
-#!/bin/bash
-
-# 1. 备份现有的源文件
-echo "正在备份原有的 sources.list..."
-sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
-
-# 2. 获取 Ubuntu 版本代号 (如 jammy, focal, noble)
-CODENAME=$(lsb_release -c | awk '{print $2}')
-
-# 3. 写入阿里云镜像源 (针对 Ubuntu 24.04 以前版本)
-# 注意：24.04 之后的版本建议修改 /etc/apt/sources.list.d/ubuntu.sources
-echo "正在更换为阿里云镜像源 (版本: $CODENAME)..."
-sudo tee /etc/apt/sources.list <<EOF
-deb https://mirrors.aliyun.com/ubuntu/ $CODENAME main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ $CODENAME-security main restricted universe multiverse
-deb-src https://mirrors.aliyun.com/ubuntu/ $CODENAME-security main restricted universe multiverse
-EOF
-
-# 4. 更新系统索引
-echo "正在更新系统索引..."
-sudo mv /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak
-sudo apt update
-
-# 5. 安装/配置 pnpm
-if ! command -v pnpm &> /dev/null
-then
-    echo "未检测到 pnpm，正在通过官方脚本安装..."
-    curl -fsSL https://get.pnpm.io/install.sh | sh -
-    source ~/.bashrc
-fi
-
-# 6. 强制设置 pnpm 国内镜像源
-echo "正在设置 pnpm 镜像源为淘宝镜像..."
-pnpm config set registry https://registry.npmmirror.com -g
-
-echo "🎉 所有操作已完成！"
-pnpm config get registry
-#+end_src
 * 安装tmux ,emacs
 #+begin_src shell
 sudo apt install tmux
