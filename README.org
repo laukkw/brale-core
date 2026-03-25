@@ -25,18 +25,18 @@ Brale 是一个围绕真实交易运行时搭建的量化框架。
 
 项目将一轮交易决策拆成了清晰的运行链路：
 
-- <strong>Observe</strong>：收集 K 线、技术指标、结构信息、衍生品/情绪数据。
-- <strong>Decide</strong>：通过多路 Agent / Provider 做归纳、共识判定和状态流转。
-- <strong>Execute</strong>：把决策交给执行层，由 Freqtrade 落单、查单、同步状态。
-- <strong>Risk / Reconcile</strong>：持续监控仓位风险，并通过 webhook / 轮询做状态对账。
+- *Observe*: 收集 K 线、技术指标、结构信息、衍生品/情绪数据。
+- *Decide*: 通过多路 Agent / Provider 做归纳、共识判定和状态流转。
+- *Execute*: 把决策交给执行层，由 Freqtrade 落单、查单、同步状态。
+- *Risk / Reconcile*: 持续监控仓位风险，并通过 webhook / 轮询做状态对账。
 
 ** 核心特点
 
 - Prompt负责引导，工程负责约束，用详细的工程实践最小化模型幻觉。
-- <strong>多 Agent 决策链路</strong>：代码中已经拆分出 indicator / structure / mechanics 三路模型与对应配置。
-- <strong>运行时调度完整</strong>：由 RuntimeScheduler 管理定时决策、价格轮询与对账任务。
-- <strong>执行层解耦</strong>：当前默认执行系统是 Freqtrade，执行入口集中在 internal/execution。
-- <strong>通知能力内置</strong>：支持 Telegram、飞书通知。
+- *多 Agent 决策链路*: 代码中已经拆分出 indicator / structure / mechanics 三路模型与对应配置。
+- *运行时调度完整*: 由 RuntimeScheduler 管理定时决策、价格轮询与对账任务。
+- *执行层解耦*: 当前默认执行系统是 Freqtrade，执行入口集中在 internal/execution。
+- *通知能力内置*: 支持 Telegram、飞书通知。
 
 ** 快速启动
 
@@ -75,7 +75,7 @@ make init
 
 Brale 当前配置分为四层：
 
-**** <strong>1) 系统级配置</strong>：configs/system.toml
+**** 1) 系统级配置：configs/system.toml
 
 负责全局运行参数，例如：
 
@@ -88,7 +88,7 @@ Brale 当前配置分为四层：
 - Webhook 监听地址、队列、回退轮询参数
 - 通知系统总开关与 Telegram / 飞书配置
 
-**** <strong>2) 币种索引</strong>：configs/symbols-index.toml
+**** 2) 币种索引：configs/symbols-index.toml
 
 这个文件决定“系统实际会运行哪些 symbol”。
 
@@ -98,7 +98,7 @@ Brale 当前配置分为四层：
 - config （symbol 配置文件）
 - strategy （策略配置文件）
 
-**** <strong>3) 单币种配置</strong>：configs/symbols/*.toml
+**** 3) 单币种配置：configs/symbols/*.toml
 
 负责这个 symbol 的数据与模型侧行为，例如：
 
@@ -111,7 +111,7 @@ Brale 当前配置分为四层：
 - 开仓冷却设置
 - 各 Agent / Provider 对应的模型路由与温度
 
-**** <strong>4) 策略配置</strong>：configs/strategies/*.toml
+**** 4) 策略配置：configs/strategies/*.toml
 
 负责交易与风控参数，例如：
 
@@ -152,7 +152,7 @@ Brale 当前配置分为四层：
 - orderbook_depth 允许的取值由配置校验限定为 5/10/20/50/100/500/1000
 - entry_offset_atr 必须 >= 0
 
-**** <strong>2) 止盈止损有两大模式</strong>：<strong>native</strong> 与 <strong>llm</strong>
+**** 2) 止盈止损有两大模式：*native* 与 *llm*
 
 风险策略总开关是：
 
@@ -165,8 +165,8 @@ Brale 当前配置分为四层：
 
 区别如下：
 
-- <strong>native</strong>：在 plan builder 阶段，直接使用内置策略生成止损与止盈，再顺手把仓位和杠杆也算出来。
-- <strong>llm</strong>：plan builder 会先生成一个基础 plan（例如 direction、entry、risk_pct 等基础字段），但不会直接用 native initial_exit 产出完整止盈止损；随后在 runner_flat_risk.go 中调用 LLM 风险服务返回 patch。当前代码要求 patch 至少给出 entry、stop_loss、take_profits、take_profit_ratios，而 reason 如果缺失则会回退为 llm-generated；之后再由代码重新做仓位缩放、杠杆/清算计算与止损合法性校验。
+- *native*: 在 plan builder 阶段，直接使用内置策略生成止损与止盈，再顺手把仓位和杠杆也算出来。
+- *llm*: plan builder 会先生成一个基础 plan（例如 direction、entry、risk_pct 等基础字段），但不会直接用 native initial_exit 产出完整止盈止损；随后在 runner_flat_risk.go 中调用 LLM 风险服务返回 patch。当前代码要求 patch 至少给出 entry、stop_loss、take_profits、take_profit_ratios，而 reason 如果缺失则会回退为 llm-generated；之后再由代码重新做仓位缩放、杠杆/清算计算与止损合法性校验。
 
 默认策略配置里，risk_strategy.mode 的默认值是 llm。
 
@@ -239,8 +239,8 @@ Native 模式使用的是：
 
 所以可以把 LLM 模式理解成：
 
-- <strong>LLM 决定止盈止损结构</strong>
-- <strong>Go 代码负责校验、缩放仓位、限制杠杆，并拒绝明显危险的计划</strong>
+- *LLM 决定止盈止损结构*
+- *Go 代码负责校验、缩放仓位、限制杠杆，并拒绝明显危险的计划*
 
 **** 5) 开仓仓位是怎么计算的
 
@@ -358,10 +358,12 @@ Freqtrade 运行数据则位于：
 
 ** 支持我
 
+#+begin_example
 ETH: 0x4b4C8041A8154a5AfB87E5589Ea292123E098267
 BTC: bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a
 SOL: G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u
 TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh
+#+end_example
 
 * English Version
 
@@ -379,18 +381,18 @@ Brale is a quantitative framework built around a real trading runtime.
 
 The project breaks a single trading decision cycle into a clear runtime flow:
 
-- <strong>Observe</strong>: collect candlesticks, technical indicators, structural information, and derivatives/sentiment data.
-- <strong>Decide</strong>: synthesize outputs from multiple Agents / Providers into consensus, gating, and state transitions.
-- <strong>Execute</strong>: hand the decision to the execution layer, where Freqtrade places orders, queries status, and synchronizes state.
-- <strong>Risk / Reconcile</strong>: continuously monitor position risk and reconcile state through webhook events and polling.
+- *Observe*: collect candlesticks, technical indicators, structural information, and derivatives/sentiment data.
+- *Decide*: synthesize outputs from multiple Agents / Providers into consensus, gating, and state transitions.
+- *Execute*: hand the decision to the execution layer, where Freqtrade places orders, queries status, and synchronizes state.
+- *Risk / Reconcile*: continuously monitor position risk and reconcile state through webhook events and polling.
 
 ** Core Features
 
 - Prompts guide the model, while engineering enforces constraints; detailed engineering practice is used to minimize hallucinations.
-- <strong>Multi-agent decision pipeline</strong>: the codebase already splits indicator / structure / mechanics into three model lanes with matching configuration.
-- <strong>Complete runtime scheduling</strong>: RuntimeScheduler manages scheduled decisions, price polling, and reconciliation tasks.
-- <strong>Decoupled execution layer</strong>: the default execution system is currently Freqtrade, with execution entrypoints concentrated in internal/execution.
-- <strong>Built-in notifications</strong>: supports Telegram and Feishu notifications.
+- *Multi-agent decision pipeline*: the codebase already splits indicator / structure / mechanics into three model lanes with matching configuration.
+- *Complete runtime scheduling*: RuntimeScheduler manages scheduled decisions, price polling, and reconciliation tasks.
+- *Decoupled execution layer*: the default execution system is currently Freqtrade, with execution entrypoints concentrated in internal/execution.
+- *Built-in notifications*: supports Telegram and Feishu notifications.
 
 ** Quick Start
 
@@ -429,7 +431,7 @@ If you do not need the local onboarding page, you can also run:
 
 Brale currently uses four configuration layers:
 
-**** <strong>1) System Configuration</strong>: configs/system.toml
+**** 1) System Configuration: configs/system.toml
 
 It defines global runtime parameters such as:
 
@@ -442,7 +444,7 @@ It defines global runtime parameters such as:
 - webhook listening address, queue, and fallback polling parameters
 - the global notification switch plus Telegram / Feishu settings
 
-**** <strong>2) Symbol Index</strong>: configs/symbols-index.toml
+**** 2) Symbol Index: configs/symbols-index.toml
 
 This file determines which symbols the system will actually run.
 
@@ -452,7 +454,7 @@ Each entry must at least include:
 - config (symbol configuration file)
 - strategy (strategy configuration file)
 
-**** <strong>3) Per-Symbol Configuration</strong>: configs/symbols/*.toml
+**** 3) Per-Symbol Configuration: configs/symbols/*.toml
 
 It controls data- and model-side behavior for that symbol, for example:
 
@@ -465,7 +467,7 @@ It controls data- and model-side behavior for that symbol, for example:
 - entry cooldown settings
 - model routing and temperature settings for each Agent / Provider
 
-**** <strong>4) Strategy Configuration</strong>: configs/strategies/*.toml
+**** 4) Strategy Configuration: configs/strategies/*.toml
 
 It defines trading and risk-control parameters, such as:
 
@@ -506,7 +508,7 @@ In addition:
 - the allowed values for orderbook_depth are restricted by config validation to 5/10/20/50/100/500/1000
 - entry_offset_atr must be >= 0
 
-**** <strong>2) There Are Two Take-Profit / Stop-Loss Modes</strong>: <strong>native</strong> and <strong>llm</strong>
+**** 2) There Are Two Take-Profit / Stop-Loss Modes: *native* and *llm*
 
 The master switch for risk strategy mode is:
 
@@ -519,8 +521,8 @@ The current code accepts only two values:
 
 The difference is as follows:
 
-- <strong>native</strong>: at the plan-builder stage, the built-in strategies directly generate stop-loss and take-profit levels, and also calculate position size and leverage in the same pass.
-- <strong>llm</strong>: the plan builder first creates a base plan (for example direction, entry, risk_pct, and other base fields), but does not directly use native initial_exit to produce the full TP/SL structure; later, runner_flat_risk.go calls the LLM risk service to return a patch. The current code requires the patch to provide at least entry, stop_loss, take_profits, and take_profit_ratios. If reason is missing, it falls back to llm-generated. After that, the code recalculates sizing, leverage / liquidation values, and stop-loss validity.
+- *native*: at the plan-builder stage, the built-in strategies directly generate stop-loss and take-profit levels, and also calculate position size and leverage in the same pass.
+- *llm*: the plan builder first creates a base plan (for example direction, entry, risk_pct, and other base fields), but does not directly use native initial_exit to produce the full TP/SL structure; later, runner_flat_risk.go calls the LLM risk service to return a patch. The current code requires the patch to provide at least entry, stop_loss, take_profits, and take_profit_ratios. If reason is missing, it falls back to llm-generated. After that, the code recalculates sizing, leverage / liquidation values, and stop-loss validity.
 
 In the default strategy configuration, the default value of risk_strategy.mode is llm.
 
@@ -593,8 +595,8 @@ When risk_strategy.mode is "llm":
 
 So LLM mode can be understood as:
 
-- <strong>The LLM determines the TP/SL structure</strong>
-- <strong>Go code validates it, rescales position sizing, limits leverage, and rejects obviously dangerous plans</strong>
+- *The LLM determines the TP/SL structure*
+- *Go code validates it, rescales position sizing, limits leverage, and rejects obviously dangerous plans*
 
 **** 5) How Opening Position Size Is Calculated
 
@@ -712,7 +714,9 @@ This project is licensed under the MIT License. See LICENSE for details.
 
 ** Support Me
 
+#+begin_example
 ETH: 0x4b4C8041A8154a5AfB87E5589Ea292123E098267
 BTC: bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a
 SOL: G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u
 TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh
+#+end_example
