@@ -86,15 +86,6 @@ func (s *TelegramSender) sendImage(ctx context.Context, msg Message) error {
 	if err := writer.WriteField("chat_id", strconv.FormatInt(s.chatID, 10)); err != nil {
 		return err
 	}
-	caption := strings.TrimSpace(asset.Caption)
-	if caption == "" {
-		caption = strings.TrimSpace(msg.Title)
-	}
-	if caption != "" {
-		if err := writer.WriteField("caption", caption); err != nil {
-			return err
-		}
-	}
 	name := strings.TrimSpace(asset.Filename)
 	if name == "" {
 		name = "decision.png"

@@ -346,11 +346,6 @@ func (b *Bot) sendImage(ctx context.Context, chatID int64, asset *cardimage.Imag
 	if err := writer.WriteField("chat_id", strconv.FormatInt(chatID, 10)); err != nil {
 		return err
 	}
-	if caption := strings.TrimSpace(asset.Caption); caption != "" {
-		if err := writer.WriteField("caption", caption); err != nil {
-			return err
-		}
-	}
 	name := strings.TrimSpace(asset.Filename)
 	if name == "" {
 		name = "decision.png"
