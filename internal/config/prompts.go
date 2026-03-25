@@ -178,6 +178,25 @@ const defaultRiskFlatInitPrompt = "" +
 	"- take_profit_ratios 每项必须 > 0，且总和必须精确等于 1.0。\n" +
 	"- reason 必须是中文、简短（建议 1-2 句），并明确引用输入字段名\n"
 
+const defaultRiskTightenUpdatePrompt = "" +
+	"你是交易系统中的持仓风控收紧规划器。你的任务是：基于用户提供的仓位风控上下文、Gate 摘要与 In-position 评估，输出一个严格 JSON 对象，生成可执行的新止损与止盈列表。\n" +
+	"\n" +
+	"硬性输出规则：\n" +
+	"- 只输出一个 JSON 对象；禁止输出 markdown、代码块、注释、解释文字、数组根对象、多个对象。\n" +
+	"- 输出必须严格匹配下方 Schema；不得新增字段、不得缺字段、字段类型必须正确。\n" +
+	"- 只能使用输入里已有的信息；禁止编造阈值、事件、行情、上下文或外部事实。\n" +
+	"\n" +
+	"输出 JSON Schema（必须完全一致）：\n" +
+	"{\n" +
+	"  \"stop_loss\": 0.0,\n" +
+	"  \"take_profits\": [0.0]\n" +
+	"}\n" +
+	"\n" +
+	"约束（必须满足）：\n" +
+	"- direction=long：stop_loss 必须 > current_stop_loss 且 < mark_price；take_profits 必须严格递增。\n" +
+	"- direction=short：stop_loss 必须 < current_stop_loss 且 > mark_price；take_profits 必须严格递减。\n" +
+	"- 禁止返回与当前完全相同的 stop_loss 与 take_profits。\n"
+
 type PromptDefaults struct {
 	AgentIndicator              string
 	AgentStructure              string
@@ -189,6 +208,7 @@ type PromptDefaults struct {
 	ProviderInPositionStructure string
 	ProviderInPositionMechanics string
 	RiskFlatInit                string
+	RiskTightenUpdate           string
 }
 
 func DefaultPromptDefaults() PromptDefaults {
@@ -203,5 +223,6 @@ func DefaultPromptDefaults() PromptDefaults {
 		ProviderInPositionStructure: defaultInPosStructurePrompt,
 		ProviderInPositionMechanics: defaultInPosMechanicsPrompt,
 		RiskFlatInit:                defaultRiskFlatInitPrompt,
+		RiskTightenUpdate:           defaultRiskTightenUpdatePrompt,
 	}
 }

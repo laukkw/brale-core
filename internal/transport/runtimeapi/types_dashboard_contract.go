@@ -246,6 +246,7 @@ type DashboardDecisionPlanContext struct {
 	MaxLeverage     float64 `json:"max_leverage"`
 	EntryOffsetATR  float64 `json:"entry_offset_atr"`
 	EntryMode       string  `json:"entry_mode"`
+	PlanSource      string  `json:"plan_source,omitempty"`
 	InitialExit     string  `json:"initial_exit"`
 }
 

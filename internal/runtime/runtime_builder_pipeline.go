@@ -21,6 +21,7 @@ func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor 
 	defaults := config.DefaultPromptDefaults()
 	riskPrompts := llmapp.LLMPromptBuilder{
 		RiskFlatInitSystem: defaults.RiskFlatInit,
+		RiskTightenSystem:  defaults.RiskTightenUpdate,
 		UserFormat:         llmapp.UserPromptFormatBullet,
 	}
 	riskSvc := llmapp.LLMRiskService{

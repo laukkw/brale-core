@@ -1892,13 +1892,17 @@ function renderDecisionPlanContext(planContext) {
   if (!planContext) {
     return "";
   }
+  const planSource = String(planContext.plan_source || "").trim().toLowerCase();
+  const initialExitDisplay = planSource === "llm"
+    ? "llm作为初始退出规则"
+    : String(planContext.initial_exit || "--");
   const items = [
     ["单笔风险", fmtPercent(planContext.risk_per_trade_pct, 2)],
     ["最大占用", fmtPercent(planContext.max_invest_pct, 0)],
     ["最大杠杆", Number.isFinite(Number(planContext.max_leverage)) ? `${fmtNumber(Number(planContext.max_leverage))}x` : "--"],
     ["入场偏移", Number.isFinite(Number(planContext.entry_offset_atr)) ? `${fmtNumber(Number(planContext.entry_offset_atr))} ATR` : "--"],
     ["入场模式", String(planContext.entry_mode || "--")],
-    ["初始退出规则", String(planContext.initial_exit || "--")]
+    ["初始退出规则", initialExitDisplay]
   ];
   return `<section class="decision-section">
     <div class="decision-section-head">

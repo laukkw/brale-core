@@ -24,6 +24,7 @@ func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig, s
 		ProviderInPosStructureSys: defaults.ProviderInPositionStructure,
 		ProviderInPosMechanicsSys: defaults.ProviderInPositionMechanics,
 		RiskFlatInitSystem:        defaults.RiskFlatInit,
+		RiskTightenSystem:         defaults.RiskTightenUpdate,
 		UserFormat:                llmapp.UserPromptFormatBullet,
 	}
 	agentRunner := &decision.AgentRunner{

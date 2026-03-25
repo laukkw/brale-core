@@ -174,6 +174,7 @@ func buildDecisionDetail(ctx context.Context, st dashboardHistoryStore, configs 
 	}
 	consensus := extractConsensusMetrics(json.RawMessage(selected.DerivedJSON))
 	tighten := buildDecisionTightenDetail(json.RawMessage(selected.DerivedJSON))
+	planSource := resolvePlanSource(selected, resolveDashboardTightenInfo(&selected))
 
 	detail := &DashboardDecisionDetail{
 		SnapshotID:                   selected.SnapshotID,
@@ -190,7 +191,7 @@ func buildDecisionDetail(ctx context.Context, st dashboardHistoryStore, configs 
 		Providers:                    providerSummaries,
 		Agents:                       agentSummaries,
 		Tighten:                      tighten,
-		PlanContext:                  buildDecisionPlanContext(configs, symbol),
+		PlanContext:                  buildDecisionPlanContext(configs, symbol, planSource),
 		Plan:                         buildDecisionPlanSummary(ctx, st, symbol),
 		Sieve:                        buildDecisionSieveDetail(json.RawMessage(selected.DerivedJSON), configs, symbol),
 		ReportMarkdown:               prependDecisionHeader("🚦 决策报告", formatter.RenderDecisionMarkdown(report)),
@@ -270,7 +271,7 @@ func tightenDisplayReason(detail *DashboardDecisionTightenDetail) string {
 	return "持仓收紧未评估"
 }
 
-func buildDecisionPlanContext(configs map[string]ConfigBundle, symbol string) *DashboardDecisionPlanContext {
+func buildDecisionPlanContext(configs map[string]ConfigBundle, symbol string, planSource string) *DashboardDecisionPlanContext {
 	bundle, ok := configs[runtime.NormalizeSymbol(symbol)]
 	if !ok {
 		return nil
@@ -282,6 +283,7 @@ func buildDecisionPlanContext(configs map[string]ConfigBundle, symbol string) *D
 		MaxLeverage:     riskMgmt.MaxLeverage,
 		EntryOffsetATR:  riskMgmt.EntryOffsetATR,
 		EntryMode:       strings.TrimSpace(riskMgmt.EntryMode),
+		PlanSource:      normalizePlanSource(planSource),
 		InitialExit:     strings.TrimSpace(riskMgmt.InitialExit.Policy),
 	}
 }

@@ -30,6 +30,7 @@ type LLMPromptBuilder struct {
 	ProviderInPosStructureSys string
 	ProviderInPosMechanicsSys string
 	RiskFlatInitSystem        string
+	RiskTightenSystem         string
 	UserFormat                UserPromptFormat
 }
 
@@ -85,7 +86,7 @@ func (b LLMPromptBuilder) FlatRiskInitPrompt(input FlatRiskPromptInput) (string,
 }
 
 func (b LLMPromptBuilder) TightenRiskUpdatePrompt(input TightenRiskPromptInput) (string, string, error) {
-	system, err := requirePrompt("prompts.risk.flat_init", b.RiskFlatInitSystem)
+	system, err := requirePrompt("prompts.risk.tighten_update", b.RiskTightenSystem)
 	if err != nil {
 		return "", "", err
 	}
