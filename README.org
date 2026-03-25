@@ -1,0 +1,718 @@
+* Brale (Break a leg) 🎭
+
+- *AI 驱动的多 Agent 量化策略引擎*
+- *AI-driven multi-agent quantitative strategy engine*
+- *既然是演戏（交易），那就祝你 "Break a leg"。*
+- *If trading is a performance, then "break a leg."*
+
+* Language / 语言
+
+- [[#中文版][简体中文]] / [[#english-version][English]]
+
+* 中文版
+
+** 免责声明
+
+- 本项目仅用于技术研究、系统开发与流程验证，不构成任何投资建议。
+- 数字资产交易具有高波动与高风险，可能导致部分或全部资金损失。
+- 使用者应自行评估策略、参数、风控与交易对手风险，并承担全部后果。
+- 任何历史表现、回测结果或示例配置均不代表未来收益。
+- 在生产环境启用前，请先在隔离环境完成充分测试、监控与应急预案。
+
+** 项目由来
+
+Brale 是一个围绕真实交易运行时搭建的量化框架。
+
+项目将一轮交易决策拆成了清晰的运行链路：
+
+- *Observe*：收集 K 线、技术指标、结构信息、衍生品/情绪数据。
+- *Decide*：通过多路 Agent / Provider 做归纳、共识判定和状态流转。
+- *Execute*：把决策交给执行层，由 =Freqtrade= 落单、查单、同步状态。
+- *Risk / Reconcile*：持续监控仓位风险，并通过 webhook / 轮询做状态对账。
+
+** 核心特点
+
+- Prompt负责引导，工程负责约束，用详细的工程实践最小化模型幻觉。
+- *多 Agent 决策链路*：代码中已经拆分出 indicator / structure / mechanics 三路模型与对应配置。
+- *运行时调度完整*：由 =RuntimeScheduler= 管理定时决策、价格轮询与对账任务。
+- *执行层解耦*：当前默认执行系统是 =Freqtrade=，执行入口集中在 =internal/execution=。
+- *通知能力内置*：支持 Telegram、飞书通知。
+
+** 快速启动
+
+*** 1. 一键脚本
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash
+#+end_src
+
+这个脚本会完成基础拉起，并启动 onboarding。
+
+*** 2. 本地部署
+
+#+begin_src bash
+git clone --depth 1 https://github.com/laukkw/brale-core.git
+cd brale-core
+cp .env.example .env
+make init
+#+end_src
+
+如果你不需要本地引导页，也可以直接执行：
+
+- =make start=：启动 freqtrade 和 brale
+
+*** 3. 常用运维命令
+
+- =make status=：查看容器状态
+- =make logs=：查看 brale / freqtrade 日志
+- =make stop=：停止 brale 和 freqtrade
+- =make rebuild=：重新构建并启动 brale
+- =make down=：停止并移除相关容器
+
+** 项目说明
+
+*** 配置体系
+
+Brale 当前配置分为四层：
+
+**** 1) 系统级配置：=configs/system.toml=
+
+负责全局运行参数，例如：
+
+- 日志格式、级别、输出路径
+- 数据库路径
+- 执行系统类型（当前默认 =freqtrade=）
+- 执行 API 地址与认证方式
+- 是否启用定时决策
+- LLM 调用最小间隔
+- Webhook 监听地址、队列、回退轮询参数
+- 通知系统总开关与 Telegram / 飞书配置
+
+**** 2) 币种索引：=configs/symbols-index.toml=
+
+这个文件决定“系统实际会运行哪些 symbol”。
+
+每个条目至少包含：
+
+- =symbol=
+- =config= （symbol 配置文件）
+- =strategy= （策略配置文件）
+
+**** 3) 单币种配置：=configs/symbols/*.toml=
+
+负责这个 symbol 的数据与模型侧行为，例如：
+
+- =intervals=
+- =kline_limit=
+- 是否启用 indicator / structure / mechanics Agent
+- 是否强制要求 OI / funding / 多空比 / 恐惧贪婪等数据
+- 技术指标窗口参数（EMA / RSI / ATR / MACD）
+- 共识阈值
+- 开仓冷却设置
+- 各 Agent / Provider 对应的模型路由与温度
+
+**** 4) 策略配置：=configs/strategies/*.toml=
+
+负责交易与风控参数，例如：
+
+- =risk_per_trade_pct=
+- =max_invest_pct=
+- =max_leverage=
+- =entry_mode= （如 =orderbook= / =atr_offset= / =market=）
+- 初始止盈止损策略
+- 滑点缓冲
+- 持仓收紧（tighten）参数
+- sieve 二次风控规则
+
+如果你准备做多币种扩展，推荐复制：
+
+- =configs/symbols/default.toml=
+- =configs/strategies/default.toml=
+
+按 symbol 新建独立配置，再把它们加入 =configs/symbols-index.toml=。
+
+*** 开仓说明
+
+**** 1) 入场价（Entry）是怎么来的
+
+开仓价由 =risk_management.entry_mode= 决定，代码当前支持三种模式：
+
+- =orderbook=
+  - 多单取 orderbook 的 bids，第 =orderbook_depth= 档价格
+  - 空单取 orderbook 的 asks，第 =orderbook_depth= 档价格
+  - 如果订单簿数据不可用，会回退到 =atr_offset= 逻辑
+- =atr_offset=
+  - long：以 =close= / =prevLow= 为基准，再减去 =ATR * entry_offset_atr=
+  - short：以 =prevHigh= / =close= 为基准，再加上 =ATR * entry_offset_atr=
+- =market=
+  - 直接使用当前 =close= 作为入场价
+
+其中：
+
+- =orderbook_depth= 允许的取值由配置校验限定为 =5/10/20/50/100/500/1000=
+- =entry_offset_atr= 必须 >= 0
+
+**** 2) 止盈止损有两大模式：=native= 与 =llm=
+
+风险策略总开关是：
+
+- =risk_management.risk_strategy.mode=
+
+当前代码只接受两个值：
+
+- =native=
+- =llm=
+
+区别如下：
+
+- *native*：在 plan builder 阶段，直接使用内置策略生成止损与止盈，再顺手把仓位和杠杆也算出来。
+- *llm*：plan builder 会先生成一个基础 plan（例如 direction、entry、risk_pct 等基础字段），但不会直接用 native initial_exit 产出完整止盈止损；随后在 =runner_flat_risk.go= 中调用 LLM 风险服务返回 patch。当前代码要求 patch 至少给出 =entry=、=stop_loss=、=take_profits=、=take_profit_ratios=，而 =reason= 如果缺失则会回退为 =llm-generated=；之后再由代码重新做仓位缩放、杠杆/清算计算与止损合法性校验。
+
+默认策略配置里，=risk_strategy.mode= 的默认值是 =llm=。
+
+**** 3) Native 模式下内置的止盈止损策略
+
+Native 模式使用的是：
+
+- =risk_management.initial_exit.policy=
+
+当前仓库内置了 3 种 policy：
+
+***** a. =atr_structure_v1=
+
+这是默认的 native policy。
+
+- 止损距离取三者最大值：
+  - =ATR * stop_atr_multiplier=
+  - 最近结构位距离（支撑 / 阻力候选价到入场价的距离）
+  - =entry * stop_min_distance_pct=
+- 止损价根据方向由“入场价 ± 止损距离”得到
+- 止盈价则按 =take_profit_rr= 数组生成，例如默认是 =[1.5, 3.0]=
+- 如果没有显式配置 =take_profit_ratios=，系统会按档位数量平均分配止盈比例
+
+适合场景：
+
+- 既希望止损能跟 ATR 走，又希望参考结构位，不想把止损打得过近
+
+***** b. =fixed_rr_v1=
+
+- 止损距离仍然来自 ATR / 最小止损距离，但 *不使用结构位*
+- 止盈按固定 RR 计算
+- 该策略的默认 RR 是 =[1.0, 2.0]=
+
+适合场景：
+
+- 你希望整套出场逻辑更机械、更稳定，不依赖结构候选位
+
+***** c. =structure_tp_v1=
+
+这是“止损参考结构，止盈也参考结构”的版本。
+
+- 止损部分和 =atr_structure_v1= 一致
+- 先按 RR 生成一版基础 TP
+- 再尝试把 TP 向结构位收拢：
+  - long：如果 entry 与固定 TP 之间存在更近的上方结构位，就把 TP 调整到该结构位附近
+  - short：如果 entry 与固定 TP 之间存在更近的下方结构位，就把 TP 调整到该结构位附近
+- 调整时会使用 =structure_buffer_pct= 做一点缓冲，避免 TP 刚好贴在结构位上
+
+适合场景：
+
+- 你想保留 RR 逻辑，但又希望止盈更贴近真实结构阻力/支撑位置
+
+**** 4) LLM 模式下止盈止损怎么生成
+
+当 =risk_strategy.mode = "llm"= 时：
+
+1. =node_plan_builder= 不再用 native policy 直接生成 stop / TP
+2. =Runner.buildFlatLLMPlan()= 调用 =FlatRiskInitLLM=
+3. LLM 必须返回一个合法 patch，至少包含：
+   - =entry=
+   - =stop_loss=
+   - =take_profits=
+   - =take_profit_ratios=
+   - =reason=
+4. 代码会做强校验：
+   - long 必须满足 =stop < entry < tp1 < tp2 ...=
+   - short 必须满足 =stop > entry > tp1 > tp2 ...=
+   - =take_profit_ratios= 总和必须等于 1
+5. patch 应用后，再统一重新计算 =position_size=、=leverage=、=liquidation_price=
+
+所以可以把 LLM 模式理解成：
+
+- *LLM 决定止盈止损结构*
+- *Go 代码负责校验、缩放仓位、限制杠杆，并拒绝明显危险的计划*
+
+**** 5) 开仓仓位是怎么计算的
+
+Brale 会先按“单笔可承受亏损”计算理论仓位：
+
+#+begin_example
+position_size = risk_amount / risk_distance
+risk_amount   = base_balance * risk_pct
+#+end_example
+
+- =base_balance=：优先取 =account.available=，没有则回退到 =account.equity=
+- =risk_pct=：来自 =risk_per_trade_pct=，并会叠加 grade factor 与 sieve size factor
+- =risk_distance=：即 =abs(entry - stop_loss)=
+
+目标是：*止损发生时，亏损尽量控制在预设风险比例内*。
+
+**** 6) 开仓前还会做哪些约束
+
+理论仓位算出来后，系统还会再套一层限制：
+
+- 用 =max_invest_pct= 限制最大资金占用
+- 用 =max_leverage= 限制最大杠杆
+- 计算清算价，若止损已经越过清算价，则直接拒绝该计划
+- 真正触发 entry 前，还会基于最新账户可用资金再刷新一次仓位，避免计划期和下单期资金变化过大
+
+可以把当前逻辑简化理解成：
+
+#+begin_example
+先确定 entry
+-> 再确定 stop / TP（native 或 llm）
+-> 用 (账户可承受亏损 / 止损距离) 算理论仓位
+-> 再套 max_invest_pct / max_leverage / liquidation 检查
+-> 合法才允许真正开仓
+#+end_example
+
+** Docker 服务与端口
+
+仓库里的 =docker-compose.yml= 默认编排了 3 个服务：
+
+| 服务 | 默认端口 | 说明 |
+|------+----------+------|
+| =onboarding= | =9992= | 初始化与引导服务 |
+| =freqtrade= | =8080= | 交易执行系统 API |
+| =brale= | =9991= | Brale 运行时 API / health / webhook |
+
+其中：
+
+- =onboarding= 默认暴露到 =127.0.0.1:9992=
+- =freqtrade= 默认暴露到 =127.0.0.1:8080=
+- =brale= 默认暴露到 =127.0.0.1:9991=
+
+** Runtime API
+
+运行时 API 路由定义在：
+
+- =internal/transport/runtimeapi/server.go=
+
+当前代码中已经挂载的主要接口包括：
+
+- =/api/runtime/schedule/enable= ：开启定时决策
+- =/api/runtime/schedule/disable= ：关闭定时决策
+- =/api/runtime/schedule/symbol= ：设置 symbol 调度模式
+- =/api/runtime/schedule/status= ：查看调度状态
+- =/api/runtime/monitor/status= ：查看监控状态
+- =/api/runtime/position/status= ：查看当前仓位状态
+- =/api/runtime/position/history= ：查看交易历史
+- =/api/runtime/decision/latest= ：查看最新决策
+- =/api/observe/run= ：手动发起观察任务
+- =/api/observe/report= ：查看观察结果
+- =/api/debug/plan/inject= ：注入调试计划
+- =/api/debug/plan/status= ：查看调试计划状态
+- =/api/debug/plan/clear= ：清理调试计划
+
+** Webhook 与健康检查
+
+当 =enable_scheduled_decision=true= 且 =[webhook].enabled=true= 时，Brale 会把这些路由挂到顶层 mux：
+
+- =/healthz=
+- =/api/live/freqtrade/webhook=
+
+** 通知与机器人
+
+根据当前实现，Brale 支持两类消息渠道：
+
+- Telegram Bot
+- 飞书 Bot
+
+而且支持启动通知（见 =system.toml= 中 =startup_notify_enabled=）。
+
+如果相关配置开启，系统启动后会在 bootstrap 阶段启动这些 Bot，并把 runtime 地址注入给它们使用。
+
+** 持久化与数据落盘
+
+在 Docker 推荐路径下，Brale 数据通常会写入：
+
+- =data/brale/= 下的运行时文件
+
+Freqtrade 运行数据则位于：
+
+- =data/freqtrade/user_data/=
+
+** 开发与扩展建议
+
+如果你准备基于这个框架继续迭代，建议优先从以下几个方向扩展：
+
+- 新增 symbol：复制默认配置并追加到 =symbols-index.toml=
+- 调整风险参数：从 =configs/strategies/*.toml= 入手
+- 调整 Agent 行为：从 =configs/symbols/*.toml= 和 LLM 环境变量入手
+- 扩展执行系统：参考 =internal/execution= 的抽象与 Freqtrade 适配实现
+- 扩展观测/运维能力：沿用 =runtimeapi= 与 =webhook= 的现有入口
+
+** 开源协议
+
+本项目采用 =MIT License=，详见 =LICENSE=。
+
+** 支持我
+
+=ETH: 0x4b4C8041A8154a5AfB87E5589Ea292123E098267=
+=BTC: bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a=
+=SOL: G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u=
+=TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh=
+
+* English Version
+
+** Disclaimer
+
+- This project is intended solely for technical research, system development, and workflow validation, and does not constitute investment advice.
+- Digital asset trading is highly volatile and risky, and may result in partial or total loss of funds.
+- Users are solely responsible for evaluating strategy, parameters, risk controls, and counterparty risk, and for bearing all consequences.
+- Any historical performance, backtest results, or sample configurations do not guarantee future returns.
+- Before enabling it in production, please complete sufficient testing, monitoring, and contingency planning in an isolated environment.
+
+** Project Background
+
+Brale is a quantitative framework built around a real trading runtime.
+
+The project breaks a single trading decision cycle into a clear runtime flow:
+
+- *Observe*: collect candlesticks, technical indicators, structural information, and derivatives/sentiment data.
+- *Decide*: synthesize outputs from multiple Agents / Providers into consensus, gating, and state transitions.
+- *Execute*: hand the decision to the execution layer, where =Freqtrade= places orders, queries status, and synchronizes state.
+- *Risk / Reconcile*: continuously monitor position risk and reconcile state through webhook events and polling.
+
+** Core Features
+
+- Prompts guide the model, while engineering enforces constraints; detailed engineering practice is used to minimize hallucinations.
+- *Multi-agent decision pipeline*: the codebase already splits indicator / structure / mechanics into three model lanes with matching configuration.
+- *Complete runtime scheduling*: =RuntimeScheduler= manages scheduled decisions, price polling, and reconciliation tasks.
+- *Decoupled execution layer*: the default execution system is currently =Freqtrade=, with execution entrypoints concentrated in =internal/execution=.
+- *Built-in notifications*: supports Telegram and Feishu notifications.
+
+** Quick Start
+
+*** 1. One-Click Script
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash
+#+end_src
+
+This script performs the basic bootstrap and starts onboarding.
+
+*** 2. Local Deployment
+
+#+begin_src bash
+git clone --depth 1 https://github.com/laukkw/brale-core.git
+cd brale-core
+cp .env.example .env
+make init
+#+end_src
+
+If you do not need the local onboarding page, you can also run:
+
+- =make start=: start freqtrade and brale
+
+*** 3. Common Operations
+
+- =make status=: check container status
+- =make logs=: view brale / freqtrade logs
+- =make stop=: stop brale and freqtrade
+- =make rebuild=: rebuild and restart brale
+- =make down=: stop and remove related containers
+
+** Project Overview
+
+*** Configuration Layout
+
+Brale currently uses four configuration layers:
+
+**** 1) System Configuration: =configs/system.toml=
+
+It defines global runtime parameters such as:
+
+- log format, level, and output path
+- database path
+- execution system type (currently defaults to =freqtrade=)
+- execution API endpoint and authentication method
+- whether scheduled decisions are enabled
+- minimum interval between LLM calls
+- webhook listening address, queue, and fallback polling parameters
+- the global notification switch plus Telegram / Feishu settings
+
+**** 2) Symbol Index: =configs/symbols-index.toml=
+
+This file determines which symbols the system will actually run.
+
+Each entry must at least include:
+
+- =symbol=
+- =config= (symbol configuration file)
+- =strategy= (strategy configuration file)
+
+**** 3) Per-Symbol Configuration: =configs/symbols/*.toml=
+
+It controls data- and model-side behavior for that symbol, for example:
+
+- =intervals=
+- =kline_limit=
+- whether indicator / structure / mechanics Agents are enabled
+- whether OI / funding / long-short ratio / fear-greed data is required
+- technical indicator window parameters (EMA / RSI / ATR / MACD)
+- consensus thresholds
+- entry cooldown settings
+- model routing and temperature settings for each Agent / Provider
+
+**** 4) Strategy Configuration: =configs/strategies/*.toml=
+
+It defines trading and risk-control parameters, such as:
+
+- =risk_per_trade_pct=
+- =max_invest_pct=
+- =max_leverage=
+- =entry_mode= (for example =orderbook= / =atr_offset= / =market=)
+- initial take-profit / stop-loss strategy
+- slippage buffer
+- in-position tightening parameters
+- sieve secondary risk-control rules
+
+If you plan to extend to multiple symbols, it is recommended to copy:
+
+- =configs/symbols/default.toml=
+- =configs/strategies/default.toml=
+
+Create independent configurations for each symbol and then add them into =configs/symbols-index.toml=.
+
+*** Entry and Position Opening
+
+**** 1) How the Entry Price Is Determined
+
+The entry price is determined by =risk_management.entry_mode=. The code currently supports three modes:
+
+- =orderbook=
+  - for longs, take the price from the bids side of the orderbook at the =orderbook_depth= level
+  - for shorts, take the price from the asks side of the orderbook at the =orderbook_depth= level
+  - if orderbook data is unavailable, it falls back to the =atr_offset= logic
+- =atr_offset=
+  - long: use =close= / =prevLow= as the base, then subtract =ATR * entry_offset_atr=
+  - short: use =prevHigh= / =close= as the base, then add =ATR * entry_offset_atr=
+- =market=
+  - directly use the current =close= as the entry price
+
+In addition:
+
+- the allowed values for =orderbook_depth= are restricted by config validation to =5/10/20/50/100/500/1000=
+- =entry_offset_atr= must be >= 0
+
+**** 2) There Are Two Take-Profit / Stop-Loss Modes: =native= and =llm=
+
+The master switch for risk strategy mode is:
+
+- =risk_management.risk_strategy.mode=
+
+The current code accepts only two values:
+
+- =native=
+- =llm=
+
+The difference is as follows:
+
+- *native*: at the plan-builder stage, the built-in strategies directly generate stop-loss and take-profit levels, and also calculate position size and leverage in the same pass.
+- *llm*: the plan builder first creates a base plan (for example direction, entry, risk_pct, and other base fields), but does not directly use native =initial_exit= to produce the full TP/SL structure; later, =runner_flat_risk.go= calls the LLM risk service to return a patch. The current code requires the patch to provide at least =entry=, =stop_loss=, =take_profits=, and =take_profit_ratios=. If =reason= is missing, it falls back to =llm-generated=. After that, the code recalculates sizing, leverage / liquidation values, and stop-loss validity.
+
+In the default strategy configuration, the default value of =risk_strategy.mode= is =llm=.
+
+**** 3) Built-in Take-Profit / Stop-Loss Strategies in Native Mode
+
+Native mode uses:
+
+- =risk_management.initial_exit.policy=
+
+The repository currently includes 3 built-in policies:
+
+***** a. =atr_structure_v1=
+
+This is the default native policy.
+
+- the stop distance takes the maximum of these three values:
+  - =ATR * stop_atr_multiplier=
+  - the distance from the nearest structural level (support / resistance candidate) to the entry price
+  - =entry * stop_min_distance_pct=
+- the stop price is derived from “entry price ± stop distance” based on trade direction
+- take-profit prices are generated from the =take_profit_rr= array, for example the default is =[1.5, 3.0]=
+- if =take_profit_ratios= is not explicitly configured, the system splits TP execution ratios evenly across levels
+
+Suitable when:
+
+- you want the stop to follow ATR while still referencing structural levels, without placing the stop too tightly
+
+***** b. =fixed_rr_v1=
+
+- the stop distance still comes from ATR / minimum stop distance, but *does not use structural levels*
+- take profits are calculated using fixed risk-reward ratios
+- the default RR for this policy is =[1.0, 2.0]=
+
+Suitable when:
+
+- you want a more mechanical and stable exit logic that does not depend on structure candidates
+
+***** c. =structure_tp_v1=
+
+This version uses structure for both stop-loss reference and take-profit reference.
+
+- the stop-loss logic is the same as =atr_structure_v1=
+- it first generates a base set of TPs from RR
+- then it attempts to pull TPs closer to structural levels:
+  - long: if there is a nearer overhead structural level between entry and the fixed TP, TP is adjusted toward that level
+  - short: if there is a nearer lower structural level between entry and the fixed TP, TP is adjusted toward that level
+- =structure_buffer_pct= is used as a small buffer so TP does not sit exactly on the structural level
+
+Suitable when:
+
+- you want to preserve RR logic while making take profits align more closely with real support / resistance structure
+
+**** 4) How Take-Profit / Stop-Loss Is Generated in LLM Mode
+
+When =risk_strategy.mode = "llm"=:
+
+1. =node_plan_builder= no longer uses a native policy to directly generate stop / TP
+2. =Runner.buildFlatLLMPlan()= calls =FlatRiskInitLLM=
+3. the LLM must return a valid patch that includes at least:
+   - =entry=
+   - =stop_loss=
+   - =take_profits=
+   - =take_profit_ratios=
+   - =reason=
+4. the code applies strict validation:
+   - for longs, it must satisfy =stop < entry < tp1 < tp2 ...=
+   - for shorts, it must satisfy =stop > entry > tp1 > tp2 ...=
+   - =take_profit_ratios= must sum to 1
+5. after applying the patch, the system recalculates =position_size=, =leverage=, and =liquidation_price=
+
+So LLM mode can be understood as:
+
+- *The LLM determines the TP/SL structure*
+- *Go code validates it, rescales position sizing, limits leverage, and rejects obviously dangerous plans*
+
+**** 5) How Opening Position Size Is Calculated
+
+Brale first calculates a theoretical position size based on the maximum loss allowed for a single trade:
+
+#+begin_example
+position_size = risk_amount / risk_distance
+risk_amount   = base_balance * risk_pct
+#+end_example
+
+- =base_balance=: it prefers =account.available=, and falls back to =account.equity= when unavailable
+- =risk_pct=: comes from =risk_per_trade_pct= and is further adjusted by the grade factor and sieve size factor
+- =risk_distance=: that is, =abs(entry - stop_loss)=
+
+The goal is: *if the stop-loss is hit, keep the loss as close as possible to the predefined risk percentage*.
+
+**** 6) What Additional Constraints Apply Before Entry
+
+After the theoretical size is calculated, the system applies another layer of constraints:
+
+- =max_invest_pct= limits maximum capital usage
+- =max_leverage= limits maximum leverage
+- the liquidation price is calculated; if the stop-loss is already beyond liquidation, the plan is rejected directly
+- before the actual entry is triggered, the system refreshes the position size once more using the latest available account balance, to avoid excessive divergence between planning time and execution time
+
+The current logic can be simplified as:
+
+#+begin_example
+Determine entry first
+-> determine stop / TP (native or llm)
+-> calculate theoretical size using (capital-at-risk / stop distance)
+-> apply max_invest_pct / max_leverage / liquidation checks
+-> only allow the order if the plan remains valid
+#+end_example
+
+** Docker Services and Ports
+
+The repository's =docker-compose.yml= defines three services by default:
+
+| Service | Default Port | Description |
+|---------+--------------+-------------|
+| =onboarding= | =9992= | onboarding and initialization service |
+| =freqtrade= | =8080= | trading execution system API |
+| =brale= | =9991= | Brale runtime API / health / webhook |
+
+Specifically:
+
+- =onboarding= is exposed by default on =127.0.0.1:9992=
+- =freqtrade= is exposed by default on =127.0.0.1:8080=
+- =brale= is exposed by default on =127.0.0.1:9991=
+
+** Runtime API
+
+The runtime API routes are defined in:
+
+- =internal/transport/runtimeapi/server.go=
+
+The main routes currently mounted in code include:
+
+- =/api/runtime/schedule/enable=: enable scheduled decisions
+- =/api/runtime/schedule/disable=: disable scheduled decisions
+- =/api/runtime/schedule/symbol=: set the scheduling mode for a symbol
+- =/api/runtime/schedule/status=: view scheduling status
+- =/api/runtime/monitor/status=: view monitoring status
+- =/api/runtime/position/status=: view current position status
+- =/api/runtime/position/history=: view trade history
+- =/api/runtime/decision/latest=: view the latest decision
+- =/api/observe/run=: manually trigger an observe task
+- =/api/observe/report=: view observe results
+- =/api/debug/plan/inject=: inject a debug plan
+- =/api/debug/plan/status=: view debug plan status
+- =/api/debug/plan/clear=: clear the debug plan
+
+** Webhook and Health Checks
+
+When =enable_scheduled_decision=true= and =[webhook].enabled=true=, Brale mounts these routes onto the top-level mux:
+
+- =/healthz=
+- =/api/live/freqtrade/webhook=
+
+** Notifications and Bots
+
+According to the current implementation, Brale supports two messaging channels:
+
+- Telegram Bot
+- Feishu Bot
+
+It also supports startup notifications (see =startup_notify_enabled= in =system.toml=).
+
+When the relevant configuration is enabled, these bots are started during bootstrap and receive the runtime address through injection.
+
+** Persistence and Data Storage
+
+In the recommended Docker path, Brale data is typically written to:
+
+- runtime files under =data/brale/=
+
+Freqtrade runtime data is stored under:
+
+- =data/freqtrade/user_data/=
+
+** Development and Extension Suggestions
+
+If you plan to continue iterating on top of this framework, it is recommended to prioritize the following directions:
+
+- add new symbols: copy the default configs and append them into =symbols-index.toml=
+- tune risk parameters: start from =configs/strategies/*.toml=
+- adjust agent behavior: start from =configs/symbols/*.toml= and the LLM environment variables
+- extend the execution system: refer to the abstractions in =internal/execution= and the Freqtrade adapter implementation
+- extend observe / ops capabilities: reuse the existing =runtimeapi= and =webhook= entrypoints
+
+** License
+
+This project is licensed under the =MIT License=. See =LICENSE= for details.
+
+** Support Me
+
+=ETH: 0x4b4C8041A8154a5AfB87E5589Ea292123E098267=
+=BTC: bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a=
+=SOL: G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u=
+=TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh=
