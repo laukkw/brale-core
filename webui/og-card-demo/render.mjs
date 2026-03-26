@@ -336,6 +336,7 @@ function buildModel(raw) {
       `持仓量背景=${mapSentence(agent.mechanics.open_interest_context)}`,
       `异常细节=${mapSentence(agent.mechanics.anomaly_detail)}`,
       `Structure | 结构状态=${emptyDash(mapValue(agent.structure.regime))}  最近突破=${emptyDash(mapValue(agent.structure.last_break))}  形态=${emptyDash(mapValue(agent.structure.pattern))}  质量=${emptyDash(mapValue(agent.structure.quality))}`,
+      `Structure细节 | 量能配合=${mapSentence(agent.structure.volume_action)}  K线反应=${mapSentence(agent.structure.candle_reaction)}`,
     ],
     evidenceCards,
     reportTimeCN: '',
