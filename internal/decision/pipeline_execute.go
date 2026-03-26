@@ -86,6 +86,11 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		p.notifyError(ctx, err)
 		return nil, err
 	}
+	if failed, ok := firstFailedSymbolResult(results); ok {
+		if err := p.handleSymbolError(ctx, logger.With(zap.String("symbol", failed.Symbol)), failed); err != nil {
+			return nil, err
+		}
+	}
 	outBySymbol := make(map[string]PersistResult, len(results)+len(cooldownSkipped))
 	for symbol, skipped := range cooldownSkipped {
 		outBySymbol[symbol] = skipped
@@ -125,6 +130,15 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		zap.Duration("latency", time.Since(start)),
 	)
 	return out, nil
+}
+
+func firstFailedSymbolResult(results []SymbolResult) (SymbolResult, bool) {
+	for _, res := range results {
+		if res.Err != nil {
+			return res, true
+		}
+	}
+	return SymbolResult{}, false
 }
 
 func (p *Pipeline) enrichRunOptions(opts RunOptions, symbols []string, modeBySymbol map[string]decisionmode.Mode) RunOptions {
@@ -229,7 +243,7 @@ func (p *Pipeline) armEntryCooldownOnExitSignal(res SymbolResult, logger *zap.Lo
 func (p *Pipeline) handleSymbol(ctx context.Context, res SymbolResult, snapID uint, snap snapshot.MarketSnapshot, comp features.CompressionResult, state fsm.PositionState, posID string) (PersistResult, error) {
 	logger := logging.FromContext(ctx).Named("pipeline").With(zap.String("symbol", res.Symbol))
 	out := PersistResult{Symbol: res.Symbol, Gate: res.Gate.GateReason}
-	if err := p.handleSymbolError(ctx, logger, res, snapID, snap); err != nil {
+	if err := p.handleSymbolError(ctx, logger, res); err != nil {
 		out.Err = err
 		return out, err
 	}
@@ -274,25 +288,12 @@ func (p *Pipeline) handleSymbol(ctx context.Context, res SymbolResult, snapID ui
 	return p.handlePlan(ctx, out, res, posID, state)
 }
 
-func (p *Pipeline) handleSymbolError(ctx context.Context, logger *zap.Logger, res SymbolResult, snapID uint, snap snapshot.MarketSnapshot) error {
+func (p *Pipeline) handleSymbolError(ctx context.Context, logger *zap.Logger, res SymbolResult) error {
 	if res.Err == nil {
 		return nil
 	}
 	logger.Error("symbol result error", zap.Error(res.Err))
 	p.notifyError(ctx, res.Err)
-	if p.GateStore == nil {
-		return res.Err
-	}
-	gate := res.Gate
-	if gate.GateReason == "" {
-		gate.GateReason = "GATE_ERROR"
-	}
-	if gate.DecisionAction == "" {
-		gate.DecisionAction = "VETO"
-	}
-	if err := p.GateStore(ctx, snap, snapID, res.Symbol, gate, res.Providers); err != nil {
-		logger.Error("gate store failed on error", zap.Error(err))
-	}
 	return res.Err
 }
 

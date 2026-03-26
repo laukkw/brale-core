@@ -33,7 +33,7 @@ type LLMProviderService struct {
 func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.IndicatorSummary, st agent.StructureSummary, mech agent.MechanicsSummary, enabled decision.AgentEnabled) (provider.IndicatorProviderOut, provider.StructureProviderOut, provider.MechanicsProviderOut, decision.ProviderPromptSet, error) {
 	if s.Runner == nil {
 		logging.FromContext(ctx).Named("decision").Error("provider judge failed", zap.String("stage", "init"), zap.Error(fmt.Errorf("runner is required")))
-		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, fmt.Errorf("runner is required")
+		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, wrapLLMStageError("provider", symbol, "init", fmt.Errorf("runner is required"))
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, ctxErr
@@ -41,7 +41,7 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 	prompts, err := s.Prompts.ProviderPrompts(ind, st, mech, enabled)
 	if err != nil {
 		logging.FromContext(ctx).Named("decision").Error("provider judge failed", zap.String("stage", "prompts"), zap.Error(err))
-		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, err
+		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, wrapLLMStageError("provider", symbol, "prompts", err)
 	}
 	var indOut provider.IndicatorProviderOut
 	var stOut provider.StructureProviderOut
@@ -68,7 +68,7 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "indicator"), zap.Error(stageErr))
 				indPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "indicator", stageErr)
 			}
 			indOut = stageOut
 			if s.Tracker != nil {
@@ -95,7 +95,7 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "structure"), zap.Error(stageErr))
 				stPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "structure", stageErr)
 			}
 			stOut = stageOut
 			if s.Tracker != nil {
@@ -122,7 +122,7 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "mechanics"), zap.Error(stageErr))
 				mechPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "mechanics", stageErr)
 			}
 			mechOut = stageOut
 			if s.Tracker != nil {
@@ -132,7 +132,9 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			return nil
 		})
 	}
-	parallel.RunBestEffort(ctx, tasks...)
+	if err := parallel.RunFailFast(ctx, tasks...); err != nil {
+		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, err
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return provider.IndicatorProviderOut{}, provider.StructureProviderOut{}, provider.MechanicsProviderOut{}, decision.ProviderPromptSet{}, ctxErr
 	}
@@ -153,7 +155,7 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 	logger := logging.FromContext(ctx).Named("decision").With(zap.String("symbol", symbol))
 	if s.Runner == nil {
 		logger.Error("provider judge failed", zap.String("stage", "init"), zap.Error(fmt.Errorf("runner is required")))
-		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, fmt.Errorf("runner is required")
+		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, wrapLLMStageError("provider", symbol, "init", fmt.Errorf("runner is required"))
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, ctxErr
@@ -161,7 +163,7 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 	prompts, err := s.Prompts.InPositionProviderPrompts(ind, st, mech, summary, enabled)
 	if err != nil {
 		logger.Error("provider judge failed", zap.String("stage", "prompts"), zap.Error(err))
-		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, err
+		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, wrapLLMStageError("provider", symbol, "prompts_in_position", err)
 	}
 	var indOut provider.InPositionIndicatorOut
 	var stOut provider.InPositionStructureOut
@@ -188,7 +190,7 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "indicator_in_position"), zap.Error(stageErr))
 				indPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "indicator_in_position", stageErr)
 			}
 			indOut = stageOut
 			if s.Tracker != nil {
@@ -215,7 +217,7 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "structure_in_position"), zap.Error(stageErr))
 				stPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "structure_in_position", stageErr)
 			}
 			stOut = stageOut
 			if s.Tracker != nil {
@@ -242,7 +244,7 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "mechanics_in_position"), zap.Error(stageErr))
 				mechPrompt.Error = stageErr.Error()
-				return stageErr
+				return wrapLLMStageError("provider", symbol, "mechanics_in_position", stageErr)
 			}
 			mechOut = stageOut
 			if s.Tracker != nil {
@@ -252,7 +254,9 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			return nil
 		})
 	}
-	parallel.RunBestEffort(ctx, tasks...)
+	if err := parallel.RunFailFast(ctx, tasks...); err != nil {
+		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, err
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, decision.ProviderPromptSet{}, ctxErr
 	}

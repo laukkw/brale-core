@@ -1,7 +1,6 @@
 package runtimeapi
 
 import (
-	"fmt"
 	"strings"
 
 	"brale-core/internal/pkg/parseutil"
@@ -100,45 +99,4 @@ func monitorRiskPlanFloatSlice(raw any) []float64 {
 	default:
 		return nil
 	}
-}
-
-func formatMonitorRiskPlanInitialLines(plan MonitorRiskPlan) []string {
-	if plan.Initial.Source == "llm" {
-		return []string{"初始止盈止损: LLM生成"}
-	}
-	lines := []string{"初始止盈止损: Go规则"}
-	if stopATR, ok := parseutil.FloatOK(plan.Initial.Params["stop_atr_multiplier"]); ok && stopATR > 0 {
-		lines = append(lines, fmt.Sprintf("初始止损: ATR x %.2f", stopATR))
-	} else if stopMin, ok := parseutil.FloatOK(plan.Initial.Params["stop_min_distance_pct"]); ok && stopMin > 0 {
-		lines = append(lines, fmt.Sprintf("初始止损最小距离: %.4f", stopMin))
-	}
-	if rr := monitorRiskPlanFloatSlice(plan.Initial.Params["take_profit_rr"]); len(rr) > 0 {
-		lines = append(lines, "初始止盈: RR x "+formatRRList(rr))
-	}
-	return lines
-}
-
-func formatMonitorRiskPlanTightenLines(plan MonitorRiskPlan) []string {
-	if plan.Tighten.Source == "llm" {
-		return []string{"持仓收紧: LLM生成"}
-	}
-	lines := []string{"持仓收紧: Go规则"}
-	if intervalSec, ok := parseutil.FloatOK(plan.Tighten.Params["min_update_interval_sec"]); ok && intervalSec > 0 {
-		lines = append(lines, fmt.Sprintf("收紧间隔: %ds", int64(intervalSec)))
-	}
-	if feePct, ok := parseutil.FloatOK(plan.Tighten.Params["breakeven_fee_pct"]); ok {
-		lines = append(lines, fmt.Sprintf("保本偏移: %.4f", feePct))
-	}
-	return lines
-}
-
-func formatRRList(values []float64) string {
-	if len(values) == 0 {
-		return "—"
-	}
-	parts := make([]string, 0, len(values))
-	for _, value := range values {
-		parts = append(parts, fmt.Sprintf("%.2f", value))
-	}
-	return strings.Join(parts, " / ")
 }

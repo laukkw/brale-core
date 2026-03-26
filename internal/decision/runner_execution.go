@@ -55,7 +55,11 @@ func (r *Runner) RunOnceWithOptions(ctx context.Context, symbols, intervals []st
 func (r *Runner) runSymbols(ctx context.Context, symbols []string, comp features.CompressionResult, acct execution.AccountState, risk execution.RiskParams, opts RunOptions) []SymbolResult {
 	results := make([]SymbolResult, 0, len(symbols))
 	for _, sym := range symbols {
-		results = append(results, r.runSymbol(ctx, sym, comp, acct, risk, opts))
+		res := r.runSymbol(ctx, sym, comp, acct, risk, opts)
+		results = append(results, res)
+		if res.Err != nil {
+			break
+		}
 	}
 	return results
 }
@@ -193,13 +197,6 @@ func isInPositionMode(opts RunOptions, symbol string) bool {
 		return false
 	}
 	return opts.ModeBySymbol[symbol] == decisionmode.ModeInPosition
-}
-
-func isLLMRiskMode(opts RunOptions, symbol string) bool {
-	if opts.RiskStrategyModeBySymbol == nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(opts.RiskStrategyModeBySymbol[symbol]), execution.PlanSourceLLM)
 }
 
 func resolveRunnerLLMRiskMode(bind strategy.StrategyBinding, opts RunOptions, symbol string) (bool, error) {

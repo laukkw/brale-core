@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -38,14 +39,19 @@ func main() {
 }
 
 func runServe(args []string, stderr io.Writer) {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	addr := fs.String("addr", "127.0.0.1:9992", "http listen addr")
 	repo := fs.String("repo", ".", "repository root")
 	basePath := fs.String("base", "/", "http base path")
 	allowNonLoopback := fs.Bool("allow-non-loopback", false, "allow non-loopback requests for trusted containerized deployments")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		os.Exit(2)
+	}
 
 	repoRoot, err := filepath.Abs(*repo)
 	if err != nil {

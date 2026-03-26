@@ -13,14 +13,40 @@ const DEFAULT_INPUT = path.resolve(
 );
 const DEFAULT_OUTPUT = path.resolve(__dirname, 'ethusdt-og-card.png');
 const CONFIG_PATH = path.resolve(__dirname, '../../configs/system.toml');
+const AUTHOR_AVATAR_PATH = path.resolve(__dirname, 'auth.jpg');
 
 const h = React.createElement;
 
 const valueMap = new Map([
+  ['ALLOW', '通过'],
+  ['allow', '通过'],
+  ['WAIT', '等待'],
+  ['wait', '等待'],
   ['VETO', '否决'],
   ['veto', '否决'],
   ['none', '无方向'],
   ['CONSENSUS_NOT_PASSED', '三路共识未通过'],
+  ['DIRECTION_MISSING', '方向缺失'],
+  ['DATA_MISSING', '数据不足'],
+  ['STRUCT_BREAK', '结构破坏'],
+  ['MECH_RISK', '力学风险'],
+  ['INDICATOR_NOISE', '指标噪音'],
+  ['INDICATOR_MIXED', '指标混乱'],
+  ['PASS_STRONG', '强通过'],
+  ['SIEVE_POLICY', '风控覆写'],
+  ['GATE_MISSING', 'Gate 事件缺失'],
+  ['direction', '方向'],
+  ['data', '数据完整性'],
+  ['structure', '结构完整性'],
+  ['mech_risk', '力学风险'],
+  ['indicator_noise', '指标噪音'],
+  ['structure_clear', '结构清晰度'],
+  ['tag_consistency', '标签一致性'],
+  ['script_select', '脚本选择'],
+  ['script_allowed', '脚本条件'],
+  ['gate_allow', 'Gate 放行'],
+  ['indicator', '指标'],
+  ['mechanics', '力学'],
   ['contracting', '收敛'],
   ['mixed', '混合/分歧'],
   ['low', '低'],
@@ -28,6 +54,8 @@ const valueMap = new Map([
   ['neutral', '中性/无明显倾向'],
   ['stable', '稳定'],
   ['long_crowded', '多头拥挤(追高风险)'],
+  ['crowded_long', '多头拥挤(追高风险)'],
+  ['crowded_short', '空头拥挤(追空风险)'],
   ['medium', '中'],
   ['否决', '否决'],
 ]);
@@ -70,12 +98,28 @@ function parseNumber(value, fallback = 0) {
 
 function parseBool(value, fallback = false) {
   if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
     if (normalized === 'true') return true;
     if (normalized === 'false') return false;
+    if (normalized === '1') return true;
+    if (normalized === '0') return false;
   }
   return fallback;
+}
+
+function parseKnownBool(value) {
+  if (typeof value === 'boolean' || typeof value === 'number') {
+    return { known: true, value: parseBool(value, false) };
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 'false', '1', '0'].includes(normalized)) {
+      return { known: true, value: parseBool(value, false) };
+    }
+  }
+  return { known: false, value: false };
 }
 
 function clamp(value, min, max) {
@@ -87,7 +131,14 @@ function lerp(min, max, ratio) {
 }
 
 function metricCardCount(model) {
-  return model.summaryCards.length + model.evidenceCards.length;
+  return thresholdRows(model).reduce((sum, row) => sum + row.items.length, 0);
+}
+
+function thresholdRows(model) {
+  return [
+    { key: 'hard-threshold', title: '局部阈值证据', kind: 'summary', items: model.summaryCards },
+    { key: 'evidence', title: '证据卡', kind: 'evidence', items: model.evidenceCards },
+  ].filter((row) => Array.isArray(row.items) && row.items.length > 0);
 }
 
 function resolveBottomRailHeight(scale) {
@@ -187,19 +238,19 @@ function estimateFillRatio(model, scale) {
     Math.max(16, scale.gap);
 
   const analysisTitle = scale.section + 14 + 18;
+  const sourceCardHeight = model.sourceCard ? estimateSourceCardHeight(model.sourceCard, scale, bodyWidth) + Math.max(12, scale.gap - 3) : 0;
   const analysisBody = model.analysisLines.reduce(
     (sum, line) => sum + estimateLines(line, scale.body, bodyWidth, 0.56) * scale.body * 1.5,
     0,
   );
 
-  const metricRows = 2;
-  const thresholdBlock =
-    metricRows * scale.cardMinHeight +
-    Math.max(0, metricRows - 1) * scale.cardGridGap;
+  const metricRows = Math.max(1, thresholdRows(model).length);
+  const thresholdBlock = metricDockHeight(metricRows, scale);
   const bottomRail = resolveBottomRailHeight(scale);
 
   const middleSection =
     Math.max(16, scale.gap - 2) +
+    sourceCardHeight +
     analysisTitle +
     analysisBody +
     Math.max(16, scale.gap - 2) +
@@ -208,6 +259,26 @@ function estimateFillRatio(model, scale) {
 
   const totalEstimated = topBlock + heroSection + middleSection + bottomBlock + framePadding + dividerAllowance;
   return totalEstimated / pageHeight;
+}
+
+function estimateSourceCardHeight(card, scale, maxWidth) {
+  const titleHeight = Math.max(scale.metric, 20) * 1.35;
+  const headlineLines = estimateLines(card.headline, Math.max(scale.metric + 4, scale.metric), maxWidth * 0.9, 0.56);
+  const sourceDetailWidth = Math.max(maxWidth * 0.48, 240);
+  const detailLines = card.lines.reduce(
+    (sum, line) => sum + estimateLines(line, Math.max(scale.metric - 2, 14), sourceDetailWidth, 0.56),
+    0,
+  );
+  return Math.round(titleHeight + headlineLines * Math.max(scale.metric + 4, scale.metric) * 1.25 + detailLines * Math.max(scale.metric - 2, 14) * 1.38 + scale.cardPadY * 2 + 28);
+}
+
+function metricDockHeight(rowCount, scale) {
+  return (
+    rowCount * scale.cardMinHeight +
+    Math.max(0, rowCount - 1) * scale.cardGridGap +
+    rowCount * Math.max(6, scale.cardGridGap - 2) +
+    12
+  );
 }
 
 function resolveAnalysisScale(model, scale) {
@@ -322,6 +393,67 @@ function buildModel(raw) {
     detail: item.detail || `当前 ${item.current.toFixed(2)} / 得分 ${item.score.toFixed(2)}`,
   }));
 
+  const trace = Array.isArray(gate.trace)
+    ? gate.trace.filter((item) => item && typeof item === 'object' && String(item.step ?? '').trim())
+    : [];
+  const failedTrace = trace.find((item) => {
+    const status = parseKnownBool(item.ok);
+    return status.known && status.value === false;
+  }) || null;
+  const traceSummary = trace.length
+    ? trace.map((item) => {
+      const status = parseKnownBool(item.ok);
+      const outcome = status.known
+        ? (status.value ? '→通过' : `→停止${item.reason ? `(${mapValue(item.reason)})` : ''}`)
+        : '→已记录';
+      return `${mapValue(item.step)}${outcome}`;
+    }).join(' · ')
+    : '未记录 Gate 路径';
+  const stopStep = emptyDash(mapValue(gate.stop_step || failedTrace?.step));
+  const finalReason = emptyDash(mapValue(gate.reason_code || gate.reason));
+  const ruleName = String(gate.rule_name || '').trim();
+  const actionBefore = String(gate.action_before || '').trim();
+  const sieveAction = String(gate.sieve_action || '').trim();
+  const sieveReason = String(gate.sieve_reason || '').trim();
+  const finalDecision = String(gate.decision_action || '').trim().toUpperCase();
+  const sieveTriggered = Boolean(sieveAction || sieveReason);
+  const gateStopDetail = failedTrace
+    ? traceSummary
+    : finalDecision === 'VETO' && sieveTriggered
+      ? `Gate 主流程未中断，最终由风控覆写否决 · ${traceSummary}`
+      : traceSummary;
+
+  const sourceHeadline = sieveTriggered && finalDecision === 'VETO'
+    ? '最终否决来源：风控覆写'
+    : failedTrace
+      ? '最终否决来源：Gate 主流程'
+      : '最终判定来源：Gate 总结';
+  const sourceTone = finalDecision === 'ALLOW'
+    ? 'pass'
+    : finalDecision === 'WAIT'
+      ? 'neutral'
+      : 'fail';
+  const sourceLines = [
+    failedTrace
+      ? `停止步骤：${stopStep}${failedTrace?.reason ? ` · 命中 ${emptyDash(mapValue(failedTrace.reason))}` : ''}`
+      : `停止步骤：${sieveTriggered && finalDecision === 'VETO' ? 'Gate 未中断' : stopStep}`,
+  ];
+  if (ruleName) {
+    sourceLines.push(`命中规则：${emptyDash(mapValue(ruleName))} (${ruleName})`);
+  }
+  if (sieveTriggered) {
+    sourceLines.push(`风控筛选：${emptyDash(mapValue(actionBefore || '—'))} → ${emptyDash(mapValue(sieveAction || finalDecision || '—'))}${sieveReason ? ` · ${emptyDash(mapValue(sieveReason))}` : ''}`);
+  }
+  sourceLines.push('说明：下方证据卡只展示局部阈值，通过不代表最终放行。');
+
+  const sourceCard = {
+    title: '判定来源说明',
+    headline: sourceHeadline,
+    lines: sourceLines,
+    tone: sourceTone,
+    meta: gate.tradeable ? '可交易' : '不可交易',
+  };
+
   return {
     symbol: raw.symbol,
     action,
@@ -338,12 +470,53 @@ function buildModel(raw) {
       `Structure | 结构状态=${emptyDash(mapValue(agent.structure.regime))}  最近突破=${emptyDash(mapValue(agent.structure.last_break))}  形态=${emptyDash(mapValue(agent.structure.pattern))}  质量=${emptyDash(mapValue(agent.structure.quality))}`,
       `Structure细节 | 量能配合=${mapSentence(agent.structure.volume_action)}  K线反应=${mapSentence(agent.structure.candle_reaction)}`,
     ],
+    sourceCard,
     evidenceCards,
     reportTimeCN: '',
   };
 }
 
-function toolbar({ center, right, height = 72 }) {
+function authorAvatar(dataUri, size) {
+  if (!dataUri) {
+    return h(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          width: size,
+          height: size,
+          borderRadius: 999,
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#e2e8f0',
+          color: '#475569',
+          fontSize: Math.max(14, Math.round(size * 0.34)),
+          fontWeight: 700,
+          letterSpacing: '0.02em',
+        },
+      },
+      'L',
+    );
+  }
+  return h('img', {
+    src: dataUri,
+    width: size,
+    height: size,
+    style: {
+      display: 'flex',
+      width: size,
+      height: size,
+      borderRadius: 999,
+      objectFit: 'cover',
+      border: '1px solid #cbd5e1',
+      background: '#ffffff',
+      boxSizing: 'border-box',
+    },
+  });
+}
+
+function toolbar({ center, avatarDataUri, height = 72 }) {
+  const avatarSize = clamp(Math.round(height * 0.72), 42, 56);
   return h(
     'div',
     {
@@ -374,7 +547,7 @@ function toolbar({ center, right, height = 72 }) {
       'Brale',
     ),
     h('div', { style: { display: 'flex', marginLeft: 'auto', marginRight: 'auto', fontSize: 18, color: '#64748b', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 600 } }, center),
-    h('div', { style: { display: 'flex', fontSize: 20, color: '#334155', fontWeight: 700, letterSpacing: '0.04em' } }, right),
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: avatarSize, height: avatarSize, marginLeft: 'auto' } }, authorAvatar(avatarDataUri, avatarSize)),
   );
 }
 
@@ -608,11 +781,150 @@ function thresholdCard(item, scale) {
   );
 }
 
+function tonePalette(tone) {
+  if (tone === 'pass') {
+    return { border: '#d1fae5', bg: '#ecfdf5', fg: '#166534', soft: '#bbf7d0' };
+  }
+  if (tone === 'neutral') {
+    return { border: '#fde68a', bg: '#fffbeb', fg: '#92400e', soft: '#fcd34d' };
+  }
+  return { border: '#fecaca', bg: '#fef2f2', fg: '#991b1b', soft: '#fca5a5' };
+}
+
+function sourceCard(card, scale) {
+  const tone = tonePalette(card.tone);
+  return h(
+    'div',
+    {
+      style: {
+        display: 'flex',
+        alignItems: 'stretch',
+        justifyContent: 'space-between',
+        gap: Math.max(18, scale.cardGap + 6),
+        padding: `${scale.cardPadY}px ${scale.cardPadX}px`,
+        background: '#ffffff',
+        border: `1px solid ${tone.border}`,
+        borderRadius: 18,
+        width: '100%',
+        height: '100%',
+        flex: 1,
+        boxSizing: 'border-box',
+        boxShadow: '0 2px 8px rgba(15,23,42,0.04)',
+        minWidth: 0,
+      },
+    },
+    h(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          alignItems: 'stretch',
+          justifyContent: 'center',
+          gap: Math.max(20, scale.cardGap + 8),
+          width: '100%',
+          height: '100%',
+          minWidth: 0,
+        },
+      },
+      h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            gap: Math.max(8, scale.cardGap - 1),
+            width: '42%',
+            minWidth: 300,
+            maxWidth: '46%',
+          },
+        },
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              fontSize: scale.metric + 1,
+              color: '#0f172a',
+              fontWeight: 700,
+              textAlign: 'left',
+            },
+          },
+          card.title,
+        ),
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              fontSize: Math.max(scale.metric + 4, scale.metric),
+              color: '#0f172a',
+              fontWeight: 800,
+              lineHeight: 1.22,
+              wordBreak: 'break-word',
+              textAlign: 'left',
+              width: '100%',
+            },
+          },
+          card.headline,
+        ),
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              fontSize: scale.metric - 5,
+              color: tone.fg,
+              background: tone.bg,
+              border: `1px solid ${tone.soft}`,
+              borderRadius: 999,
+              padding: '4px 8px',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            },
+          },
+          card.meta,
+        ),
+      ),
+      h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            gap: Math.max(6, scale.cardGap - 5),
+            flex: 1,
+            width: '100%',
+            minWidth: 0,
+          },
+        },
+        ...card.lines.map((line) => h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              justifyContent: 'flex-start',
+              width: '100%',
+              fontSize: scale.metric - 2,
+              color: '#64748b',
+              lineHeight: 1.35,
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              textAlign: 'left',
+            },
+          },
+          line,
+        )),
+      ),
+    ),
+  );
+}
+
 function thresholdSection(model, scale) {
-  const rows = [
-    { key: 'hard-threshold', title: '硬阈值卡', kind: 'summary', items: model.summaryCards },
-    { key: 'evidence', title: '证据卡', kind: 'evidence', items: model.evidenceCards },
-  ];
+  const rows = thresholdRows(model);
 
   return h(
     'div',
@@ -653,8 +965,8 @@ function thresholdSection(model, scale) {
               'div',
               { style: { display: 'flex', flex: 1, minWidth: 0, height: '100%' } },
               row.kind === 'summary'
-                  ? consensusSummaryCard(item, scale)
-                  : thresholdCard(item, scale),
+                ? consensusSummaryCard(item, scale)
+                : thresholdCard(item, scale),
             ),
           ),
           ...Array.from({ length: Math.max(0, 2 - row.items.length) }).map(() =>
@@ -671,12 +983,8 @@ function buildTree(model, meta) {
   const baseScale = chooseScale(enrichedModel);
   const scale = fitScaleToPage(enrichedModel, baseScale);
   const analysisScale = resolveAnalysisScale(enrichedModel, scale);
-  const metricRows = 2;
-  const metricDockHeight =
-    metricRows * scale.cardMinHeight +
-    Math.max(0, metricRows - 1) * scale.cardGridGap +
-    metricRows * Math.max(6, scale.cardGridGap - 2) +
-    12;
+  const metricRows = Math.max(1, thresholdRows(enrichedModel).length);
+  const metricDockSize = metricDockHeight(metricRows, scale);
   const bottomRailHeight = resolveBottomRailHeight(scale);
   return h(
     'div',
@@ -709,7 +1017,7 @@ function buildTree(model, meta) {
       },
       toolbar({
         center: `${meta.runner}`,
-        right: 'by:lauk',
+        avatarDataUri: meta.avatarDataUri,
         height: scale.barHeight,
       }),
       h(
@@ -730,6 +1038,8 @@ function buildTree(model, meta) {
           chip(`DIRECTION ${model.direction}`, { background: '#ecfeff', color: '#155e75', border: '#bae6fd', fontSize: scale.chip }),
         ),
         h('div', { style: { display: 'flex', height: Math.max(12, scale.gap - 5) } }),
+        sourceCard(model.sourceCard, scale),
+        h('div', { style: { display: 'flex', height: Math.max(12, scale.gap - 5) } }),
         h('div', { style: { display: 'flex', borderTop: '1px solid #e2e8f0' } }),
         h(
           'div',
@@ -742,7 +1052,7 @@ function buildTree(model, meta) {
           h('div', { style: { display: 'flex', borderTop: '1px dashed #cbd5e1', flexShrink: 0, marginTop: Math.max(10, scale.gap - 6) } }),
           h(
             'div',
-            { style: { display: 'flex', width: '100%', minWidth: 0, height: metricDockHeight, flexShrink: 0, marginTop: Math.max(10, scale.gap - 6) } },
+            { style: { display: 'flex', width: '100%', minWidth: 0, height: metricDockSize, flexShrink: 0, marginTop: Math.max(10, scale.gap - 6) } },
             thresholdSection(model, scale),
           ),
           h('div', { style: { display: 'flex', height: bottomRailHeight, flexShrink: 0 } }),
@@ -783,7 +1093,18 @@ async function resolveRunnerAndTime() {
     hour12: false,
     timeZone: 'Asia/Shanghai',
   }).format(new Date()).replace(/\//g, '-');
-  return { runner, reportTime, reportTimeCN };
+  const avatarDataUri = await loadAuthorAvatar();
+  return { runner, reportTime, reportTimeCN, avatarDataUri };
+}
+
+async function loadAuthorAvatar() {
+  try {
+    await fs.access(AUTHOR_AVATAR_PATH);
+    const raw = await fs.readFile(AUTHOR_AVATAR_PATH);
+    return `data:image/jpeg;base64,${raw.toString('base64')}`;
+  } catch {
+    return '';
+  }
 }
 
 async function loadFonts() {

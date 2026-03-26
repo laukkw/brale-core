@@ -9,6 +9,22 @@
       "reason": "三路共识未通过",
       "reason_code": "CONSENSUS_NOT_PASSED",
       "tradeable": false,
+      "stop_step": "mech_risk",
+      "rule_name": "MECH_RISK",
+      "action_before": "ALLOW",
+      "sieve_action": "VETO",
+      "sieve_reason": "crowded_long",
+      "trace": [
+        {
+          "step": "direction",
+          "ok": true
+        },
+        {
+          "step": "mech_risk",
+          "ok": false,
+          "reason": "MECH_RISK"
+        }
+      ],
       "direction_consensus": {
         "score": -0.276,
         "confidence": 0.116,

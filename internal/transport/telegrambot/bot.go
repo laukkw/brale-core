@@ -324,18 +324,6 @@ func (b *Bot) sendMessage(ctx context.Context, chatID int64, text string, parseM
 	return resp.Result.MessageID, nil
 }
 
-func (b *Bot) sendMarkdown(ctx context.Context, chatID int64, text string) {
-	if _, err := b.sendMessage(ctx, chatID, text, "Markdown", nil); err != nil {
-		b.sendText(ctx, chatID, text)
-	}
-}
-
-func (b *Bot) sendHTML(ctx context.Context, chatID int64, text string) {
-	if _, err := b.sendMessage(ctx, chatID, text, "HTML", nil); err != nil {
-		b.sendText(ctx, chatID, text)
-	}
-}
-
 func (b *Bot) sendImage(ctx context.Context, chatID int64, asset *cardimage.ImageAsset) error {
 	if asset == nil || len(asset.Data) == 0 {
 		return errors.New("telegram bot image payload is empty")

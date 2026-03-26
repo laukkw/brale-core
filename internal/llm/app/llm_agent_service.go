@@ -38,6 +38,9 @@ func (s LLMAgentService) Analyze(ctx context.Context, symbol string, data featur
 		return agent.IndicatorSummary{}, agent.StructureSummary{}, agent.MechanicsSummary{}, decision.AgentPromptSet{}, ctxErr
 	}
 	inputs, stageErrs := s.pickInputs(ctx, data, symbol, enabled)
+	if err := firstLLMStageError(symbol, "agent", enabled, stageErrs); err != nil {
+		return agent.IndicatorSummary{}, agent.StructureSummary{}, agent.MechanicsSummary{}, decision.AgentPromptSet{}, err
+	}
 	var indOut agent.IndicatorSummary
 	var stOut agent.StructureSummary
 	var mechOut agent.MechanicsSummary
@@ -53,7 +56,7 @@ func (s LLMAgentService) Analyze(ctx context.Context, symbol string, data featur
 			tasks = append(tasks, func(runCtx context.Context) error {
 				var stageErr error
 				indOut, indPrompt, stageErr = s.runIndicatorStage(runCtx, symbol, inputs.indicator)
-				return stageErr
+				return wrapLLMStageError("agent", symbol, "indicator", stageErr)
 			})
 		}
 	}
@@ -64,7 +67,7 @@ func (s LLMAgentService) Analyze(ctx context.Context, symbol string, data featur
 			tasks = append(tasks, func(runCtx context.Context) error {
 				var stageErr error
 				stOut, stPrompt, stageErr = s.runStructureStage(runCtx, symbol, inputs.trend)
-				return stageErr
+				return wrapLLMStageError("agent", symbol, "structure", stageErr)
 			})
 		}
 	}
@@ -75,11 +78,13 @@ func (s LLMAgentService) Analyze(ctx context.Context, symbol string, data featur
 			tasks = append(tasks, func(runCtx context.Context) error {
 				var stageErr error
 				mechOut, mechPrompt, stageErr = s.runMechanicsStage(runCtx, symbol, inputs.mechanics)
-				return stageErr
+				return wrapLLMStageError("agent", symbol, "mechanics", stageErr)
 			})
 		}
 	}
-	parallel.RunBestEffort(ctx, tasks...)
+	if err := parallel.RunFailFast(ctx, tasks...); err != nil {
+		return agent.IndicatorSummary{}, agent.StructureSummary{}, agent.MechanicsSummary{}, decision.AgentPromptSet{}, err
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return agent.IndicatorSummary{}, agent.StructureSummary{}, agent.MechanicsSummary{}, decision.AgentPromptSet{}, ctxErr
 	}
@@ -93,6 +98,41 @@ func (s LLMAgentService) Analyze(ctx context.Context, symbol string, data featur
 		prompts.Mechanics = mechPrompt
 	}
 	return indOut, stOut, mechOut, prompts, nil
+}
+
+func firstLLMStageError(symbol, phase string, enabled decision.AgentEnabled, stageErrs map[string]error) error {
+	if enabled.Indicator {
+		if err := stageErrs["indicator"]; err != nil {
+			return wrapLLMStageError(phase, symbol, "indicator", err)
+		}
+	}
+	if enabled.Structure {
+		if err := stageErrs["structure"]; err != nil {
+			return wrapLLMStageError(phase, symbol, "structure", err)
+		}
+	}
+	if enabled.Mechanics {
+		if err := stageErrs["mechanics"]; err != nil {
+			return wrapLLMStageError(phase, symbol, "mechanics", err)
+		}
+	}
+	return nil
+}
+
+func wrapLLMStageError(phase, symbol, stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	phase = strings.TrimSpace(phase)
+	stage = strings.TrimSpace(stage)
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if phase == "" {
+		phase = "llm"
+	}
+	if stage == "" {
+		return fmt.Errorf("llm %s failed: symbol=%s: %w", phase, symbol, err)
+	}
+	return fmt.Errorf("llm %s stage failed: symbol=%s stage=%s: %w", phase, symbol, stage, err)
 }
 
 type llmAgentInputs struct {

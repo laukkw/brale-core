@@ -29,7 +29,6 @@ import (
 const (
 	defaultSessionTTL     = 5 * time.Minute
 	defaultIdempotencyTTL = 15 * time.Minute
-	maxReplyChunk         = 3500
 	tradeHistoryMenuLimit = 10
 )
 
@@ -388,34 +387,11 @@ func (b *Bot) handleLatest(ctx context.Context, chatID, symbol string) {
 		b.sendReply(ctx, chatID, "latest decision image send failed: "+err.Error())
 	}
 }
-func (b *Bot) sendChunked(ctx context.Context, chatID, text string) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return
-	}
-	for _, chunk := range splitChunks(text, maxReplyChunk) {
-		b.sendReply(ctx, chatID, chunk)
-	}
-}
 
 func (b *Bot) sendReply(ctx context.Context, chatID, text string) {
 	if err := b.messenger.SendText(ctx, chatID, text); err != nil {
 		b.logger.Warn("feishu reply failed", zap.String("chat_id", chatID), zap.Error(err))
 	}
-}
-
-func (b *Bot) sendDecisionCard(ctx context.Context, chatID, title, markdown string) bool {
-	sender, ok := b.messenger.(interface {
-		SendCard(ctx context.Context, chatID, title, markdown string) error
-	})
-	if !ok {
-		return false
-	}
-	if err := sender.SendCard(ctx, chatID, title, markdown); err != nil {
-		b.logger.Warn("feishu decision card failed, fallback to text", zap.String("chat_id", chatID), zap.Error(err))
-		return false
-	}
-	return true
 }
 
 func (b *Bot) isDuplicateEvent(id string) bool {
@@ -559,22 +535,6 @@ func extractMessageText(content string) string {
 		return ""
 	}
 	return strings.TrimSpace(parsed.Text)
-}
-
-func splitChunks(text string, size int) []string {
-	if len(text) <= size {
-		return []string{text}
-	}
-	parts := make([]string, 0, len(text)/size+1)
-	remaining := text
-	for len(remaining) > size {
-		parts = append(parts, remaining[:size])
-		remaining = remaining[size:]
-	}
-	if remaining != "" {
-		parts = append(parts, remaining)
-	}
-	return parts
 }
 
 func renderMonitor(resp botruntime.MonitorStatusResponse) string {

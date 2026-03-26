@@ -46,7 +46,19 @@ type ogGate struct {
 	Reason         string                `json:"reason"`
 	ReasonCode     string                `json:"reason_code"`
 	Tradeable      bool                  `json:"tradeable"`
+	StopStep       string                `json:"stop_step,omitempty"`
+	RuleName       string                `json:"rule_name,omitempty"`
+	ActionBefore   string                `json:"action_before,omitempty"`
+	SieveAction    string                `json:"sieve_action,omitempty"`
+	SieveReason    string                `json:"sieve_reason,omitempty"`
 	Consensus      *ogDirectionConsensus `json:"direction_consensus,omitempty"`
+	Trace          []ogGateTraceStep     `json:"trace,omitempty"`
+}
+
+type ogGateTraceStep struct {
+	Step   string `json:"step"`
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type ogDirectionConsensus struct {
@@ -225,6 +237,14 @@ func buildPayload(input decisionfmt.DecisionInput, report decisionfmt.DecisionRe
 		},
 	}
 	payload.RawBlocks.Gate.Consensus = parseDirectionConsensus(report.Gate.Derived)
+	payload.RawBlocks.Gate.StopStep = readDerivedString(report.Gate.Derived, "gate_stop_step")
+	payload.RawBlocks.Gate.ActionBefore = readDerivedString(report.Gate.Derived, "gate_action_before_sieve")
+	payload.RawBlocks.Gate.SieveAction = readDerivedString(report.Gate.Derived, "sieve_action")
+	payload.RawBlocks.Gate.SieveReason = readDerivedString(report.Gate.Derived, "sieve_reason")
+	payload.RawBlocks.Gate.Trace = parseGateTrace(report.Gate.Derived)
+	if report.Gate.RuleHit != nil {
+		payload.RawBlocks.Gate.RuleName = strings.TrimSpace(report.Gate.RuleHit.Name)
+	}
 	for _, agent := range input.Agents {
 		switch normalizeStage(agent.Stage) {
 		case "indicator":
@@ -251,6 +271,74 @@ func buildPayload(input decisionfmt.DecisionInput, report decisionfmt.DecisionRe
 		}
 	}
 	return payload, nil
+}
+
+func readDerivedString(derived map[string]any, key string) string {
+	if len(derived) == 0 {
+		return ""
+	}
+	value, ok := derived[key]
+	if !ok || value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "<nil>" {
+		return ""
+	}
+	return text
+}
+
+func parseGateTrace(derived map[string]any) []ogGateTraceStep {
+	if len(derived) == 0 {
+		return nil
+	}
+	rawTrace, ok := derived["gate_trace"].([]any)
+	if !ok || len(rawTrace) == 0 {
+		return nil
+	}
+	steps := make([]ogGateTraceStep, 0, len(rawTrace))
+	for _, raw := range rawTrace {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		step := strings.TrimSpace(fmt.Sprint(entry["step"]))
+		if step == "" || step == "<nil>" {
+			continue
+		}
+		reason := strings.TrimSpace(fmt.Sprint(entry["reason"]))
+		if reason == "<nil>" {
+			reason = ""
+		}
+		steps = append(steps, ogGateTraceStep{
+			Step:   step,
+			OK:     parseTraceOK(entry["ok"]),
+			Reason: reason,
+		})
+	}
+	if len(steps) == 0 {
+		return nil
+	}
+	return steps
+}
+
+func parseTraceOK(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case float64:
+		return v != 0
+	case float32:
+		return v != 0
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
 }
 
 func parseDirectionConsensus(derived map[string]any) *ogDirectionConsensus {

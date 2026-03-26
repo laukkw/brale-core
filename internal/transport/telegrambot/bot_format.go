@@ -172,19 +172,3 @@ func formatFloatList(items []float64) string {
 	}
 	return strings.Join(parts, ", ")
 }
-
-func formatTelegramHTML(input string) string {
-	text := strings.TrimSpace(input)
-	if text == "" {
-		return ""
-	}
-	replacer := strings.NewReplacer(
-		"<h3>", "<b>",
-		"</h3>", "</b>\n",
-		"<h4>", "<b>",
-		"</h4>", "</b>\n",
-		"<p>", "",
-		"</p>", "\n",
-	)
-	return strings.TrimSpace(replacer.Replace(text))
-}

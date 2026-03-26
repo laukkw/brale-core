@@ -6,6 +6,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"brale-core/internal/decision/agent"
@@ -73,9 +74,25 @@ func (p *Pipeline) notifyError(ctx context.Context, err error) {
 	if err == nil || p.Notifier == nil {
 		return
 	}
-	if notifyErr := p.Notifier.SendError(ctx, err.Error()); notifyErr != nil {
+	if notifyErr := p.Notifier.SendError(ctx, formatErrorNotification(ctx, err)); notifyErr != nil {
 		logging.FromContext(ctx).Named("pipeline").Error("notify error failed", zap.Error(notifyErr))
 	}
+}
+
+func formatErrorNotification(ctx context.Context, err error) string {
+	if err == nil {
+		return ""
+	}
+	lines := make([]string, 0, 4)
+	lines = append(lines, "decision pipeline failed")
+	if roundID, ok := llm.SessionRoundIDFromContext(ctx); ok {
+		lines = append(lines, fmt.Sprintf("round_id=%s", roundID.String()))
+	}
+	if flow, ok := llm.SessionFlowFromContext(ctx); ok {
+		lines = append(lines, fmt.Sprintf("flow=%s", flow.String()))
+	}
+	lines = append(lines, fmt.Sprintf("error=%s", strings.TrimSpace(err.Error())))
+	return strings.Join(lines, "\n")
 }
 
 func (p *Pipeline) validate() error {
