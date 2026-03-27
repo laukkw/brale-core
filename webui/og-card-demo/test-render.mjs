@@ -3,15 +3,43 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { CARD_WIDTH, DEFAULT_RENDER_HEIGHT, renderCard } from './render.mjs';
+import { buildModel, CARD_WIDTH, DEFAULT_RENDER_HEIGHT, renderCard } from './render.mjs';
 
-async function main() {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'og-card-demo-'));
-  const inputPath = path.join(tmpDir, 'short-input.json');
-  const outputPath = path.join(tmpDir, 'short-output.png');
-  const sampleOutputPath = path.join(tmpDir, 'sample-output.png');
+function baseAgentBlocks() {
+  return {
+    indicator: {
+      expansion: 'range',
+      alignment: 'mixed',
+      noise: 'low',
+      momentum_detail: '动能不足。',
+      conflict_detail: '暂无明显冲突。',
+      movement_score: 0.72,
+      movement_confidence: 0.78,
+    },
+    mechanics: {
+      leverage_state: 'stable',
+      crowding: 'balanced',
+      risk_level: 'low',
+      open_interest_context: 'OI 平稳。',
+      anomaly_detail: '无明显异常。',
+      movement_score: 0.7,
+      movement_confidence: 0.75,
+    },
+    structure: {
+      regime: 'range',
+      last_break: 'unknown',
+      quality: 'clean',
+      pattern: 'unknown',
+      volume_action: '量能平稳。',
+      candle_reaction: 'K 线反应温和。',
+      movement_score: 0.74,
+      movement_confidence: 0.8,
+    },
+  };
+}
 
-  const shortInput = {
+function createInput(gateOverrides = {}, agentOverrides = {}) {
+  return {
     symbol: 'BTCUSDT',
     raw_blocks: {
       gate: {
@@ -34,47 +62,99 @@ async function main() {
             reason: 'DIRECTION_MISSING',
           },
         ],
+        ...gateOverrides,
       },
       agent: {
-        indicator: {
-          expansion: 'range',
-          alignment: 'mixed',
-          noise: 'low',
-          momentum_detail: '动能不足。',
-          conflict_detail: '暂无明显冲突。',
-          movement_score: 0.1,
-          movement_confidence: 0.2,
-        },
-        mechanics: {
-          leverage_state: 'stable',
-          crowding: 'balanced',
-          risk_level: 'low',
-          open_interest_context: 'OI 平稳。',
-          anomaly_detail: '无明显异常。',
-          movement_score: 0.1,
-          movement_confidence: 0.2,
-        },
-        structure: {
-          regime: 'range',
-          last_break: 'unknown',
-          quality: 'clean',
-          pattern: 'unknown',
-          volume_action: '量能平稳。',
-          candle_reaction: 'K 线反应温和。',
-          movement_score: 0.1,
-          movement_confidence: 0.2,
-        },
+        ...baseAgentBlocks(),
+        ...agentOverrides,
       },
     },
   };
+}
 
-  await fs.writeFile(inputPath, JSON.stringify(shortInput, null, 2));
+async function renderScenario({ tmpDir, name, input }) {
+  const inputPath = path.join(tmpDir, `${name}-input.json`);
+  const outputPath = path.join(tmpDir, `${name}-output.png`);
+  await fs.writeFile(inputPath, JSON.stringify(input, null, 2));
   const result = await renderCard({ inputPath, outputPath });
-
-  assert.equal(result.width, CARD_WIDTH, 'render width should stay fixed');
-  assert.ok(result.height > 0, 'render height should be positive');
-  assert.ok(result.height < DEFAULT_RENDER_HEIGHT, `expected cropped height < ${DEFAULT_RENDER_HEIGHT}, got ${result.height}`);
   await fs.access(outputPath);
+  assert.equal(result.width, CARD_WIDTH, `${name} render width should stay fixed`);
+  assert.ok(result.height > 0, `${name} render height should be positive`);
+  return { inputPath, outputPath, result };
+}
+
+async function main() {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'og-card-demo-'));
+  const sampleOutputPath = path.join(tmpDir, 'sample-output.png');
+
+  const shortInput = createInput();
+  const shortModel = buildModel(shortInput);
+  assert.equal(shortModel.sourceCard.sourceLabel, 'Gate 主流程');
+  assert.equal(shortModel.sourceCard.lines[0].kind, 'danger');
+  assert.match(shortModel.sourceCard.lines[0].text, /停止步骤：清算风险检查|停止步骤：方向/);
+
+  const { result } = await renderScenario({ tmpDir, name: 'short', input: shortInput });
+
+  assert.ok(result.height < DEFAULT_RENDER_HEIGHT, `expected cropped height < ${DEFAULT_RENDER_HEIGHT}, got ${result.height}`);
+
+  const openSuccessInput = createInput({
+    decision_action: 'OPEN_LONG',
+    tradeable: true,
+    stop_step: '',
+    rule_name: '',
+    trace: [
+      { step: 'direction', ok: true },
+      { step: 'clear_risk', ok: true },
+    ],
+    direction_consensus: {
+      score: 0.76,
+      confidence: 0.83,
+      score_threshold: 0.5,
+      confidence_threshold: 0.6,
+      score_passed: true,
+      confidence_passed: true,
+    },
+  });
+  const openSuccessModel = buildModel(openSuccessInput);
+  assert.equal(openSuccessModel.sourceCard.sourceLabel, 'Gate 总结');
+  assert.equal(openSuccessModel.sourceCard.verdictText, '可交易');
+  assert.equal(openSuccessModel.sourceCard.lines[0].text, '停止步骤：无（Gate 通过）');
+  await renderScenario({ tmpDir, name: 'open-success', input: openSuccessInput });
+
+  const tightenedRiskInput = createInput({
+    decision_action: 'WAIT',
+    tradeable: false,
+    stop_step: '',
+    rule_name: 'MECH_RISK',
+    action_before: 'OPEN_LONG',
+    sieve_action: 'WAIT',
+    sieve_reason: 'MECH_RISK',
+    trace: [
+      { step: 'direction', ok: true },
+      { step: 'clear_risk', ok: true },
+    ],
+    direction_consensus: {
+      score: 0.71,
+      confidence: 0.79,
+      score_threshold: 0.5,
+      confidence_threshold: 0.6,
+      score_passed: true,
+      confidence_passed: true,
+    },
+  }, {
+    mechanics: {
+      ...baseAgentBlocks().mechanics,
+      crowding: 'crowded',
+      risk_level: 'high',
+      anomaly_detail: '拥挤度抬升，风控转为保守。',
+    },
+  });
+  const tightenedRiskModel = buildModel(tightenedRiskInput);
+  assert.equal(tightenedRiskModel.sourceCard.sourceLabel, '风控覆写');
+  assert.equal(tightenedRiskModel.sourceCard.verdictText, '不可交易');
+  assert.equal(tightenedRiskModel.sourceCard.lines[0].text, '停止步骤：Gate 未中断');
+  assert.match(tightenedRiskModel.sourceCard.lines[2].text, /风控筛选：(开多|OPEN_LONG) → (观望|等待|WAIT)/);
+  await renderScenario({ tmpDir, name: 'tightened-risk', input: tightenedRiskInput });
 
   const sampleInputPath = path.resolve('./sample-input.json');
   const sampleResult = await renderCard({ inputPath: sampleInputPath, outputPath: sampleOutputPath });
@@ -86,7 +166,7 @@ async function main() {
   );
   await fs.access(sampleOutputPath);
 
-  console.log(`ok short=${result.width}x${result.height} sample=${sampleResult.width}x${sampleResult.height}`);
+  console.log(`ok short=${result.width}x${result.height} open-success tightened-risk sample=${sampleResult.width}x${sampleResult.height}`);
 }
 
 main().catch((error) => {

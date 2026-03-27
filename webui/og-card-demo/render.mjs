@@ -225,6 +225,8 @@ function estimateRenderHeight(model) {
   const sourceChars = model.sourceCard.lines.reduce((sum, line) => sum + line.text.length, 0);
   const progressChars = model.progressCards.reduce((sum, card) => sum + card.title.length + card.value.length + card.status.length, 0);
   const analysisChars = model.analysisItems.reduce((sum, item) => sum + item.tag.length + item.text.length, 0);
+  const analysisGroupCount = model.analysisItems.filter((item) => item.isCategory).length;
+  const analysisSeparatorCount = Math.max(0, analysisGroupCount - 1);
   const totalChars = titleChars + sourceChars + progressChars + analysisChars;
 
   return clamp(
@@ -232,13 +234,14 @@ function estimateRenderHeight(model) {
       + Math.ceil(totalChars * 0.88)
       + model.sourceCard.lines.length * 24
       + model.progressCards.length * 28
-      + model.analysisItems.length * 32,
+      + model.analysisItems.length * 32
+      + analysisSeparatorCount * 24,
     DEFAULT_RENDER_HEIGHT,
     MAX_RENDER_HEIGHT,
   );
 }
 
-function buildModel(raw) {
+export function buildModel(raw) {
   const gate = raw?.raw_blocks?.gate ?? {};
   const agent = raw?.raw_blocks?.agent ?? {};
   const indicator = agent.indicator ?? {};
@@ -342,8 +345,11 @@ function buildModel(raw) {
   const sieveReason = String(gate.sieve_reason || '').trim();
   const actionBefore = String(gate.action_before || '').trim();
   const sieveTriggered = Boolean(sieveAction || sieveReason);
+  const tradeable = parseBool(gate.tradeable, false);
+  const sieveOutcome = String(sieveAction || finalDecision || '').trim().toUpperCase();
+  const sieveChanged = Boolean(sieveTriggered && actionBefore && sieveOutcome && actionBefore.toUpperCase() !== sieveOutcome);
 
-  const sourceLabel = sieveTriggered && finalDecision === 'VETO'
+  const sourceLabel = (sieveTriggered && (finalDecision === 'VETO' || sieveChanged))
     ? '风控覆写'
     : failedTrace
       ? 'Gate 主流程'
@@ -353,33 +359,41 @@ function buildModel(raw) {
     {
       text: failedTrace
         ? `停止步骤：${stopStep}${failedTrace?.reason ? ` · 命中 ${emptyDash(mapValue(failedTrace.reason))}` : ''}`
-        : `停止步骤：${sieveTriggered && finalDecision === 'VETO' ? 'Gate 未中断' : stopStep}`,
+        : sieveTriggered
+          ? '停止步骤：Gate 未中断'
+          : tradeable
+            ? '停止步骤：无（Gate 通过）'
+            : `停止步骤：${stopStep}`,
       note: false,
+      kind: 'danger',
     },
   ];
   if (ruleName) {
     sourceLines.push({
       text: `命中规则：${emptyDash(mapValue(ruleName))} (${ruleName})`,
       note: false,
+      kind: 'default',
     });
   }
   if (sieveTriggered) {
     sourceLines.push({
       text: `风控筛选：${emptyDash(mapValue(actionBefore || '—'))} → ${emptyDash(mapValue(sieveAction || finalDecision || '—'))}${sieveReason ? ` · ${emptyDash(mapValue(sieveReason))}` : ''}`,
       note: false,
+      kind: 'default',
     });
   }
   sourceLines.push({
     text: '说明：下方证据卡只展示局部阈值，通过不代表最终放行。',
     note: true,
+    kind: 'note',
   });
 
   const sourceCard = {
     title: '判定来源说明',
-    tradeable: parseBool(gate.tradeable, false),
+    tradeable,
     sourceLabel,
     lines: sourceLines,
-    verdictText: parseBool(gate.tradeable, false) ? '可交易' : '不可交易',
+    verdictText: tradeable ? '可交易' : '不可交易',
   };
 
   const analysisItems = [
@@ -470,9 +484,9 @@ function tonePalette(tone) {
 
 function categoryTagStyle(variant) {
   const map = {
-    indicator: { bg: '#cbd5e1', fg: '#1e293b', border: '#94a3b8' },
-    mechanics: { bg: '#fde68a', fg: '#78350f', border: '#f59e0b' },
-    structure: { bg: '#fecdd3', fg: '#881337', border: '#fb7185' },
+    indicator: { bg: '#dcfce7', fg: '#166534', border: '#86efac' },
+    mechanics: { bg: '#dcfce7', fg: '#166534', border: '#86efac' },
+    structure: { bg: '#dcfce7', fg: '#166534', border: '#86efac' },
     default: { bg: '#e5e7eb', fg: '#111827', border: '#9ca3af' },
   };
   return map[variant] ?? map.default;
@@ -481,8 +495,8 @@ function categoryTagStyle(variant) {
 function normalTagStyle(variant) {
   const map = {
     indicator: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
-    mechanics: { bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
-    structure: { bg: '#fff1f2', fg: '#e11d48', border: '#fecdd3' },
+    mechanics: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
+    structure: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
     default: { bg: '#f8fafc', fg: '#4b5563', border: '#d1d5db' },
   };
   return map[variant] ?? map.default;
@@ -699,6 +713,43 @@ function analysisItem(item, scale) {
   );
 }
 
+function analysisSeparator(scale) {
+  const segmentCount = 18;
+  return h(
+    'div',
+    {
+      style: {
+        display: 'flex',
+        width: '100%',
+        padding: `${Math.max(6, scale.gap - 10)}px 6px ${Math.max(2, scale.gap - 12)}px`,
+      },
+    },
+    h(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          gap: 8,
+          opacity: 0.9,
+        },
+      },
+      ...Array.from({ length: segmentCount }, (_, index) => h('div', {
+        key: `analysis-separator-${index}`,
+        style: {
+          display: 'flex',
+          flex: 1,
+          minWidth: 0,
+          height: 2,
+          borderRadius: 999,
+          background: index % 3 === 1 ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.42)',
+        },
+      })),
+    ),
+  );
+}
+
 function sourceCard(card, scale) {
   const tradeable = card.tradeable;
   return h(
@@ -832,7 +883,23 @@ function sourceCard(card, scale) {
           padding: '16px 18px',
         },
       },
-      ...card.lines.map((line) => h(
+      ...card.lines.map((line) => {
+        const dotColor = line.kind === 'danger'
+          ? '#ef4444'
+          : line.note
+            ? '#3b82f6'
+            : '#94a3b8';
+        const textColor = line.kind === 'danger'
+          ? '#dc2626'
+          : line.note
+            ? '#2563eb'
+            : '#475569';
+        const textWeight = line.kind === 'danger'
+          ? 700
+          : line.note
+            ? 700
+            : 500;
+        return h(
         'div',
         {
           style: {
@@ -850,7 +917,7 @@ function sourceCard(card, scale) {
             marginTop: 7,
             borderRadius: 999,
             flexShrink: 0,
-            background: line.note ? '#3b82f6' : '#94a3b8',
+            background: dotColor,
           },
         }),
         h(
@@ -861,8 +928,8 @@ function sourceCard(card, scale) {
               flex: 1,
               minWidth: 0,
               fontSize: Math.max(12, scale.tiny),
-              color: line.note ? '#2563eb' : '#475569',
-              fontWeight: line.note ? 700 : 500,
+              color: textColor,
+              fontWeight: textWeight,
               lineHeight: 1.45,
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
@@ -870,7 +937,8 @@ function sourceCard(card, scale) {
           },
           line.text,
         ),
-      )),
+      );
+      }),
     ),
   );
 }
@@ -1106,7 +1174,12 @@ function buildTree(model, meta, canvasHeight) {
             h(
               'div',
               { style: { display: 'flex', flexDirection: 'column', gap: Math.max(8, scale.gap - 12) } },
-              ...model.analysisItems.map((item) => analysisItem(item, scale)),
+              ...model.analysisItems.flatMap((item, index) => {
+                if (item.isCategory && index > 0) {
+                  return [analysisSeparator(scale), analysisItem(item, scale)];
+                }
+                return [analysisItem(item, scale)];
+              }),
             ),
           ),
         ),
