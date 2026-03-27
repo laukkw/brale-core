@@ -40,7 +40,13 @@ services:
       start_period: 10s
 
   freqtrade:
-    image: freqtradeorg/freqtrade:stable
+    build:
+      context: .
+      dockerfile: Dockerfile.freqtrade
+      args:
+        # 将宿主机环境变量穿透进 Dockerfile
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     restart: unless-stopped
     env_file:
