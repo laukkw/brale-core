@@ -162,7 +162,7 @@ onboarding-refresh-brale:
 	@echo "[OK] onboarding-refresh-brale: done"
 
 start-freqtrade:
-	@$(STACK_ENV) $(COMPOSE) up -d freqtrade
+	@$(STACK_ENV) $(COMPOSE) up -d --build freqtrade
 
 wait-freqtrade:
 	@ \
