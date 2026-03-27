@@ -262,7 +262,7 @@ function translateSieveReason(reason) {
     CROWD_ALIGN_HIGH_BLOCK: "拥挤度过高且与方向一致，系统选择保守处理。",
     CROWD_ALIGN_LOW_WAIT: "方向尚可，但拥挤确认不足，先等待下一轮确认。",
     LIQ_LOW_WAIT: "清算强度不足，先不激活更高仓位。",
-    LIQ_HIGH_ALLOW: "清算与力学标签匹配，允许按筛网规则推进。"
+    LIQ_HIGH_ALLOW: "清算信号与市场机制标签匹配，允许按筛网规则推进。"
   };
   return labels[code] || (code ? `风险筛选命中 ${code}` : "当前未命中额外风险筛选原因");
 }
@@ -1099,10 +1099,10 @@ function renderFlow(flow) {
   const graphNodes = [
     node("agent-indicator", "flow-pos-agent-indicator", stageStatus(agentIndicator, "ok"), agentTitle("指标", agentIndicator), stageSummary(agentIndicator, summarizeStageValues(agentIndicator && agentIndicator.values)), agentIndicator && agentIndicator.values, stageReason(agentIndicator, ""), "agent"),
     node("agent-structure", "flow-pos-agent-structure", stageStatus(agentStructure, "ok"), agentTitle("结构", agentStructure), stageSummary(agentStructure, summarizeStageValues(agentStructure && agentStructure.values)), agentStructure && agentStructure.values, stageReason(agentStructure, ""), "agent"),
-    node("agent-mechanics", "flow-pos-agent-mechanics", stageStatus(agentMechanics, "ok"), agentTitle("力学", agentMechanics), stageSummary(agentMechanics, summarizeStageValues(agentMechanics && agentMechanics.values)), agentMechanics && agentMechanics.values, stageReason(agentMechanics, ""), "agent"),
+    node("agent-mechanics", "flow-pos-agent-mechanics", stageStatus(agentMechanics, "ok"), agentTitle("市场机制", agentMechanics), stageSummary(agentMechanics, summarizeStageValues(agentMechanics && agentMechanics.values)), agentMechanics && agentMechanics.values, stageReason(agentMechanics, ""), "agent"),
     node("provider-indicator", "flow-pos-provider-indicator", stageStatus(providerIndicator, "ok"), `${providerTitlePrefix} / 指标`, stageSummary(providerIndicator, summarizeStageValues(providerIndicator && providerIndicator.values)), providerIndicator && providerIndicator.values, stageReason(providerIndicator, ""), "provider"),
     node("provider-structure", "flow-pos-provider-structure", stageStatus(providerStructure, "ok"), `${providerTitlePrefix} / 结构`, stageSummary(providerStructure, summarizeStageValues(providerStructure && providerStructure.values)), providerStructure && providerStructure.values, stageReason(providerStructure, ""), "provider"),
-    node("provider-mechanics", "flow-pos-provider-mechanics", stageStatus(providerMechanics, "ok"), `${providerTitlePrefix} / 力学`, stageSummary(providerMechanics, summarizeStageValues(providerMechanics && providerMechanics.values)), providerMechanics && providerMechanics.values, stageReason(providerMechanics, ""), "provider")
+    node("provider-mechanics", "flow-pos-provider-mechanics", stageStatus(providerMechanics, "ok"), `${providerTitlePrefix} / 市场机制`, stageSummary(providerMechanics, summarizeStageValues(providerMechanics && providerMechanics.values)), providerMechanics && providerMechanics.values, stageReason(providerMechanics, ""), "provider")
   ];
 
   if (inPosition && inPosition.active) {
@@ -1948,7 +1948,7 @@ function renderDecisionSieve(sieve) {
         <span class="flow-chip pass">仓位系数:${escapeHtml(fmtPercent(Number(sieve.size_factor), 0))}</span>
         <span class="flow-chip">最小仓位:${escapeHtml(fmtPercent(Number(sieve.min_size_factor), 0))}</span>
         <span class="flow-chip">默认仓位:${escapeHtml(fmtPercent(Number(sieve.default_size_factor), 0))}</span>
-        ${matched ? `<span class="flow-chip">力学标签:${escapeHtml(matched.mechanics_tag || "--")}</span>
+        ${matched ? `<span class="flow-chip">机制标签:${escapeHtml(matched.mechanics_tag || "--")}</span>
         <span class="flow-chip">清算置信:${escapeHtml(matched.liq_confidence || "--")}</span>
         <span class="flow-chip">拥挤方向:${matched.crowding_align === true ? "同向" : matched.crowding_align === false ? "反向" : "不限"}</span>` : ""}
       </div>

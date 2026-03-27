@@ -1743,7 +1743,7 @@ function gateRoleLabel(role) {
   const r = String(role || "").toLowerCase();
   if (r.includes("indicator")) return "指标";
   if (r.includes("structure")) return "结构";
-  if (r.includes("mechanics")) return "力学/风险";
+  if (r.includes("mechanics")) return "市场机制";
   return role || "Provider";
 }
 
