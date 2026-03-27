@@ -8,11 +8,8 @@ ARG HOST_GID=1000
 # 3. 临时提权：由于底层镜像默认是 ftuser (1000) 运行，我们需要切回 root 才能修改系统级权限
 USER root
 
-# 4. 核心逻辑：条件触发式权限对齐
-# - if [ "${HOST_UID}" != "1000" ] : 这是一个极度严谨的判断。如果当前开发者本来就是 1000，则直接跳过，零性能损耗。
-# - usermod/groupmod -o : -o 参数允许覆盖和非唯一标识，防止极端情况下 GID 冲突导致构建失败。
-# - chown -R : 将内置的核心代码库和环境变量全部过户给新的宿主机 UID。
-RUN if [ "${HOST_UID}" != "1000" ]; then \
+# 4. 核心逻辑：只要 UID 或 GID 任一偏离默认值，就对齐镜像内用户和目录权限
+RUN if [ "${HOST_UID}" != "1000" ] || [ "${HOST_GID}" != "1000" ]; then \
         usermod -o -u ${HOST_UID} ftuser && \
         groupmod -o -g ${HOST_GID} ftuser && \
         chown -R ${HOST_UID}:${HOST_GID} /freqtrade /home/ftuser; \
