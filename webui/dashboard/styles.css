@@ -1399,6 +1399,13 @@ tbody tr {
   margin-top: 8px;
 }
 
+.decision-kpi-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9fb6d3;
+}
+
 .decision-chip {
   display: inline-flex;
   align-items: center;

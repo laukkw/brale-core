@@ -1656,7 +1656,7 @@ function renderGateProcess(derived) {
     const stepKey = String(entry.step || "").trim();
     if (!stepKey) return;
     const ok = entry.ok === true;
-    const statusText = ok ? "通过" : "停止";
+    const statusText = ok ? "该步通过" : "在此停止";
     const reasonKey = String(entry.reason || "").trim();
     lines.push(`${stepKey}: ${statusText}${reasonKey ? ` (${reasonKey})` : ""}`);
   });

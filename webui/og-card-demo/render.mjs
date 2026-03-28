@@ -16,6 +16,7 @@ const AUTHOR_AVATAR_PATH = path.resolve(__dirname, 'auth.jpg');
 const BRALE_LOGO_PATH = path.resolve(__dirname, '../dashboard/favicon-mask.svg');
 const CARD_WIDTH = 640;
 const CANVAS_WIDTH = CARD_WIDTH;
+const DEFAULT_OUTPUT_WIDTH = 2048;
 const DEFAULT_RENDER_HEIGHT = 1440;
 const MAX_RENDER_HEIGHT = 4096;
 const PAPER_TEXTURE_DATA_URI = "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.9'/%3E%3C/svg%3E";
@@ -170,6 +171,23 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function resolveOutputWidth(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_OUTPUT_WIDTH;
+  }
+  return Math.round(clamp(parsed, CANVAS_WIDTH, 4096));
+}
+
+const OUTPUT_WIDTH = resolveOutputWidth(
+  process.env.BRALE_NOTIFY_OG_OUTPUT_WIDTH
+  ?? process.env.OG_OUTPUT_WIDTH
+  ?? process.env.BRALE_NOTIFY_OG_EXPORT_WIDTH
+  ?? process.env.OG_EXPORT_WIDTH
+  ?? DEFAULT_OUTPUT_WIDTH,
+);
+const EXPORT_SCALE = Math.round((OUTPUT_WIDTH / CANVAS_WIDTH) * 100) / 100;
+
 function ratioToPercent(value) {
   return clamp(Math.round(value * 100), 0, 100);
 }
@@ -282,8 +300,9 @@ export function buildModel(raw) {
       value: `当前 ${consensusScore.toFixed(3)} / 达成率 ${withPercent(scoreRate)}`,
       progressPct: ratioToPercent(scoreRate),
       thresholdPct: ratioToPercent(consensusScoreThreshold),
+      thresholdLabel: '方向阈值',
       thresholdText: consensusScoreThreshold.toFixed(3),
-      status: scorePassed ? '通过' : '未达阈值',
+      status: scorePassed ? '达到方向门槛' : '未达方向门槛',
       tone: scorePassed ? 'emerald' : 'rose',
       isSuccess: scorePassed,
     },
@@ -293,8 +312,9 @@ export function buildModel(raw) {
       value: `当前 ${consensusConfidence.toFixed(3)} / 达成率 ${withPercent(confidenceRate)}`,
       progressPct: ratioToPercent(confidenceRate),
       thresholdPct: ratioToPercent(consensusConfidenceThreshold),
+      thresholdLabel: '置信阈值',
       thresholdText: consensusConfidenceThreshold.toFixed(3),
-      status: confidencePassed ? '通过' : '未达阈值',
+      status: confidencePassed ? '达到置信门槛' : '未达置信门槛',
       tone: confidencePassed ? 'emerald' : 'amber',
       isSuccess: confidencePassed,
     },
@@ -308,23 +328,25 @@ export function buildModel(raw) {
   const evidenceCards = [
     {
       key: 'structure',
-      title: '结构状态',
-      value: `regime ${emptyDash(mapValue(structure.regime))} • quality ${emptyDash(mapValue(structure.quality))}`,
+      title: '结构判断',
+      value: `regime ${emptyDash(mapValue(structure.regime))} • quality ${emptyDash(mapValue(structure.quality))} • 可靠度 ${structureCurrent.toFixed(3)}`,
       progressPct: ratioToPercent(structureCurrent / Math.max(structureTarget, 0.001)),
       thresholdPct: ratioToPercent(structureTarget),
+      thresholdLabel: '可靠度阈值',
       thresholdText: structureTarget.toFixed(2),
-      status: structureCurrent >= structureTarget ? '通过' : '未达阈值',
+      status: structureCurrent >= structureTarget ? '可靠度足够' : '可靠度不足',
       tone: structureCurrent >= structureTarget ? 'emerald' : 'amber',
       isSuccess: structureCurrent >= structureTarget,
     },
     {
       key: 'mechanics',
-      title: '清算风险',
-      value: `risk ${emptyDash(mapValue(mechanics.risk_level))} • crowding ${emptyDash(mapValue(mechanics.crowding))}`,
+      title: '清算风险判断',
+      value: `risk ${emptyDash(mapValue(mechanics.risk_level))} • crowding ${emptyDash(mapValue(mechanics.crowding))} • 可靠度 ${mechanicsCurrent.toFixed(3)}`,
       progressPct: ratioToPercent(mechanicsCurrent / Math.max(mechanicsTarget, 0.001)),
       thresholdPct: ratioToPercent(mechanicsTarget),
+      thresholdLabel: '可靠度阈值',
       thresholdText: mechanicsTarget.toFixed(2),
-      status: mechanicsCurrent >= mechanicsTarget ? '通过' : '未达阈值',
+      status: mechanicsCurrent >= mechanicsTarget ? '可靠度足够' : '可靠度不足',
       tone: mechanicsCurrent >= mechanicsTarget ? 'emerald' : 'amber',
       isSuccess: mechanicsCurrent >= mechanicsTarget,
     },
@@ -362,7 +384,7 @@ export function buildModel(raw) {
         : sieveTriggered
           ? '停止步骤：Gate 未中断'
           : tradeable
-            ? '停止步骤：无（Gate 通过）'
+            ? '停止步骤：无（Gate 放行）'
             : `停止步骤：${stopStep}`,
       note: false,
       kind: 'danger',
@@ -383,7 +405,7 @@ export function buildModel(raw) {
     });
   }
   sourceLines.push({
-    text: '说明：下方证据卡只展示局部阈值，通过不代表最终放行。',
+    text: '说明：共识卡展示方向/置信门槛；结构与清算风险卡展示判断可靠度阈值。',
     note: true,
     kind: 'note',
   });
@@ -642,7 +664,7 @@ function progressCard(card, scale) {
         },
       },
       h('div', { style: { display: 'flex' } }, `进度 ${card.progressPct}%`),
-      h('div', { style: { display: 'flex' } }, `阈值 ${card.thresholdText}`),
+      h('div', { style: { display: 'flex' } }, `${card.thresholdLabel || '阈值'} ${card.thresholdText}`),
     ),
   );
 }
@@ -1067,8 +1089,9 @@ function buildTree(model, meta, canvasHeight) {
           style: {
             display: 'flex',
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-            color: '#9ca3af',
-            fontSize: Math.max(10, scale.tiny - 1),
+            color: '#64748b',
+            fontSize: Math.max(12, scale.tiny),
+            fontWeight: 500,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
           },
@@ -1078,7 +1101,7 @@ function buildTree(model, meta, canvasHeight) {
           { style: { display: 'flex', alignItems: 'center', gap: 12 } },
           h('div', {
             style: {
-              display: 'flex', fontSize: Math.max(12, scale.small - 3), color: '#334155', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontWeight: 700,
+              display: 'flex', fontSize: Math.max(13, scale.small - 2), color: '#334155', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontWeight: 700,
             },
           }, '@lauk_liu'),
           meta.avatarDataUri
@@ -1130,7 +1153,7 @@ function buildTree(model, meta, canvasHeight) {
                 'div',
                 {
                   style: {
-                    display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280', fontSize: Math.max(13, scale.small - 4), fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    display: 'flex', alignItems: 'center', gap: 8, color: '#475569', fontSize: Math.max(14, scale.small - 3), fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontWeight: 500,
                   },
                 },
                 h('div', { style: { display: 'flex', width: 8, height: 8, borderRadius: 999, background: '#94a3b8', flexShrink: 0 } }),
@@ -1150,7 +1173,7 @@ function buildTree(model, meta, canvasHeight) {
               'div',
               { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: Math.max(16, scale.small - 2), color: '#334155', letterSpacing: '0.05em', fontWeight: 800, textTransform: 'uppercase' } },
               h('div', { style: { display: 'flex', width: 10, height: 10, borderRadius: 999, background: '#64748b' } }),
-              h('div', { style: { display: 'flex' } }, '局部阈值证据'),
+    h('div', { style: { display: 'flex' } }, '局部证据快照（非最终放行）'),
             ),
             h(
               'div',
@@ -1262,11 +1285,9 @@ export async function renderCard({ inputPath, outputPath }) {
     fonts,
   });
 
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: 'width', value: CANVAS_WIDTH },
-  });
-
-  const bbox = resvg.getBBox();
+  let cropBox = null;
+  const cropProbe = new Resvg(svg);
+  const bbox = cropProbe.getBBox();
   if (bbox) {
     const cropHeight = clamp(
       Math.ceil(bbox.y + bbox.height + 2),
@@ -1277,7 +1298,15 @@ export async function renderCard({ inputPath, outputPath }) {
     bbox.y = 0;
     bbox.width = CANVAS_WIDTH;
     bbox.height = cropHeight;
-    resvg.cropByBBox(bbox);
+    cropBox = bbox;
+  }
+
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: 'width', value: OUTPUT_WIDTH },
+  });
+
+  if (cropBox) {
+    resvg.cropByBBox(cropBox);
   }
 
   const rendered = resvg.render();
@@ -1288,6 +1317,8 @@ export async function renderCard({ inputPath, outputPath }) {
     width: rendered.width,
     height: rendered.height,
     estimatedHeight: renderHeight,
+    logicalWidth: CANVAS_WIDTH,
+    exportScale: EXPORT_SCALE,
   };
 }
 
@@ -1308,6 +1339,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 export {
   CANVAS_WIDTH,
   CARD_WIDTH,
+  OUTPUT_WIDTH,
+  EXPORT_SCALE,
   DEFAULT_RENDER_HEIGHT,
   estimateRenderHeight,
 };

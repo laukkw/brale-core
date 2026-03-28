@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildModel, CARD_WIDTH, DEFAULT_RENDER_HEIGHT, renderCard } from './render.mjs';
+import { buildModel, CARD_WIDTH, DEFAULT_RENDER_HEIGHT, EXPORT_SCALE, OUTPUT_WIDTH, renderCard } from './render.mjs';
 
 function baseAgentBlocks() {
   return {
@@ -78,7 +78,9 @@ async function renderScenario({ tmpDir, name, input }) {
   await fs.writeFile(inputPath, JSON.stringify(input, null, 2));
   const result = await renderCard({ inputPath, outputPath });
   await fs.access(outputPath);
-  assert.equal(result.width, CARD_WIDTH, `${name} render width should stay fixed`);
+  assert.equal(result.logicalWidth, CARD_WIDTH, `${name} logical width should stay fixed`);
+  assert.equal(result.width, OUTPUT_WIDTH, `${name} export width should use hi-res output`);
+  assert.ok(result.exportScale >= 1, `${name} export scale should be >= 1`);
   assert.ok(result.height > 0, `${name} render height should be positive`);
   return { inputPath, outputPath, result };
 }
@@ -95,7 +97,10 @@ async function main() {
 
   const { result } = await renderScenario({ tmpDir, name: 'short', input: shortInput });
 
-  assert.ok(result.height < DEFAULT_RENDER_HEIGHT, `expected cropped height < ${DEFAULT_RENDER_HEIGHT}, got ${result.height}`);
+  assert.ok(
+    result.height < DEFAULT_RENDER_HEIGHT * EXPORT_SCALE,
+    `expected cropped height < ${DEFAULT_RENDER_HEIGHT * EXPORT_SCALE}, got ${result.height}`,
+  );
 
   const openSuccessInput = createInput({
     decision_action: 'OPEN_LONG',
@@ -118,7 +123,7 @@ async function main() {
   const openSuccessModel = buildModel(openSuccessInput);
   assert.equal(openSuccessModel.sourceCard.sourceLabel, 'Gate 总结');
   assert.equal(openSuccessModel.sourceCard.verdictText, '可交易');
-  assert.equal(openSuccessModel.sourceCard.lines[0].text, '停止步骤：无（Gate 通过）');
+  assert.equal(openSuccessModel.sourceCard.lines[0].text, '停止步骤：无（Gate 放行）');
   await renderScenario({ tmpDir, name: 'open-success', input: openSuccessInput });
 
   const tightenedRiskInput = createInput({
@@ -158,15 +163,16 @@ async function main() {
 
   const sampleInputPath = path.resolve('./sample-input.json');
   const sampleResult = await renderCard({ inputPath: sampleInputPath, outputPath: sampleOutputPath });
-  assert.equal(sampleResult.width, CARD_WIDTH, 'sample render width should stay fixed');
+  assert.equal(sampleResult.logicalWidth, CARD_WIDTH, 'sample logical width should stay fixed');
+  assert.equal(sampleResult.width, OUTPUT_WIDTH, 'sample export width should use hi-res output');
   assert.ok(sampleResult.height > result.height, 'sample render should be taller than short fixture');
   assert.ok(
-    sampleResult.height < sampleResult.estimatedHeight - 100,
-    `expected sample render to stay well below estimate ceiling, got height=${sampleResult.height} estimate=${sampleResult.estimatedHeight}`,
+    sampleResult.height < (sampleResult.estimatedHeight - 100) * EXPORT_SCALE,
+    `expected sample render to stay well below scaled estimate ceiling, got height=${sampleResult.height} estimate=${sampleResult.estimatedHeight} scale=${EXPORT_SCALE}`,
   );
   await fs.access(sampleOutputPath);
 
-  console.log(`ok short=${result.width}x${result.height} open-success tightened-risk sample=${sampleResult.width}x${sampleResult.height}`);
+  console.log(`ok scale=${EXPORT_SCALE} short=${result.width}x${result.height} open-success tightened-risk sample=${sampleResult.width}x${sampleResult.height}`);
 }
 
 main().catch((error) => {

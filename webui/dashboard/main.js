@@ -193,12 +193,32 @@ function fmtConsensusValue(value) {
   return parsed.toFixed(3);
 }
 
-function fmtConsensusPassed(value) {
+function fmtThresholdStatus(value) {
   if (value === true) {
-    return "达标";
+    return "达到分数阈值";
   }
   if (value === false) {
-    return "未达标";
+    return "未达分数阈值";
+  }
+  return "--";
+}
+
+function fmtConfidenceThresholdStatus(value) {
+  if (value === true) {
+    return "达到置信阈值";
+  }
+  if (value === false) {
+    return "未达置信阈值";
+  }
+  return "--";
+}
+
+function fmtOverallConsensusStatus(value) {
+  if (value === true) {
+    return "已达共识门槛";
+  }
+  if (value === false) {
+    return "未达共识门槛";
   }
   return "--";
 }
@@ -2034,7 +2054,7 @@ function renderDecisionDetail(detail, fallbackMessage, selectedDecisionAt) {
           <div class="decision-chip-row">
             <span class="decision-chip ${decisionActionClass(action)}">${escapeHtml(actionLabel(action))}</span>
             <span class="decision-chip ${tradeable ? "pass" : "fail"}">可交易 ${tradeable ? "是" : "否"}</span>
-            <span class="decision-chip ${decisionBoolClass(overallPassed)}">共识 ${escapeHtml(fmtConsensusPassed(overallPassed))}</span>
+            <span class="decision-chip ${decisionBoolClass(overallPassed)}">共识 ${escapeHtml(fmtOverallConsensusStatus(overallPassed))}</span>
           </div>
         </div>
         <a class="decision-link-btn" href="${escapeHtml(decisionViewHref)}" target="_blank" rel="noopener noreferrer">打开决策视图</a>
@@ -2047,7 +2067,7 @@ function renderDecisionDetail(detail, fallbackMessage, selectedDecisionAt) {
         <div class="decision-kpi-card">
           <div class="decision-kpi-head">
             <span>共识总分</span>
-            <span class="decision-chip ${decisionBoolClass(scorePassed)}">${escapeHtml(fmtConsensusPassed(scorePassed))}</span>
+            <span class="decision-chip ${decisionBoolClass(scorePassed)}">${escapeHtml(fmtThresholdStatus(scorePassed))}</span>
           </div>
           <div class="decision-kpi-value">${escapeHtml(fmtConsensusValue(detail.consensus_score))}</div>
           <div class="decision-kpi-sub">阈值 ${escapeHtml(fmtConsensusValue(detail.consensus_score_threshold))}</div>
@@ -2057,7 +2077,7 @@ function renderDecisionDetail(detail, fallbackMessage, selectedDecisionAt) {
         <div class="decision-kpi-card">
           <div class="decision-kpi-head">
             <span>置信度</span>
-            <span class="decision-chip ${decisionBoolClass(confidencePassed)}">${escapeHtml(fmtConsensusPassed(confidencePassed))}</span>
+            <span class="decision-chip ${decisionBoolClass(confidencePassed)}">${escapeHtml(fmtConfidenceThresholdStatus(confidencePassed))}</span>
           </div>
           <div class="decision-kpi-value">${escapeHtml(fmtConsensusValue(detail.consensus_confidence))}</div>
           <div class="decision-kpi-sub">阈值 ${escapeHtml(fmtConsensusValue(detail.consensus_confidence_threshold))}</div>
@@ -2066,10 +2086,11 @@ function renderDecisionDetail(detail, fallbackMessage, selectedDecisionAt) {
         </div>
       </div>
       <div class="decision-check-row">
-        <span class="decision-chip ${decisionBoolClass(scorePassed)}">总分 ${escapeHtml(fmtConsensusPassed(scorePassed))}</span>
-        <span class="decision-chip ${decisionBoolClass(confidencePassed)}">置信度 ${escapeHtml(fmtConsensusPassed(confidencePassed))}</span>
-        <span class="decision-chip ${decisionBoolClass(overallPassed)}">总判定 ${escapeHtml(fmtConsensusPassed(overallPassed))}</span>
-      </div>`}
+        <span class="decision-chip ${decisionBoolClass(scorePassed)}">总分 ${escapeHtml(fmtThresholdStatus(scorePassed))}</span>
+        <span class="decision-chip ${decisionBoolClass(confidencePassed)}">置信度 ${escapeHtml(fmtConfidenceThresholdStatus(confidencePassed))}</span>
+        <span class="decision-chip ${decisionBoolClass(overallPassed)}">共识 ${escapeHtml(fmtOverallConsensusStatus(overallPassed))}</span>
+      </div>
+      <div class="decision-kpi-note">这里的总分/置信度只表示方向共识是否达到各自门槛，不代表 Gate 已放行。</div>`}
       ${!isTighten ? renderDecisionPlanContext(detail.plan_context) : ""}
       ${renderDecisionSieve(detail.sieve)}
       ${renderDecisionPlan(detail.plan)}
