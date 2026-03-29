@@ -33,6 +33,7 @@ docs/presentations/
 /brale-web/
 
 .env
+.worktrees/
 
 # Binaries / build outputs
 /brale
