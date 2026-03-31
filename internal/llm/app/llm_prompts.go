@@ -39,6 +39,7 @@ type FlatRiskPromptInput struct {
 	Direction            string
 	Entry                float64
 	RiskPct              float64
+	PlanSummary          map[string]any
 	Consensus            map[string]any
 	Structure            map[string]any
 	OtherProviderSummary map[string]any
@@ -72,12 +73,14 @@ func (b LLMPromptBuilder) FlatRiskInitPrompt(input FlatRiskPromptInput) (string,
 		"entry":     input.Entry,
 		"risk_pct":  input.RiskPct,
 	})
+	planRaw, _ := json.Marshal(input.PlanSummary)
 	consensusRaw, _ := json.Marshal(input.Consensus)
 	structureRaw, _ := json.Marshal(input.Structure)
 	providerRaw, _ := json.Marshal(input.OtherProviderSummary)
 	user := formatPayloads(
 		b.UserFormat,
 		payloadBlock{label: "交易上下文(必填):", payload: string(contextRaw)},
+		payloadBlock{label: "计划摘要(必填):", payload: string(planRaw)},
 		payloadBlock{label: "共识摘要(必填):", payload: string(consensusRaw)},
 		payloadBlock{label: "结构摘要(必填):", payload: string(structureRaw)},
 		payloadBlock{label: "其他 Provider 摘要(必填):", payload: string(providerRaw)},
@@ -441,6 +444,9 @@ func validateFlatRiskPromptInput(input FlatRiskPromptInput) error {
 	}
 	if input.RiskPct <= 0 {
 		return fmt.Errorf("flat_risk.risk_pct is required")
+	}
+	if err := requireNonEmptyMap("flat_risk.plan_summary", input.PlanSummary); err != nil {
+		return err
 	}
 	if err := requireNonEmptyMap("flat_risk.consensus", input.Consensus); err != nil {
 		return err

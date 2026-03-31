@@ -49,9 +49,11 @@ func (flow LLMFlow) String() string {
 type LLMStage string
 
 const (
-	LLMStageIndicator LLMStage = "indicator"
-	LLMStageStructure LLMStage = "structure"
-	LLMStageMechanics LLMStage = "mechanics"
+	LLMStageIndicator    LLMStage = "indicator"
+	LLMStageStructure    LLMStage = "structure"
+	LLMStageMechanics    LLMStage = "mechanics"
+	LLMStageRiskFlatInit LLMStage = "risk_flat_init"
+	LLMStageRiskTighten  LLMStage = "risk_tighten"
 )
 
 func NewLLMStage(raw string) (LLMStage, error) {
@@ -61,7 +63,7 @@ func NewLLMStage(raw string) (LLMStage, error) {
 	}
 	value = strings.ToLower(value)
 	switch LLMStage(value) {
-	case LLMStageIndicator, LLMStageStructure, LLMStageMechanics:
+	case LLMStageIndicator, LLMStageStructure, LLMStageMechanics, LLMStageRiskFlatInit, LLMStageRiskTighten:
 		return LLMStage(value), nil
 	default:
 		return "", fmt.Errorf("stage is invalid: %s", value)
@@ -70,31 +72,6 @@ func NewLLMStage(raw string) (LLMStage, error) {
 
 func (stage LLMStage) String() string {
 	return string(stage)
-}
-
-type SessionMode string
-
-const (
-	SessionModeSession   SessionMode = "session"
-	SessionModeStateless SessionMode = "stateless"
-)
-
-func NewSessionMode(raw string) (SessionMode, error) {
-	value, err := normalizeSessionField("mode", raw)
-	if err != nil {
-		return "", err
-	}
-	value = strings.ToLower(value)
-	switch SessionMode(value) {
-	case SessionModeSession, SessionModeStateless:
-		return SessionMode(value), nil
-	default:
-		return "", fmt.Errorf("mode is invalid: %s", value)
-	}
-}
-
-func (mode SessionMode) String() string {
-	return string(mode)
 }
 
 type RoundLaneKey string

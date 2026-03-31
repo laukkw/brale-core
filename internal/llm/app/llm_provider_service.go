@@ -17,17 +17,14 @@ import (
 	"brale-core/internal/pkg/parallel"
 	"brale-core/internal/prompt/positionprompt"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type LLMProviderService struct {
-	Runner         *provider.Runner
-	Prompts        LLMPromptBuilder
-	Cache          *LLMStageCache
-	Tracker        *LLMRunTracker
-	SessionManager *llm.RoundSessionManager
-	SessionMode    llm.SessionMode
+	Runner  *provider.Runner
+	Prompts LLMPromptBuilder
+	Cache   *LLMStageCache
+	Tracker *LLMRunTracker
 }
 
 func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.IndicatorSummary, st agent.StructureSummary, mech agent.MechanicsSummary, enabled decision.AgentEnabled) (provider.IndicatorProviderOut, provider.StructureProviderOut, provider.MechanicsProviderOut, decision.ProviderPromptSet, error) {
@@ -61,8 +58,8 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 				indOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorInput, "provider_indicator", func(callCtx context.Context, sessionID string, user string) (provider.IndicatorProviderOut, error) {
-				return s.Runner.JudgeIndicatorWithSession(callCtx, sessionID, prompts.IndicatorSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorInput, "provider_indicator", func(callCtx context.Context, _ string, user string) (provider.IndicatorProviderOut, error) {
+				return s.Runner.JudgeIndicator(callCtx, prompts.IndicatorSys, user)
 			})
 			indPrompt.User = finalUser
 			if stageErr != nil {
@@ -88,8 +85,8 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 				stOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureInput, "provider_structure", func(callCtx context.Context, sessionID string, user string) (provider.StructureProviderOut, error) {
-				return s.Runner.JudgeStructureWithSession(callCtx, sessionID, prompts.StructureSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureInput, "provider_structure", func(callCtx context.Context, _ string, user string) (provider.StructureProviderOut, error) {
+				return s.Runner.JudgeStructure(callCtx, prompts.StructureSys, user)
 			})
 			stPrompt.User = finalUser
 			if stageErr != nil {
@@ -115,8 +112,8 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 				mechOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsInput, "provider_mechanics", func(callCtx context.Context, sessionID string, user string) (provider.MechanicsProviderOut, error) {
-				return s.Runner.JudgeMechanicsWithSession(callCtx, sessionID, prompts.MechanicsSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsInput, "provider_mechanics", func(callCtx context.Context, _ string, user string) (provider.MechanicsProviderOut, error) {
+				return s.Runner.JudgeMechanics(callCtx, prompts.MechanicsSys, user)
 			})
 			mechPrompt.User = finalUser
 			if stageErr != nil {
@@ -183,8 +180,8 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 				indOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorInput, "provider_indicator_in_position", func(callCtx context.Context, sessionID string, user string) (provider.InPositionIndicatorOut, error) {
-				return s.Runner.JudgeIndicatorInPositionWithSession(callCtx, sessionID, prompts.IndicatorSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorInput, "provider_indicator_in_position", func(callCtx context.Context, _ string, user string) (provider.InPositionIndicatorOut, error) {
+				return s.Runner.JudgeIndicatorInPosition(callCtx, prompts.IndicatorSys, user)
 			})
 			indPrompt.User = finalUser
 			if stageErr != nil {
@@ -210,8 +207,8 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 				stOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureInput, "provider_structure_in_position", func(callCtx context.Context, sessionID string, user string) (provider.InPositionStructureOut, error) {
-				return s.Runner.JudgeStructureInPositionWithSession(callCtx, sessionID, prompts.StructureSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureInput, "provider_structure_in_position", func(callCtx context.Context, _ string, user string) (provider.InPositionStructureOut, error) {
+				return s.Runner.JudgeStructureInPosition(callCtx, prompts.StructureSys, user)
 			})
 			stPrompt.User = finalUser
 			if stageErr != nil {
@@ -237,8 +234,8 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 				mechOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsInput, "provider_mechanics_in_position", func(callCtx context.Context, sessionID string, user string) (provider.InPositionMechanicsOut, error) {
-				return s.Runner.JudgeMechanicsInPositionWithSession(callCtx, sessionID, prompts.MechanicsSys, user)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsInput, "provider_mechanics_in_position", func(callCtx context.Context, _ string, user string) (provider.InPositionMechanicsOut, error) {
+				return s.Runner.JudgeMechanicsInPosition(callCtx, prompts.MechanicsSys, user)
 			})
 			mechPrompt.User = finalUser
 			if stageErr != nil {
@@ -274,90 +271,21 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 }
 
 func (s LLMProviderService) providerUserPrompt(ctx context.Context, user string, symbol string, cacheStage string, stage llm.LLMStage) string {
-	_, mode, err := s.resolveLaneMode(llm.WithSessionSymbol(ctx, symbol), stage)
-	if err == nil && mode == llm.SessionModeSession {
-		return user
-	}
 	return appendLastOutput(user, s.Cache, symbol, cacheStage)
 }
 
 func runProviderWithLaneSession[T any](ctx context.Context, service LLMProviderService, symbol string, stage llm.LLMStage, input string, cacheStage string, invoke func(context.Context, string, string) (T, error)) (T, string, error) {
-	var zero T
 	callCtx := llm.WithSessionSymbol(ctx, symbol)
-	key, laneMode, err := service.resolveLaneMode(callCtx, stage)
-	if err != nil || laneMode != llm.SessionModeSession {
-		service.logLaneCall(callCtx, stage, llm.SessionModeStateless, "", false, "")
-		user := appendLastOutput(input, service.Cache, symbol, cacheStage)
-		out, callErr := invoke(callCtx, "", user)
-		return out, user, callErr
-	}
-	sessionID, reused, err := service.acquireLaneSession(key)
-	if err != nil {
-		service.markLaneFallback(callCtx, key, stage, string(llm.SessionCapabilityCreateFailed))
-		user := appendLastOutput(input, service.Cache, symbol, cacheStage)
-		out, callErr := invoke(callCtx, "", user)
-		return out, user, callErr
-	}
-	currentUser := input
-	if reused {
-		currentUser = reusedSessionConstraintUserPrompt()
-	}
-	out, callErr := invoke(callCtx, sessionID, currentUser)
-	if callErr == nil {
-		service.logLaneCall(callCtx, stage, laneMode, sessionID, reused, "")
-		return out, currentUser, nil
-	}
-	if !llm.IsSessionCapabilityError(callErr) {
-		return zero, currentUser, callErr
-	}
-	fallbackReason := string(llm.SessionCapabilityUnsupported)
-	if llm.IsSessionCapabilityReason(callErr, llm.SessionCapabilityCreateFailed) {
-		fallbackReason = string(llm.SessionCapabilityCreateFailed)
-	}
-	if llm.IsSessionCapabilityReason(callErr, llm.SessionCapabilityExpired) {
-		fallbackReason = string(llm.SessionCapabilityExpired)
-	}
-	service.markLaneFallback(callCtx, key, stage, fallbackReason)
 	user := appendLastOutput(input, service.Cache, symbol, cacheStage)
-	out, retryErr := invoke(callCtx, "", user)
-	return out, user, retryErr
+	service.logLaneCall(callCtx, stage, "stateless", "", false, "")
+	out, err := invoke(callCtx, "", user)
+	return out, user, err
 }
 
-func reusedSessionConstraintUserPrompt() string {
-	return "继续基于当前会话上下文完成本轮判断。只输出一个 JSON 对象；严格遵循 system 提示中的字段、枚举和值类型约束；不要输出解释、Markdown 或代码块。"
-}
-
-func (s LLMProviderService) resolveLaneMode(ctx context.Context, stage llm.LLMStage) (llm.RoundLaneKey, llm.SessionMode, error) {
-	if s.SessionMode != llm.SessionModeSession || s.SessionManager == nil {
-		return "", llm.SessionModeStateless, nil
-	}
-	key, err := llm.RoundLaneKeyFromContext(ctx, stage)
-	if err != nil {
-		return "", llm.SessionModeStateless, err
-	}
-	return key, s.SessionManager.Mode(key), nil
-}
-
-func (s LLMProviderService) acquireLaneSession(key llm.RoundLaneKey) (string, bool, error) {
-	if s.SessionManager == nil {
-		return "", false, nil
-	}
-	return s.SessionManager.AcquireOrCreate(key, func() (string, error) {
-		return uuid.NewString(), nil
-	})
-}
-
-func (s LLMProviderService) markLaneFallback(ctx context.Context, key llm.RoundLaneKey, stage llm.LLMStage, fallbackReason string) {
-	if s.SessionManager != nil {
-		s.SessionManager.MarkFallback(key)
-	}
-	s.logLaneCall(ctx, stage, llm.SessionModeStateless, "", false, fallbackReason)
-}
-
-func (s LLMProviderService) logLaneCall(ctx context.Context, stage llm.LLMStage, mode llm.SessionMode, sessionID string, reused bool, fallbackReason string) {
+func (s LLMProviderService) logLaneCall(ctx context.Context, stage llm.LLMStage, mode string, sessionID string, reused bool, fallbackReason string) {
 	fields := []zap.Field{
 		zap.String("stage", stage.String()),
-		zap.String("session_mode", mode.String()),
+		zap.String("session_mode", strings.TrimSpace(mode)),
 		zap.String("session_id", strings.TrimSpace(sessionID)),
 		zap.Bool("session_reused", reused),
 		zap.String("fallback_reason", strings.TrimSpace(fallbackReason)),

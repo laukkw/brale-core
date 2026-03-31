@@ -11,16 +11,11 @@ import (
 	"brale-core/internal/llm"
 	"brale-core/internal/pkg/llmclean"
 	"brale-core/internal/risk/initexit"
-
-	"github.com/google/uuid"
 )
 
 type LLMRiskService struct {
 	Provider llm.Provider
 	Prompts  LLMPromptBuilder
-
-	SessionManager *llm.RoundSessionManager
-	SessionMode    llm.SessionMode
 }
 
 func (s LLMRiskService) FlatRiskInitLLM() decision.FlatRiskInitLLM {
@@ -36,7 +31,7 @@ func (s LLMRiskService) FlatRiskInitLLM() decision.FlatRiskInitLLM {
 		if err != nil {
 			return nil, err
 		}
-		raw, err := s.callRiskWithLaneSession(ctx, input.Symbol, llm.LLMFlowFlat, system, user)
+		raw, err := s.Provider.Call(ctx, system, user)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +62,7 @@ func (s LLMRiskService) TightenRiskLLM() decision.TightenRiskUpdateLLM {
 		if err != nil {
 			return nil, err
 		}
-		raw, err := s.callRiskWithLaneSession(ctx, input.Symbol, llm.LLMFlowInPosition, system, user)
+		raw, err := s.Provider.Call(ctx, system, user)
 		if err != nil {
 			return nil, err
 		}
@@ -90,11 +85,23 @@ func buildFlatRiskPromptInput(input decision.FlatRiskInitInput) (FlatRiskPromptI
 		return FlatRiskPromptInput{}, fmt.Errorf("plan entry is required")
 	}
 	consensus, structureSummary, otherProviderSummary := deriveRiskPromptSummaries(input.Gate)
+	planSummary := map[string]any{
+		"entry":          input.Plan.Entry,
+		"risk_pct":       input.Plan.RiskPct,
+		"stop_loss":      input.Plan.StopLoss,
+		"take_profits":   append([]float64(nil), input.Plan.TakeProfits...),
+		"atr":            input.Plan.RiskAnnotations.ATR,
+		"max_invest_pct": input.Plan.RiskAnnotations.MaxInvestPct,
+		"max_invest_amt": input.Plan.RiskAnnotations.MaxInvestAmt,
+		"max_leverage":   input.Plan.RiskAnnotations.MaxLeverage,
+		"liq_price":      input.Plan.RiskAnnotations.LiqPrice,
+	}
 	return FlatRiskPromptInput{
 		Symbol:               strings.ToUpper(strings.TrimSpace(input.Symbol)),
 		Direction:            strings.ToLower(strings.TrimSpace(input.Plan.Direction)),
 		Entry:                input.Plan.Entry,
 		RiskPct:              input.Plan.RiskPct,
+		PlanSummary:          planSummary,
 		Consensus:            consensus,
 		Structure:            structureSummary,
 		OtherProviderSummary: otherProviderSummary,
@@ -199,13 +206,25 @@ type tightenRiskPatchPayload struct {
 	TakeProfits []float64 `json:"take_profits"`
 }
 
+var flatRiskPatchAllowedFields = map[string]struct{}{
+	"entry":              {},
+	"stop_loss":          {},
+	"take_profits":       {},
+	"take_profit_ratios": {},
+	"reason":             {},
+}
+
 func decodeFlatRiskPatch(raw string) (flatRiskPatchPayload, error) {
 	clean := strings.TrimSpace(llmclean.CleanJSON(raw))
 	if clean == "" {
 		return flatRiskPatchPayload{}, fmt.Errorf("empty response")
 	}
+	sanitized, err := filterJSONObjectFields(clean, flatRiskPatchAllowedFields)
+	if err != nil {
+		return flatRiskPatchPayload{}, err
+	}
 	var payload flatRiskPatchPayload
-	if err := decodeStrictJSON(clean, &payload); err != nil {
+	if err := decodeStrictJSON(sanitized, &payload); err != nil {
 		return flatRiskPatchPayload{}, err
 	}
 	if payload.StopLoss == nil {
@@ -227,6 +246,24 @@ func decodeFlatRiskPatch(raw string) (flatRiskPatchPayload, error) {
 		return flatRiskPatchPayload{}, fmt.Errorf("reason is required")
 	}
 	return payload, nil
+}
+
+func filterJSONObjectFields(raw string, allowed map[string]struct{}) (string, error) {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return "", fmt.Errorf("invalid json: %w", err)
+	}
+	filtered := make(map[string]json.RawMessage, len(payload))
+	for key, value := range payload {
+		if _, ok := allowed[key]; ok {
+			filtered[key] = value
+		}
+	}
+	out, err := json.Marshal(filtered)
+	if err != nil {
+		return "", fmt.Errorf("marshal filtered json: %w", err)
+	}
+	return string(out), nil
 }
 
 func decodeTightenRiskPatch(raw string) (tightenRiskPatchPayload, error) {
@@ -254,62 +291,4 @@ func decodeStrictJSON(raw string, out any) error {
 		return fmt.Errorf("invalid json: %w", err)
 	}
 	return nil
-}
-
-func (s LLMRiskService) callRiskWithLaneSession(ctx context.Context, symbol string, flow llm.LLMFlow, system string, user string) (string, error) {
-	callCtx := llm.WithSessionSymbol(ctx, symbol)
-	callCtx = llm.WithSessionFlow(callCtx, flow)
-	key, laneMode, err := s.resolveLaneMode(callCtx, llm.LLMStageStructure)
-	if err != nil || laneMode != llm.SessionModeSession {
-		return llm.CallWithOptionalSession(callCtx, s.Provider, "", system, user)
-	}
-	sessionID, reused, err := s.acquireLaneSession(key)
-	if err != nil {
-		s.markLaneFallback(key)
-		return llm.CallWithOptionalSession(callCtx, s.Provider, "", system, user)
-	}
-	currentUser := user
-	if reused {
-		currentUser = reusedRiskSessionConstraintUserPrompt()
-	}
-	raw, callErr := llm.CallWithOptionalSession(callCtx, s.Provider, sessionID, system, currentUser)
-	if callErr == nil {
-		return raw, nil
-	}
-	if !llm.IsSessionCapabilityError(callErr) {
-		return "", callErr
-	}
-	s.markLaneFallback(key)
-	return llm.CallWithOptionalSession(callCtx, s.Provider, "", system, user)
-}
-
-func reusedRiskSessionConstraintUserPrompt() string {
-	return "继续基于当前会话上下文完成本轮判断。只输出一个 JSON 对象；严格遵循 system 提示中的字段、枚举和值类型约束；不要输出解释、Markdown 或代码块。"
-}
-
-func (s LLMRiskService) resolveLaneMode(ctx context.Context, stage llm.LLMStage) (llm.RoundLaneKey, llm.SessionMode, error) {
-	if s.SessionMode != llm.SessionModeSession || s.SessionManager == nil {
-		return "", llm.SessionModeStateless, nil
-	}
-	key, err := llm.RoundLaneKeyFromContext(ctx, stage)
-	if err != nil {
-		return "", llm.SessionModeStateless, err
-	}
-	return key, s.SessionManager.Mode(key), nil
-}
-
-func (s LLMRiskService) acquireLaneSession(key llm.RoundLaneKey) (string, bool, error) {
-	if s.SessionManager == nil {
-		return "", false, nil
-	}
-	return s.SessionManager.AcquireOrCreate(key, func() (string, error) {
-		return uuid.NewString(), nil
-	})
-}
-
-func (s LLMRiskService) markLaneFallback(key llm.RoundLaneKey) {
-	if s.SessionManager == nil {
-		return
-	}
-	s.SessionManager.MarkFallback(key)
 }
