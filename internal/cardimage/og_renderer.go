@@ -51,6 +51,7 @@ type ogGate struct {
 	ActionBefore   string                `json:"action_before,omitempty"`
 	SieveAction    string                `json:"sieve_action,omitempty"`
 	SieveReason    string                `json:"sieve_reason,omitempty"`
+	Execution      map[string]any        `json:"execution,omitempty"`
 	Consensus      *ogDirectionConsensus `json:"direction_consensus,omitempty"`
 	Trace          []ogGateTraceStep     `json:"trace,omitempty"`
 }
@@ -241,6 +242,7 @@ func buildPayload(input decisionfmt.DecisionInput, report decisionfmt.DecisionRe
 	payload.RawBlocks.Gate.ActionBefore = readDerivedString(report.Gate.Derived, "gate_action_before_sieve")
 	payload.RawBlocks.Gate.SieveAction = readDerivedString(report.Gate.Derived, "sieve_action")
 	payload.RawBlocks.Gate.SieveReason = readDerivedString(report.Gate.Derived, "sieve_reason")
+	payload.RawBlocks.Gate.Execution = readDerivedMap(report.Gate.Derived, "execution")
 	payload.RawBlocks.Gate.Trace = parseGateTrace(report.Gate.Derived)
 	if report.Gate.RuleHit != nil {
 		payload.RawBlocks.Gate.RuleName = strings.TrimSpace(report.Gate.RuleHit.Name)
@@ -271,6 +273,25 @@ func buildPayload(input decisionfmt.DecisionInput, report decisionfmt.DecisionRe
 		}
 	}
 	return payload, nil
+}
+
+func readDerivedMap(derived map[string]any, key string) map[string]any {
+	if len(derived) == 0 {
+		return nil
+	}
+	value, ok := derived[key]
+	if !ok || value == nil {
+		return nil
+	}
+	raw, ok := value.(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(raw))
+	for k, v := range raw {
+		out[k] = v
+	}
+	return out
 }
 
 func readDerivedString(derived map[string]any, key string) string {
