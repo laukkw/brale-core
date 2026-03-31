@@ -14,7 +14,7 @@ docs/ppt/
 项目运行逻辑全说明.md
 docs/position-flow-report.md
 docs/project_introduction_technical.md
-
+docs/*
 *_test
 *_test.go
 AGENTS.md
