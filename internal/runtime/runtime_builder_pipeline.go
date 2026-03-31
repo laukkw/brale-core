@@ -6,7 +6,6 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
-	"brale-core/internal/llm"
 	llmapp "brale-core/internal/llm/app"
 	"brale-core/internal/market"
 	"brale-core/internal/position"
@@ -17,7 +16,7 @@ import (
 	"brale-core/internal/transport/notify"
 )
 
-func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor *decision.FeatureCompressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, runtimeCfg symbolRuntimeConfig, sessionManager *llm.RoundSessionManager, sessionMode llm.SessionMode) decision.Runner {
+func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor *decision.FeatureCompressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, runtimeCfg symbolRuntimeConfig) decision.Runner {
 	defaults := config.DefaultPromptDefaults()
 	riskPrompts := llmapp.LLMPromptBuilder{
 		RiskFlatInitSystem: defaults.RiskFlatInit,
@@ -25,10 +24,8 @@ func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor 
 		UserFormat:         llmapp.UserPromptFormatBullet,
 	}
 	riskSvc := llmapp.LLMRiskService{
-		Provider:       newLLMClient(sys, runtimeCfg.Symbol.LLM.Provider.Structure),
-		Prompts:        riskPrompts,
-		SessionManager: sessionManager,
-		SessionMode:    sessionMode,
+		Provider: newLLMClient(sys, runtimeCfg.Symbol.LLM.Provider.Structure),
+		Prompts:  riskPrompts,
 	}
 	return decision.Runner{
 		Snapshotter:     fetcher,
@@ -43,7 +40,7 @@ func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor 
 	}
 }
 
-func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource, barInterval time.Duration, symbol string, bind strategy.StrategyBinding, symbolCfg config.SymbolConfig, stratCfg config.StrategyConfig, runner *decision.Runner, exitConfirmCache *decision.ExitConfirmCache, sessionManager *llm.RoundSessionManager, sessionMode llm.SessionMode) (*decision.Pipeline, error) {
+func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource, barInterval time.Duration, symbol string, bind strategy.StrategyBinding, symbolCfg config.SymbolConfig, stratCfg config.StrategyConfig, runner *decision.Runner, exitConfirmCache *decision.ExitConfirmCache) (*decision.Pipeline, error) {
 	runtimeCfg := symbolRuntimeConfig{
 		Symbol:      symbolCfg,
 		Strategy:    stratCfg,
@@ -51,10 +48,10 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		BarInterval: barInterval,
 	}
 	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource)
-	return buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, runner, exitConfirmCache, sessionManager, sessionMode)
+	return buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, runner, exitConfirmCache)
 }
 
-func buildPipelineFromRuntimeConfig(sys config.SystemConfig, deps SymbolRuntimeBuildDeps, runtimeCfg symbolRuntimeConfig, runner *decision.Runner, exitConfirmCache *decision.ExitConfirmCache, sessionManager *llm.RoundSessionManager, sessionMode llm.SessionMode) (*decision.Pipeline, error) {
+func buildPipelineFromRuntimeConfig(sys config.SystemConfig, deps SymbolRuntimeBuildDeps, runtimeCfg symbolRuntimeConfig, runner *decision.Runner, exitConfirmCache *decision.ExitConfirmCache) (*decision.Pipeline, error) {
 	formatter := decision.NewFormatter()
 	notifier, err := notify.NewManager(notify.FromConfig(sys.Notification), formatter)
 	if err != nil {
@@ -92,9 +89,6 @@ func buildPipelineFromRuntimeConfig(sys config.SystemConfig, deps SymbolRuntimeB
 		ProviderInPositionStore: hooks.SaveProviderInPosition,
 		GateStore:               hooks.SaveGate,
 		Notifier:                notifier,
-		SessionManager:          sessionManager,
-		SessionCleanup:          llm.CleanupOpenAISession,
-		SessionMode:             sessionMode,
 		TightenRiskLLM:          runner.TightenRiskLLM,
 	}, nil
 }

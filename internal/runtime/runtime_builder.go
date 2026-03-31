@@ -9,7 +9,6 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
-	"brale-core/internal/llm"
 	"brale-core/internal/market"
 	"brale-core/internal/position"
 	"brale-core/internal/reconcile"
@@ -81,17 +80,12 @@ func buildSymbolRuntimeFromConfig(metricsCtx context.Context, sys config.SystemC
 }
 
 func buildSymbolRuntimeFromRuntimeConfig(metricsCtx context.Context, sys config.SystemConfig, runtimeCfg symbolRuntimeConfig, deps SymbolRuntimeBuildDeps) (SymbolRuntime, error) {
-	sessionManager := llm.NewRoundSessionManager()
-	sessionMode, err := config.ResolveSessionMode(sys, runtimeCfg.Symbol)
-	if err != nil {
-		return SymbolRuntime{}, err
-	}
-	agentSvc, providerSvc, tracker := buildSymbolAgents(sys, runtimeCfg.Symbol, sessionManager, sessionMode)
+	agentSvc, providerSvc, tracker := buildSymbolAgents(sys, runtimeCfg.Symbol)
 	fetcher := buildSnapshotFetcher(runtimeCfg.Symbol, runtimeCfg.RequireMechanics)
 	compressor, services := buildCompressor(runtimeCfg.Symbol, runtimeCfg.EnabledConfig, runtimeCfg.EnabledMap)
 	exitConfirmCache := decision.NewExitConfirmCache()
-	runner := buildRunner(sys, fetcher, compressor, agentSvc, providerSvc, runtimeCfg, sessionManager, sessionMode)
-	pipeline, err := buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, &runner, exitConfirmCache, sessionManager, sessionMode)
+	runner := buildRunner(sys, fetcher, compressor, agentSvc, providerSvc, runtimeCfg)
+	pipeline, err := buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, &runner, exitConfirmCache)
 	if err != nil {
 		return SymbolRuntime{}, err
 	}
@@ -103,8 +97,6 @@ func buildSymbolRuntimeFromRuntimeConfig(metricsCtx context.Context, sys config.
 		RiskPerTradePct: runtimeCfg.Strategy.RiskManagement.RiskPerTradePct,
 		Enabled:         runtimeCfg.EnabledApp,
 		LLMTracker:      tracker,
-		SessionManager:  sessionManager,
-		SessionMode:     sessionMode,
 		Pipeline:        pipeline,
 		Services:        services,
 	}, nil

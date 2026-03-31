@@ -9,7 +9,7 @@ import (
 	llmapp "brale-core/internal/llm/app"
 )
 
-func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig, sessionManager *llm.RoundSessionManager, sessionMode llm.SessionMode) (decision.AgentService, decision.ProviderService, *llmapp.LLMRunTracker) {
+func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig) (decision.AgentService, decision.ProviderService, *llmapp.LLMRunTracker) {
 	cache := llmapp.NewLLMStageCache()
 	tracker := llmapp.NewLLMRunTracker()
 	defaults := config.DefaultPromptDefaults()
@@ -23,8 +23,6 @@ func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig, s
 		ProviderInPosIndicatorSys: defaults.ProviderInPositionIndicator,
 		ProviderInPosStructureSys: defaults.ProviderInPositionStructure,
 		ProviderInPosMechanicsSys: defaults.ProviderInPositionMechanics,
-		RiskFlatInitSystem:        defaults.RiskFlatInit,
-		RiskTightenSystem:         defaults.RiskTightenUpdate,
 		UserFormat:                llmapp.UserPromptFormatBullet,
 	}
 	agentRunner := &decision.AgentRunner{
@@ -37,7 +35,7 @@ func buildSymbolAgents(sys config.SystemConfig, symbolCfg config.SymbolConfig, s
 		Structure: newLLMClient(sys, symbolCfg.LLM.Provider.Structure),
 		Mechanics: newLLMClient(sys, symbolCfg.LLM.Provider.Mechanics),
 	}
-	return llmapp.LLMAgentService{Runner: agentRunner, Prompts: builder, Cache: cache, Tracker: tracker, SessionManager: sessionManager, SessionMode: sessionMode}, llmapp.LLMProviderService{Runner: providerRunner, Prompts: builder, Cache: cache, Tracker: tracker, SessionManager: sessionManager, SessionMode: sessionMode}, tracker
+	return llmapp.LLMAgentService{Runner: agentRunner, Prompts: builder, Cache: cache, Tracker: tracker}, llmapp.LLMProviderService{Runner: providerRunner, Prompts: builder, Cache: cache, Tracker: tracker}, tracker
 }
 
 func newLLMClient(sys config.SystemConfig, role config.LLMRoleConfig) *llm.OpenAIClient {
