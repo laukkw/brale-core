@@ -4,7 +4,7 @@
 # 币种标识（必须与交易所/行情源一致）。
 symbol = "ETHUSDT"
 # 拉取的 K 线周期列表，顺序仅影响展示，不影响逻辑。
-intervals = ["5m", "15m","1h"]
+intervals = ["15m", "1h","4h"]
 # 每个周期拉取的 K 线数量，越大越耗时但结构更完整。
 kline_limit = 300
 
@@ -54,11 +54,11 @@ pretty = false
 [consensus]
 # score_threshold：共识总分门槛（|score| >= threshold 才允许有方向）。
 # 建议原因：避免“方向分数很弱”时误开仓。
-score_threshold = 0.3
+score_threshold = 0.6
 # confidence_threshold：共识置信门槛（confidence >= threshold 才允许有方向）。
 # 建议原因：当前 confidence = coverage * agreement，且权重含 C^1.5 惩罚，
 # 0.60 在实盘会偏严，容易长期不过门槛；默认 0.52 更平衡“机会”和“噪声过滤”。
-confidence_threshold = 0.3
+confidence_threshold = 0.52
 
 
 # cooldown：节流与防抖设置（避免短时间重复开仓）。
