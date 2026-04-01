@@ -30,6 +30,10 @@ func shouldPreferInPositionProvider(isOpen bool, gate *store.GateEventRecord) bo
 	return readmodel.ShouldPreferInPositionProvider(isOpen, gate)
 }
 
+func mapByProviderRoleWithMode(providers []store.ProviderEventRecord, preferInPosition bool) (map[string]store.ProviderEventRecord, bool) {
+	return readmodel.MapByProviderRoleWithMode(providers, preferInPosition)
+}
+
 func mapDashboardFlowTrace(trace readmodel.FlowTrace) DashboardFlowTrace {
 	out := DashboardFlowTrace{
 		Agents:    mapDashboardFlowStageValues(trace.Agents),

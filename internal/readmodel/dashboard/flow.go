@@ -92,6 +92,10 @@ func AssembleFlowStageSet(providers []store.ProviderEventRecord, agents []store.
 	}
 }
 
+func MapByProviderRoleWithMode(providers []store.ProviderEventRecord, preferInPosition bool) (map[string]store.ProviderEventRecord, bool) {
+	return mapByProviderRoleWithMode(providers, preferInPosition)
+}
+
 func BuildFlowTrace(stages FlowStageSet, gate *store.GateEventRecord, side string, isOpen bool) FlowTrace {
 	trace := FlowTrace{
 		Agents:    append([]FlowStageData(nil), stages.AgentStages...),
@@ -168,6 +172,10 @@ func BuildFlowNodes(stages FlowStageSet, gate *store.GateEventRecord, tighten *T
 		Values:  summarizeResultFields(*gate, tighten),
 	})
 	return nodes
+}
+
+func SummarizeTightenResultFields(derived map[string]any, tighten *TightenInfo) []FlowValueField {
+	return summarizeTightenResultFields(derived, tighten)
 }
 
 func ShouldPreferInPositionProvider(isOpen bool, gate *store.GateEventRecord) bool {

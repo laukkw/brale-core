@@ -4,12 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"brale-core/internal/position"
+	readmodel "brale-core/internal/readmodel/decisionflow"
 	"brale-core/internal/runtime"
 	"brale-core/internal/store"
 )
-
-const dashboardDecisionFlowGateScanLimit = 200
 
 type dashboardFlowUsecase struct {
 	resolver    SymbolResolver
@@ -53,78 +51,23 @@ func (u dashboardFlowUsecase) build(ctx context.Context, rawSymbol string, snaps
 	if parseErr != nil {
 		return DashboardDecisionFlowResponse{}, &usecaseError{Status: 400, Code: "invalid_snapshot_id", Message: "snapshot_id 非法", Details: parseErr.Error()}
 	}
-
-	var err error
-	gates := []store.GateEventRecord{}
-	if !hasSelectedSnapshot {
-		gates, err = u.store.ListGateEvents(ctx, normalizedSymbol, dashboardDecisionFlowGateScanLimit)
-		if err != nil {
-			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: err.Error()}
-		}
-	}
-
-	pos, isOpen, err := u.store.FindPositionBySymbol(ctx, normalizedSymbol, position.OpenPositionStatuses)
+	result, err := readmodel.BuildFlow(ctx, u.store, normalizedSymbol, selectedSnapshotID, hasSelectedSnapshot, u.resolveSymbolConfig(normalizedSymbol))
 	if err != nil {
-		return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "position_lookup_failed", Message: "持仓查询失败", Details: err.Error()}
-	}
-
-	selection := dashboardFlowSelection{}
-	if hasSelectedSnapshot {
-		selectedGate, found, gateErr := u.store.FindGateEventBySnapshot(ctx, normalizedSymbol, selectedSnapshotID)
-		if gateErr != nil {
-			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: gateErr.Error()}
-		}
-		if !found {
+		if err == readmodel.ErrSnapshotNotFound {
 			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 404, Code: "snapshot_not_found", Message: "snapshot_id 对应决策不存在", Details: selectedSnapshotID}
 		}
-		selection = dashboardFlowSelection{
-			Anchor: DashboardFlowAnchor{Type: "selected_round", SnapshotID: selectedSnapshotID, Confidence: "high", Reason: "selected_by_snapshot_id"},
-			Gate:   &selectedGate,
-		}
-	} else {
-		var ok bool
-		selection, ok = selectDashboardFlowSelection(selectedSnapshotID, false, pos, isOpen, gates)
-		if !ok {
-			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 404, Code: "snapshot_not_found", Message: "snapshot_id 对应决策不存在", Details: selectedSnapshotID}
-		}
+		return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "decision_flow_failed", Message: "decision flow 读取失败", Details: err.Error()}
 	}
-	anchor := selection.Anchor
-	gateway := selection.Gate
-
-	providers := []store.ProviderEventRecord{}
-	agents := []store.AgentEventRecord{}
-	if gateway != nil && gateway.SnapshotID > 0 {
-		providers, err = u.store.ListProviderEventsBySnapshot(ctx, normalizedSymbol, gateway.SnapshotID)
-		if err != nil {
-			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "provider_events_failed", Message: "provider 事件读取失败", Details: err.Error()}
-		}
-		agents, err = u.store.ListAgentEventsBySnapshot(ctx, normalizedSymbol, gateway.SnapshotID)
-		if err != nil {
-			return DashboardDecisionFlowResponse{}, &usecaseError{Status: 500, Code: "agent_events_failed", Message: "agent 事件读取失败", Details: err.Error()}
-		}
-	}
-
-	tighten := resolveDashboardTightenInfo(gateway)
-	if tighten == nil && isOpen && !hasSelectedSnapshot {
-		tighten = resolveDashboardTightenFromRiskHistory(ctx, u.store, pos)
-	}
-
-	preferInPositionProvider := shouldPreferInPositionProvider(isOpen, gateway)
-	agentModels := u.resolveAgentStageModels(normalizedSymbol)
-	stages := assembleDashboardFlowStageSet(providers, agents, preferInPositionProvider, agentModels)
-	nodes := buildDashboardFlowNodes(stages, gateway, tighten)
-	intervals := u.resolveSymbolIntervals(normalizedSymbol)
-	trace := buildDashboardFlowTrace(stages, gateway, pos, isOpen)
 
 	return DashboardDecisionFlowResponse{
 		Status: "ok",
 		Symbol: normalizedSymbol,
 		Flow: DashboardDecisionFlow{
-			Anchor:    anchor,
-			Nodes:     nodes,
-			Intervals: intervals,
-			Trace:     trace,
-			Tighten:   tighten,
+			Anchor:    DashboardFlowAnchor(result.Anchor),
+			Nodes:     mapDashboardFlowNodes(result.Nodes),
+			Intervals: append([]string(nil), result.Intervals...),
+			Trace:     mapDashboardFlowTrace(result.Trace),
+			Tighten:   mapDashboardTightenInfo(result.Tighten),
 		},
 		Summary: dashboardContractSummary,
 	}, nil
@@ -154,13 +97,25 @@ func (u dashboardFlowUsecase) resolveAgentStageModels(symbol string) map[string]
 	return models
 }
 
-func (u dashboardFlowUsecase) resolveSymbolIntervals(symbol string) []string {
-	if u.resolver == nil {
-		return nil
+func (u dashboardFlowUsecase) resolveSymbolConfig(symbol string) readmodel.SymbolConfig {
+	cfg := readmodel.SymbolConfig{AgentModels: u.resolveAgentStageModels(symbol)}
+	if u.resolver != nil {
+		resolved, err := u.resolver.Resolve(symbol)
+		if err == nil {
+			cfg.Intervals = normalizedIntervals(resolved.Intervals)
+		}
 	}
-	resolved, err := u.resolver.Resolve(symbol)
-	if err != nil {
-		return nil
+	if bundle, ok := u.symbolCfgs[symbol]; ok {
+		cfg.StrategyHash = bundle.Strategy.Hash
+		cfg.RiskManagement = readmodel.RiskManagementConfig{
+			RiskPerTradePct: bundle.Strategy.RiskManagement.RiskPerTradePct,
+			MaxInvestPct:    bundle.Strategy.RiskManagement.MaxInvestPct,
+			MaxLeverage:     bundle.Strategy.RiskManagement.MaxLeverage,
+			EntryOffsetATR:  bundle.Strategy.RiskManagement.EntryOffsetATR,
+			EntryMode:       bundle.Strategy.RiskManagement.EntryMode,
+			InitialExit:     bundle.Strategy.RiskManagement.InitialExit.Policy,
+			Sieve:           bundle.Strategy.RiskManagement.Sieve,
+		}
 	}
-	return normalizedIntervals(resolved.Intervals)
+	return cfg
 }

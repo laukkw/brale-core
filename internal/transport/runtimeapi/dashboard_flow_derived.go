@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"strings"
 
 	readmodel "brale-core/internal/readmodel/dashboard"
 	"brale-core/internal/store"
@@ -29,6 +30,11 @@ func summarizeTerminalOutcome(gate store.GateEventRecord, tighten *DashboardTigh
 
 func summarizeResultFields(gate store.GateEventRecord, tighten *DashboardTightenInfo) []DashboardFlowValueField {
 	rm := readmodelSummarizeResultFields(gate, tighten)
+	return mapDashboardFlowFields(rm)
+}
+
+func summarizeTightenResultFields(derived map[string]any, tighten *DashboardTightenInfo) []DashboardFlowValueField {
+	rm := readmodel.SummarizeTightenResultFields(derived, toReadmodelTightenInfo(tighten))
 	return mapDashboardFlowFields(rm)
 }
 
@@ -125,9 +131,9 @@ func resolvePlanSource(gate store.GateEventRecord, tighten *DashboardTightenInfo
 }
 
 func normalizePlanSource(raw string) string {
-	switch raw {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "llm", "go":
-		return raw
+		return strings.ToLower(strings.TrimSpace(raw))
 	default:
 		return ""
 	}
