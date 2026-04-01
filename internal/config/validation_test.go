@@ -47,6 +47,40 @@ addr = ":9991"
 	}
 }
 
+func TestLoadSystemConfigNormalizesPersistModeAliases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "live alias maps to minimal", input: "live", want: "minimal"},
+		{name: "backtest alias maps to full", input: "backtest", want: "full"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "system.toml")
+			data := []byte(strings.Join([]string{
+				`db_path = ":memory:"`,
+				`persist_mode = "` + tt.input + `"`,
+				`execution_system = "freqtrade"`,
+				`exec_endpoint = "http://127.0.0.1:8080/api/v1"`,
+			}, "\n"))
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatalf("write system.toml: %v", err)
+			}
+
+			cfg, err := LoadSystemConfig(path)
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if cfg.PersistMode != tt.want {
+				t.Fatalf("persist_mode=%q want %q", cfg.PersistMode, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateSymbolIndexConfigRejectsCanonicalDuplicate(t *testing.T) {
 	err := ValidateSymbolIndexConfig(SymbolIndexConfig{Symbols: []SymbolIndexEntry{
 		{Symbol: "BTCUSDT", Config: "symbols/btc.toml", Strategy: "strategies/btc.toml"},
