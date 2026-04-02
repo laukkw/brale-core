@@ -19,6 +19,8 @@ docs/*
 *_test.go
 AGENTS.md
 webui/og-card-demo/node_modules/*
+webui/landing-page/
+webui/promo-video/
 skills/*
 
 .agents/
@@ -54,3 +56,8 @@ dist/
 /data/brale/
 /data/freqtrade/
 /手写的部署文档.org
+.codex
+CLAUDE.md
+env_old
+flow.md
+webui/og-card-demo/ethusdt-og-card.png
