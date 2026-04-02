@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -74,20 +73,4 @@ func SessionFlowFromContext(ctx context.Context) (LLMFlow, bool) {
 		return "", false
 	}
 	return flow, true
-}
-
-func RoundLaneKeyFromContext(ctx context.Context, stage LLMStage) (RoundLaneKey, error) {
-	roundID, ok := SessionRoundIDFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("round_id missing from context")
-	}
-	symbol, ok := SessionSymbolFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("symbol missing from context")
-	}
-	flow, ok := SessionFlowFromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("flow missing from context")
-	}
-	return NewRoundLaneKey(roundID, symbol, flow, stage)
 }

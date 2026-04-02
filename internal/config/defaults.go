@@ -55,7 +55,11 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 	if err := applyDefaultLLMModels(sys, &cfg); err != nil {
 		return SymbolConfig{}, err
 	}
-	cfg.Hash = CombineHashes(symbol, "default")
+	h, err := HashSymbolConfig(cfg)
+	if err != nil {
+		return SymbolConfig{}, err
+	}
+	cfg.Hash = h
 	return cfg, nil
 }
 
@@ -113,7 +117,7 @@ func applyCooldownDefaults(cfg *CooldownConfig, defaults CooldownConfig) {
 
 func DefaultStrategyConfig(symbol string) StrategyConfig {
 	symbol = NormalizeSymbol(symbol)
-	return StrategyConfig{
+	cfg := StrategyConfig{
 		Symbol:        symbol,
 		ID:            "default-" + symbol,
 		RuleChainPath: "configs/rules/default.json",
@@ -151,8 +155,13 @@ func DefaultStrategyConfig(symbol string) StrategyConfig {
 				DefaultSizeFactor: 1.0,
 			},
 		},
-		Hash: CombineHashes(symbol, "default_strategy"),
 	}
+	h, err := HashStrategyConfig(cfg)
+	if err != nil {
+		h = CombineHashes(symbol, "default_strategy")
+	}
+	cfg.Hash = h
+	return cfg
 }
 
 func applyDefaultLLMModels(sys SystemConfig, cfg *SymbolConfig) error {

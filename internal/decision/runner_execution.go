@@ -145,7 +145,7 @@ func (r *Runner) runAgentAndProviderStages(ctx context.Context, symbol string, c
 
 func (r *Runner) evaluateRuleflowAndFinalize(ctx context.Context, symbol string, comp features.CompressionResult, acct execution.AccountState, risk execution.RiskParams, opts RunOptions, inputs *runnerSymbolInputs, res SymbolResult) SymbolResult {
 	rfEngine := r.ensureRuleflowEngine()
-	rfInput := buildRuleflowInput(symbol, res, inputs.Binding, inputs.State, "", inputs.ExitConfirmCount, opts.BuildPlan, comp, acct, risk, ruleflow.InPositionOutputs{}, ruleflow.HardGuardPosition{})
+	rfInput := buildRuleflowInput(symbol, res, inputs.Binding, inputs.State, "", inputs.ExitConfirmCount, opts.BuildPlan, comp, acct, risk, ruleflow.InPositionOutputs{}, ruleflow.HardGuardPosition{}, inputs.ScoreThreshold, inputs.ConfThreshold)
 	rfStart := time.Now()
 	rfResult, err := rfEngine.Evaluate(ctx, inputs.Binding.RuleChainPath, rfInput)
 	if err != nil {
@@ -230,6 +230,8 @@ func applyDirectionConsensus(res *SymbolResult, enabled AgentEnabled, scoreThres
 	res.ConsensusScore = consensus.Score
 	res.ConsensusConfidence = consensus.Confidence
 	res.ConsensusAgreement = consensus.Agreement
+	res.ConsensusResonance = consensus.Resonance.Bonus
+	res.ConsensusResonant = consensus.Resonance.Active
 }
 
 func applyRuleflowResult(res *SymbolResult, rfResult ruleflow.Result, comp features.CompressionResult, symbol string, enabled AgentEnabled, scoreThreshold, confThreshold float64, llmRiskMode bool) {

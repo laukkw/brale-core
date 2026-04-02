@@ -56,6 +56,15 @@ func buildInputPayload(ctx context.Context, input Input) (string, error) {
 			"mechanics": input.Providers.Mechanics,
 		},
 		"structure_direction": input.StructureDirection,
+		"consensus": map[string]any{
+			"score":                input.ConsensusScore,
+			"confidence":           input.ConsensusConfidence,
+			"agreement":            input.ConsensusAgreement,
+			"resonance_bonus":      input.ConsensusResonance,
+			"resonance_active":     input.ConsensusResonant,
+			"score_threshold":      input.ScoreThreshold,
+			"confidence_threshold": input.ConfidenceThreshold,
+		},
 		"account": map[string]any{
 			"equity":    input.Account.Equity,
 			"available": input.Account.Available,

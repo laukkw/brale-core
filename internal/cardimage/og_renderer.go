@@ -29,8 +29,9 @@ type OGRenderer struct {
 }
 
 type ogPayload struct {
-	Symbol    string      `json:"symbol"`
-	RawBlocks ogRawBlocks `json:"raw_blocks"`
+	Symbol       string      `json:"symbol"`
+	CurrentPrice float64     `json:"current_price,omitempty"`
+	RawBlocks    ogRawBlocks `json:"raw_blocks"`
 }
 
 type ogRawBlocks struct {
@@ -238,6 +239,7 @@ func buildPayload(input decisionfmt.DecisionInput, report decisionfmt.DecisionRe
 		},
 	}
 	payload.RawBlocks.Gate.Consensus = parseDirectionConsensus(report.Gate.Derived)
+	payload.CurrentPrice = readDerivedFloat(report.Gate.Derived, "current_price")
 	payload.RawBlocks.Gate.StopStep = readDerivedString(report.Gate.Derived, "gate_stop_step")
 	payload.RawBlocks.Gate.ActionBefore = readDerivedString(report.Gate.Derived, "gate_action_before_sieve")
 	payload.RawBlocks.Gate.SieveAction = readDerivedString(report.Gate.Derived, "sieve_action")
@@ -307,6 +309,25 @@ func readDerivedString(derived map[string]any, key string) string {
 		return ""
 	}
 	return text
+}
+
+func readDerivedFloat(derived map[string]any, key string) float64 {
+	if len(derived) == 0 {
+		return 0
+	}
+	value, ok := derived[key]
+	if !ok || value == nil {
+		return 0
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" {
+		return 0
+	}
+	out, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0
+	}
+	return out
 }
 
 func parseGateTrace(derived map[string]any) []ogGateTraceStep {

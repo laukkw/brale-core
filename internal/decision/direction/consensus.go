@@ -21,16 +21,29 @@ type Consensus struct {
 	Confidence float64
 	Agreement  float64
 	Direction  string
+	Resonance  Resonance
+}
+
+type Resonance struct {
+	Active bool
+	Bonus  float64
 }
 
 const (
 	weightStructure = 1.0
 	weightIndicator = 0.7
 	weightMechanics = 0.5
-	confidencePower = 1.5
+	confidencePower = 1.0
 
 	thresholdScore = 0.35
 	thresholdConf  = 0.52
+
+	resonanceMinConfidence    = 0.35
+	resonanceMinScoreAbs      = 0.30
+	resonanceOpposeConfidence = 0.55
+	resonanceOpposeScoreAbs   = 0.45
+	resonanceBonusScale       = 0.4
+	resonanceBonusCap         = 0.12
 )
 
 func ThresholdScore() float64 {
@@ -57,8 +70,8 @@ Let:
   Si = Score from source i [-1, 1]
   Ci = Confidence from source i [0, 1]
 1. Effective Weight (Wi):
-   Wi = Bi * (Ci)^1.5
-   (Note: Power weighting penalizes uncertain signals non-linearly)
+   Wi = Bi * Ci
+   (Lower curvature keeps early trend evidence in play instead of crushing medium-confidence reads.)
 2. Aggregations:
    SumW     = Σ Wi
    SumWS    = Σ (Wi * Si)
@@ -94,6 +107,7 @@ func ComputeConsensusWithThresholds(ind Evidence, st Evidence, mech Evidence, sc
 	var sumWS float64
 	var sumBase float64
 	var sumWSign float64
+	validItems := make([]weightedEvidence, 0, len(items))
 
 	for _, item := range items {
 		bw := base[item.Source]
@@ -110,6 +124,12 @@ func ComputeConsensusWithThresholds(ind Evidence, st Evidence, mech Evidence, sc
 		sumW += w
 		sumWS += w * score
 		sumWSign += w * sign(score)
+		validItems = append(validItems, weightedEvidence{
+			Source:     item.Source,
+			BaseWeight: bw,
+			Score:      score,
+			Confidence: conf,
+		})
 	}
 
 	if sumW <= 0 || sumBase <= 0 {
@@ -119,7 +139,9 @@ func ComputeConsensusWithThresholds(ind Evidence, st Evidence, mech Evidence, sc
 	score := clamp(sumWS/sumW, -1, 1)
 	agreement := clamp(math.Abs(sumWSign)/sumW, 0, 1)
 	coverage := clamp(sumW/sumBase, 0, 1)
-	confidence := clamp(coverage*agreement, 0, 1)
+	baseConfidence := clamp(coverage*agreement, 0, 1)
+	resonance := computeResonance(validItems, sumBase, score)
+	confidence := clamp(baseConfidence+resonance.Bonus, 0, 1)
 
 	direction := "none"
 	if IsConsensusPassedWithThresholds(score, confidence, scoreThreshold, confidenceThreshold) {
@@ -135,6 +157,63 @@ func ComputeConsensusWithThresholds(ind Evidence, st Evidence, mech Evidence, sc
 		Confidence: confidence,
 		Agreement:  agreement,
 		Direction:  direction,
+		Resonance:  resonance,
+	}
+}
+
+type weightedEvidence struct {
+	Source     Source
+	BaseWeight float64
+	Score      float64
+	Confidence float64
+}
+
+func computeResonance(items []weightedEvidence, sumBase, consensusScore float64) Resonance {
+	if len(items) < 2 || sumBase <= 0 {
+		return Resonance{}
+	}
+	dominantSign := sign(consensusScore)
+	if dominantSign == 0 {
+		return Resonance{}
+	}
+
+	aligned := make([]weightedEvidence, 0, len(items))
+	var alignedBaseWeight float64
+	var alignedConfidence float64
+	var alignedScoreAbs float64
+
+	for _, item := range items {
+		scoreSign := sign(item.Score)
+		if scoreSign == dominantSign {
+			if item.Confidence < resonanceMinConfidence || math.Abs(item.Score) < resonanceMinScoreAbs {
+				continue
+			}
+			aligned = append(aligned, item)
+			alignedBaseWeight += item.BaseWeight
+			alignedConfidence += item.Confidence
+			alignedScoreAbs += math.Abs(item.Score)
+			continue
+		}
+		if scoreSign == -dominantSign && item.Confidence >= resonanceOpposeConfidence && math.Abs(item.Score) >= resonanceOpposeScoreAbs {
+			return Resonance{}
+		}
+	}
+
+	if len(aligned) < 2 {
+		return Resonance{}
+	}
+
+	alignedWeightRatio := clamp(alignedBaseWeight/sumBase, 0, 1)
+	alignedConfAvg := clamp(alignedConfidence/float64(len(aligned)), 0, 1)
+	alignedScoreAvg := clamp(alignedScoreAbs/float64(len(aligned)), 0, 1)
+	strength := alignedWeightRatio * alignedConfAvg * alignedScoreAvg
+	bonus := math.Min(resonanceBonusCap, resonanceBonusScale*strength)
+	if bonus <= 0 {
+		return Resonance{}
+	}
+	return Resonance{
+		Active: true,
+		Bonus:  bonus,
 	}
 }
 

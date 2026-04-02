@@ -13,20 +13,27 @@ import (
 )
 
 type Input struct {
-	Symbol             string
-	Providers          fund.ProviderBundle
-	AgentStructure     agent.StructureSummary
-	InPosition         InPositionOutputs
-	Position           HardGuardPosition
-	State              fsm.PositionState
-	PositionID         string
-	ExitConfirmCount   int
-	BuildPlan          bool
-	Compression        features.CompressionResult
-	Account            execution.AccountState
-	Risk               execution.RiskParams
-	Binding            strategy.StrategyBinding
-	StructureDirection string
+	Symbol              string
+	Providers           fund.ProviderBundle
+	AgentStructure      agent.StructureSummary
+	InPosition          InPositionOutputs
+	Position            HardGuardPosition
+	State               fsm.PositionState
+	PositionID          string
+	ExitConfirmCount    int
+	BuildPlan           bool
+	Compression         features.CompressionResult
+	Account             execution.AccountState
+	Risk                execution.RiskParams
+	Binding             strategy.StrategyBinding
+	StructureDirection  string
+	ConsensusScore      float64
+	ConsensusConfidence float64
+	ConsensusAgreement  float64
+	ConsensusResonance  float64
+	ConsensusResonant   bool
+	ScoreThreshold      float64
+	ConfidenceThreshold float64
 }
 
 type InPositionOutputs struct {

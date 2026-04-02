@@ -8,25 +8,6 @@ import (
 
 type GateEntryNode struct{}
 
-const (
-	gateGradeNone   = 0
-	gateGradeLow    = 1
-	gateGradeMedium = 2
-	gateGradeHigh   = 3
-
-	gatePriorityConsensusFailed  = 0
-	gatePriorityDataMissing      = 1
-	gatePriorityStructBreak      = 1
-	gatePriorityMechRisk         = 2
-	gatePriorityIndicatorNoise   = 3
-	gatePriorityIndicatorMixed   = 4
-	gatePriorityTagInconsistent  = 5
-	gatePriorityScriptMissing    = 6
-	gatePriorityScriptNotAllowed = 7
-	gatePrioritySieveOverride    = 8
-	gatePriorityAllow            = 10
-)
-
 // GateDecisionNode exists for backward-compatible RuleGo chains.
 // Some rule JSONs reference brale/gate_decision; we delegate to GateEntryNode.
 type GateDecisionNode struct{}
@@ -74,6 +55,7 @@ func (n *GateEntryNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	indicator := toMap(providers["indicator"])
 	structure := toMap(providers["structure"])
 	mechanics := toMap(providers["mechanics"])
+	consensus := toMap(root["consensus"])
 	riskMgmt := toMap(root["risk_management"])
 	binding := toMap(root["binding"])
 	state := strings.ToUpper(strings.TrimSpace(toString(root["state"])))
@@ -92,18 +74,25 @@ func (n *GateEntryNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	liqConfidence := strings.ToLower(toString(toMap(mechanics["liquidation_stress"])["confidence"]))
 	crowdingAlign := (structureDirection == "long" && mechanicsTag == "crowded_long") || (structureDirection == "short" && mechanicsTag == "crowded_short")
 	inputs := gateInputs{
-		State:              state,
-		StructureDirection: structureDirection,
-		IndicatorTag:       indicatorTag,
-		StructureTag:       structureTag,
-		MechanicsTag:       mechanicsTag,
-		MomentumExpansion:  momentumExpansion,
-		Alignment:          alignment,
-		MeanRevNoise:       meanRevNoise,
-		StructureClear:     structureClear,
-		StructureIntegrity: structureIntegrity,
-		LiquidationStress:  liquidationStress,
-		LiqConfidence:      liqConfidence,
+		State:               state,
+		StructureDirection:  structureDirection,
+		IndicatorTag:        indicatorTag,
+		StructureTag:        structureTag,
+		MechanicsTag:        mechanicsTag,
+		MomentumExpansion:   momentumExpansion,
+		Alignment:           alignment,
+		MeanRevNoise:        meanRevNoise,
+		StructureClear:      structureClear,
+		StructureIntegrity:  structureIntegrity,
+		LiquidationStress:   liquidationStress,
+		LiqConfidence:       liqConfidence,
+		ConsensusScore:      toFloat(consensus["score"]),
+		ConsensusConfidence: toFloat(consensus["confidence"]),
+		ConsensusAgreement:  toFloat(consensus["agreement"]),
+		ConsensusResonance:  toFloat(consensus["resonance_bonus"]),
+		ConsensusResonant:   toBool(consensus["resonance_active"]),
+		ScoreThreshold:      toFloat(consensus["score_threshold"]),
+		ConfidenceThreshold: toFloat(consensus["confidence_threshold"]),
 	}
 	missingProviders := resolveMissingProviders(providersEnabled, indicator, structure, mechanics)
 	decision := evaluateGateDecision(inputs, missingProviders)
@@ -139,6 +128,13 @@ func (n *GateEntryNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	derived["structure_tag"] = structureTag
 	derived["mechanics_tag"] = mechanicsTag
 	derived["crowding_align"] = crowdingAlign
+	derived["consensus_score"] = inputs.ConsensusScore
+	derived["consensus_confidence"] = inputs.ConsensusConfidence
+	derived["consensus_agreement"] = inputs.ConsensusAgreement
+	derived["consensus_resonance_bonus"] = inputs.ConsensusResonance
+	derived["consensus_resonant"] = inputs.ConsensusResonant
+	derived["consensus_score_threshold"] = inputs.ScoreThreshold
+	derived["consensus_confidence_threshold"] = inputs.ConfidenceThreshold
 	derived["gate_trace"] = decision.GateTrace
 	derived["gate_stop_step"] = decision.StopStep
 	derived["gate_stop_reason"] = decision.StopReason
@@ -164,195 +160,11 @@ func (n *GateEntryNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	respondRuleMsgJSON(ctx, msg, root)
 }
 
-type gateInputs struct {
-	State              string
-	StructureDirection string
-	IndicatorTag       string
-	StructureTag       string
-	MechanicsTag       string
-	MomentumExpansion  bool
-	Alignment          bool
-	MeanRevNoise       bool
-	StructureClear     bool
-	StructureIntegrity bool
-	LiquidationStress  bool
-	LiqConfidence      string
-}
-
-type gateDecision struct {
-	Action     string
-	Reason     string
-	Direction  string
-	Grade      int
-	Priority   int
-	StopStep   string
-	StopReason string
-	GateTrace  []map[string]any
-}
-
 func resolveMissingProviders(providersEnabled, indicator, structure, mechanics map[string]any) bool {
 	if len(providersEnabled) > 0 {
 		return !toBool(providersEnabled["indicator"]) || !toBool(providersEnabled["structure"]) || !toBool(providersEnabled["mechanics"])
 	}
 	return len(indicator) == 0 || len(structure) == 0 || len(mechanics) == 0
-}
-
-func evaluateGateDecision(inputs gateInputs, missingProviders bool) gateDecision {
-	eval := gateDecisionEvaluator{
-		inputs:           inputs,
-		missingProviders: missingProviders,
-		decision:         gateDecision{Direction: inputs.StructureDirection, Grade: gateGradeNone},
-	}
-	eval.evaluate()
-	eval.decision.GateTrace = eval.gateTrace
-	return eval.decision
-}
-
-type gateDecisionEvaluator struct {
-	inputs           gateInputs
-	missingProviders bool
-	decision         gateDecision
-	gateTrace        []map[string]any
-}
-
-func (e *gateDecisionEvaluator) evaluate() {
-	e.evalDirection()
-	e.evalData()
-	e.evalStructure()
-	e.evalMechRisk()
-	e.evalIndicatorNoise()
-	e.evalStructureClear()
-	e.evalTagConsistency()
-	e.evalScript()
-}
-
-func (e *gateDecisionEvaluator) hasAction() bool {
-	return strings.TrimSpace(e.decision.Action) != ""
-}
-
-func (e *gateDecisionEvaluator) appendGateTrace(step string, ok bool, code string) {
-	entry := map[string]any{
-		"step": step,
-		"ok":   ok,
-	}
-	if strings.TrimSpace(code) != "" {
-		entry["reason"] = code
-	}
-	e.gateTrace = append(e.gateTrace, entry)
-}
-
-func (e *gateDecisionEvaluator) setStop(step string, action string, code string, priority int) {
-	e.decision.Action = action
-	e.decision.Reason = code
-	e.decision.Priority = priority
-	e.decision.StopStep = step
-	e.decision.StopReason = code
-	e.appendGateTrace(step, false, code)
-}
-
-func (e *gateDecisionEvaluator) evalDirection() {
-	if e.hasAction() {
-		return
-	}
-	if e.inputs.StructureDirection == "" || e.inputs.StructureDirection == "none" {
-		e.decision.Direction = "none"
-		e.setStop("direction", "VETO", "CONSENSUS_NOT_PASSED", gatePriorityConsensusFailed)
-		return
-	}
-	e.appendGateTrace("direction", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalData() {
-	if e.hasAction() {
-		return
-	}
-	if !e.missingProviders || e.inputs.State == "IN_POSITION" {
-		e.appendGateTrace("data", true, "")
-		return
-	}
-	e.setStop("data", "VETO", "DATA_MISSING", gatePriorityDataMissing)
-}
-
-func (e *gateDecisionEvaluator) evalStructure() {
-	if e.hasAction() {
-		return
-	}
-	if !e.inputs.StructureIntegrity || e.inputs.StructureTag == "structure_broken" {
-		e.setStop("structure", "VETO", "STRUCT_BREAK", gatePriorityStructBreak)
-		return
-	}
-	e.appendGateTrace("structure", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalMechRisk() {
-	if e.hasAction() {
-		return
-	}
-	if e.inputs.MechanicsTag == "liquidation_cascade" {
-		e.setStop("mech_risk", "VETO", "MECH_RISK", gatePriorityMechRisk)
-		return
-	}
-	if e.inputs.LiquidationStress && e.inputs.LiqConfidence != "low" {
-		e.setStop("mech_risk", "WAIT", "MECH_RISK", gatePriorityMechRisk)
-		return
-	}
-	e.appendGateTrace("mech_risk", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalIndicatorNoise() {
-	if e.hasAction() {
-		return
-	}
-	if e.inputs.MeanRevNoise || e.inputs.IndicatorTag == "noise" {
-		e.setStop("indicator_noise", "WAIT", "INDICATOR_NOISE", gatePriorityIndicatorNoise)
-		return
-	}
-	e.appendGateTrace("indicator_noise", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalStructureClear() {
-	if e.hasAction() {
-		return
-	}
-	if !e.inputs.StructureClear {
-		e.setStop("structure_clear", "WAIT", "INDICATOR_MIXED", gatePriorityIndicatorMixed)
-		return
-	}
-	e.appendGateTrace("structure_clear", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalTagConsistency() {
-	if e.hasAction() {
-		return
-	}
-	if !resolveBoolTagConsistencyFromFlags(e.inputs.IndicatorTag, e.inputs.MomentumExpansion, e.inputs.Alignment, e.inputs.MeanRevNoise) {
-		e.setStop("tag_consistency", "WAIT", "INDICATOR_MIXED", gatePriorityTagInconsistent)
-		return
-	}
-	e.appendGateTrace("tag_consistency", true, "")
-}
-
-func (e *gateDecisionEvaluator) evalScript() {
-	if e.hasAction() {
-		return
-	}
-	script := resolveEntryScript(e.inputs.IndicatorTag, e.inputs.StructureTag)
-	if script == "" {
-		e.setStop("script_select", "WAIT", "INDICATOR_MIXED", gatePriorityScriptMissing)
-		return
-	}
-	e.appendGateTrace("script_select", true, "")
-	if !isEntryScriptAllowed(script, e.inputs.MomentumExpansion, e.inputs.Alignment, e.inputs.MeanRevNoise) {
-		e.setStop("script_allowed", "WAIT", "INDICATOR_MIXED", gatePriorityScriptNotAllowed)
-		return
-	}
-	e.appendGateTrace("script_allowed", true, "")
-	e.decision.Action = "ALLOW"
-	e.decision.Reason = "PASS_STRONG"
-	e.decision.Grade = resolveEntryGrade(script)
-	e.decision.Priority = gatePriorityAllow
-	e.decision.StopStep = "gate_allow"
-	e.decision.StopReason = e.decision.Reason
 }
 
 func resolveBoolTagConsistencyFromFlags(indicatorTag string, momentumExpansion, alignment, meanRevNoise bool) bool {
@@ -368,62 +180,6 @@ func resolveBoolTagConsistencyFromFlags(indicatorTag string, momentumExpansion, 
 	default:
 		return true
 	}
-}
-
-func resolveEntryScript(indicatorTag, structureTag string) string {
-	switch {
-	case indicatorTag == "trend_surge" && structureTag == "breakout_confirmed":
-		return "A"
-	case indicatorTag == "pullback_entry" && structureTag == "support_retest":
-		return "B"
-	case indicatorTag == "divergence_reversal" && structureTag == "support_retest":
-		return "C"
-	case indicatorTag == "trend_surge" && structureTag == "support_retest":
-		return "D"
-	case indicatorTag == "pullback_entry" && structureTag == "breakout_confirmed":
-		return "E"
-	case indicatorTag == "divergence_reversal" && structureTag == "breakout_confirmed":
-		return "F"
-	default:
-		return ""
-	}
-}
-
-func isEntryScriptAllowed(script string, momentumExpansion, alignment, meanRevNoise bool) bool {
-	switch script {
-	case "A":
-		return momentumExpansion && alignment && !meanRevNoise
-	case "B":
-		return !momentumExpansion && alignment && !meanRevNoise
-	case "C":
-		return !alignment && !meanRevNoise
-	case "D":
-		return momentumExpansion && alignment && !meanRevNoise
-	case "E":
-		return !momentumExpansion && alignment && !meanRevNoise
-	case "F":
-		return !alignment && !meanRevNoise
-	default:
-		return false
-	}
-}
-
-func resolveEntryGrade(script string) int {
-	switch script {
-	case "A":
-		return gateGradeHigh
-	case "B":
-		return gateGradeMedium
-	case "C":
-		return gateGradeLow
-	case "D":
-		return gateGradeMedium
-	case "E":
-		return gateGradeLow
-	case "F":
-		return gateGradeLow
-	}
-	return gateGradeNone
 }
 
 type sieveDecision struct {

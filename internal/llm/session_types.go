@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const roundLaneKeyDelimiter = "|"
-
 type RoundID string
 
 func NewRoundID(raw string) (RoundID, error) {
@@ -74,40 +72,13 @@ func (stage LLMStage) String() string {
 	return string(stage)
 }
 
-type RoundLaneKey string
-
-func NewRoundLaneKey(roundID RoundID, symbol string, flow LLMFlow, stage LLMStage) (RoundLaneKey, error) {
-	rid, err := NewRoundID(roundID.String())
-	if err != nil {
-		return "", err
-	}
-	sym, err := normalizeSessionField("symbol", symbol)
-	if err != nil {
-		return "", err
-	}
-	parsedFlow, err := NewLLMFlow(flow.String())
-	if err != nil {
-		return "", err
-	}
-	parsedStage, err := NewLLMStage(stage.String())
-	if err != nil {
-		return "", err
-	}
-	key := fmt.Sprintf("%s%s%s%s%s%s%s", rid, roundLaneKeyDelimiter, sym, roundLaneKeyDelimiter, parsedFlow, roundLaneKeyDelimiter, parsedStage)
-	return RoundLaneKey(key), nil
-}
-
-func (key RoundLaneKey) String() string {
-	return string(key)
-}
-
 func normalizeSessionField(fieldName, raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return "", fmt.Errorf("%s is required", fieldName)
 	}
-	if strings.Contains(value, roundLaneKeyDelimiter) {
-		return "", fmt.Errorf("%s must not contain %q", fieldName, roundLaneKeyDelimiter)
+	if strings.Contains(value, "|") {
+		return "", fmt.Errorf("%s must not contain %q", fieldName, "|")
 	}
 	return value, nil
 }

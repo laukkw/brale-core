@@ -336,6 +336,7 @@ func buildProviderUser(format UserPromptFormat, summary providerSummary, example
 	return formatPayloads(
 		format,
 		payloadBlock{label: "摘要输入:", payload: string(raw)},
+		payloadBlock{label: "约束: 输出示例 JSON 仅用于展示固定字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。", payload: ""},
 		payloadBlock{label: "输出示例(JSON):", payload: example},
 	)
 }
@@ -347,7 +348,7 @@ func buildInPositionProviderUser(format UserPromptFormat, summary providerSummar
 		format,
 		payloadBlock{label: "摘要输入:", payload: string(raw)},
 		payloadBlock{label: "仓位摘要:", payload: string(posRaw)},
-		payloadBlock{label: "约束: 仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。", payload: ""},
+		payloadBlock{label: "约束: 仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。输出示例 JSON 仅用于展示字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。", payload: ""},
 		payloadBlock{label: "输出示例(JSON):", payload: example},
 	)
 }
@@ -357,7 +358,7 @@ func providerExampleIndicator() string {
 		MomentumExpansion: false,
 		Alignment:         false,
 		MeanRevNoise:      false,
-		SignalTag:         "momentum_weak",
+		SignalTag:         "example_tag",
 	}
 
 	raw, _ := json.Marshal(ex)
@@ -368,8 +369,8 @@ func providerExampleStructure() string {
 	ex := provider.StructureProviderOut{
 		ClearStructure: true,
 		Integrity:      true,
-		Reason:         "regime=trend_up; quality=mixed; last_break=bos_up（示例仅示意字段结构与引用格式）",
-		SignalTag:      "support_retest",
+		Reason:         "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		SignalTag:      "example_tag",
 	}
 
 	raw, _ := json.Marshal(ex)
@@ -381,9 +382,9 @@ func providerExampleMechanics() string {
 		LiquidationStress: provider.SemanticSignal{
 			Value:      true,
 			Confidence: provider.ConfidenceLow,
-			Reason:     "crowding.long_short_ratio=1.4; oi_history.4h.change_pct=3.2，更多像缩仓或等待确认而非直接回避（示例仅示意字段结构与引用格式）",
+			Reason:     "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
 		},
-		SignalTag: "crowded_long",
+		SignalTag: "example_tag",
 	}
 
 	raw, _ := json.Marshal(ex)
@@ -394,8 +395,8 @@ func providerExampleInPositionIndicator() string {
 	ex := provider.InPositionIndicatorOut{
 		MomentumSustaining: true,
 		DivergenceDetected: false,
-		Reason:             "ok",
-		MonitorTag:         "keep",
+		Reason:             "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		MonitorTag:         "example_monitor_tag",
 	}
 	raw, _ := json.Marshal(ex)
 	return string(raw)
@@ -405,8 +406,8 @@ func providerExampleInPositionStructure() string {
 	ex := provider.InPositionStructureOut{
 		Integrity:   true,
 		ThreatLevel: provider.ThreatLevelNone,
-		Reason:      "ok",
-		MonitorTag:  "keep",
+		Reason:      "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		MonitorTag:  "example_monitor_tag",
 	}
 	raw, _ := json.Marshal(ex)
 	return string(raw)

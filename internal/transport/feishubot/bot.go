@@ -209,62 +209,11 @@ func (b *Bot) processMessage(ctx context.Context, senderID, chatID, text string)
 	}
 	commandText := normalizeCommandInput(text)
 
-	if sess, ok := b.sessions.get(senderID); ok {
-		symbolText := normalizeSymbol(commandText)
-		if !isValidSymbol(symbolText) {
-			b.sendReply(ctx, chatID, "invalid symbol, please input like BTC or BTCUSDT")
-			return
-		}
-		b.sessions.delete(senderID)
-		switch sess.Step {
-		case stepAwaitObserveSymbol:
-			b.handleObserve(ctx, chatID, symbolText)
-			return
-		case stepAwaitLatestSymbol:
-			b.handleLatest(ctx, chatID, symbolText)
-			return
-		}
+	if b.dispatchSessionInput(ctx, senderID, chatID, commandText) {
+		return
 	}
 
-	action, arg := parseCommand(commandText)
-	switch action {
-	case "monitor":
-		b.handleMonitor(ctx, chatID)
-	case "positions":
-		b.handlePositions(ctx, chatID)
-	case "trades":
-		b.handleTrades(ctx, chatID)
-	case "observe":
-		if arg == "" {
-			b.sessions.save(&session{SenderID: senderID, ChatID: chatID, Step: stepAwaitObserveSymbol})
-			b.sendReply(ctx, chatID, "please input symbol for observe")
-			return
-		}
-		symbolText := normalizeSymbol(arg)
-		if !isValidSymbol(symbolText) {
-			b.sendReply(ctx, chatID, "invalid symbol")
-			return
-		}
-		b.handleObserve(ctx, chatID, symbolText)
-	case "schedule_on":
-		b.handleSchedule(ctx, chatID, true)
-	case "schedule_off":
-		b.handleSchedule(ctx, chatID, false)
-	case "latest":
-		if arg == "" {
-			b.sessions.save(&session{SenderID: senderID, ChatID: chatID, Step: stepAwaitLatestSymbol})
-			b.sendReply(ctx, chatID, "please input symbol for latest decision")
-			return
-		}
-		symbolText := normalizeSymbol(arg)
-		if !isValidSymbol(symbolText) {
-			b.sendReply(ctx, chatID, "invalid symbol")
-			return
-		}
-		b.handleLatest(ctx, chatID, symbolText)
-	default:
-		b.sendReply(ctx, chatID, helpText())
-	}
+	b.dispatchCommand(ctx, senderID, chatID, parseCommandRoute(commandText))
 }
 
 func (b *Bot) handleMonitor(ctx context.Context, chatID string) {

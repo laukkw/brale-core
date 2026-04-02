@@ -46,8 +46,12 @@ func (n *DeriveTradeableNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 		},
 	}
 	structureDirection := strings.ToLower(toString(root["structure_direction"]))
-	root["structure"] = map[string]any{
-		"direction": structureDirection,
+	if existingStructure, ok := root["structure"].(map[string]any); ok {
+		existingStructure["direction"] = structureDirection
+	} else {
+		root["structure"] = map[string]any{
+			"direction": structureDirection,
+		}
 	}
 
 	root["derived"] = derived

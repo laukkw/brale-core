@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"brale-core/internal/decision/direction"
 	"brale-core/internal/decision/features"
 	"brale-core/internal/decision/fsm"
 	"brale-core/internal/decision/fund"
@@ -221,6 +222,8 @@ func (p *Pipeline) evaluateRuleflowHoldGate(ctx context.Context, symbol string, 
 		execution.RiskParams{RiskPerTradePct: bind.RiskManagement.RiskPerTradePct},
 		inPos,
 		hardGuardInput,
+		direction.ThresholdScore(),
+		direction.ThresholdConfidence(),
 	)
 	rfResult, err := rfEngine.Evaluate(ctx, bind.RuleChainPath, rfInput)
 	if err != nil {

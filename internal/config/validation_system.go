@@ -60,7 +60,7 @@ func validatePersistMode(mode string) error {
 	case "", "minimal", "full", "live", "backtest":
 		return nil
 	default:
-		return validationErrorf("persist_mode must be minimal or full")
+		return validationErrorf("persist_mode must be one of minimal/full/live/backtest")
 	}
 }
 

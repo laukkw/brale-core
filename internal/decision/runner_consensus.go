@@ -46,6 +46,8 @@ func buildDirectionConsensusDerived(enabled AgentEnabled, res SymbolResult, scor
 		"confidence":           res.ConsensusConfidence,
 		"agreement":            res.ConsensusAgreement,
 		"direction":            res.ConsensusDirection,
+		"resonance_bonus":      res.ConsensusResonance,
+		"resonance_active":     res.ConsensusResonant,
 		"score_threshold":      scoreThreshold,
 		"confidence_threshold": confThreshold,
 		"score_passed":         math.Abs(res.ConsensusScore) >= scoreThreshold,

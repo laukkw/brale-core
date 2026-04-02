@@ -72,6 +72,8 @@ type SymbolResult struct {
 	ConsensusScore      float64
 	ConsensusConfidence float64
 	ConsensusAgreement  float64
+	ConsensusResonance  float64
+	ConsensusResonant   bool
 	AgentPrompts        AgentPromptSet
 	ProviderPrompts     ProviderPromptSet
 	InPositionIndicator provider.InPositionIndicatorOut

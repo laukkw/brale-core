@@ -262,6 +262,45 @@ function withPercent(value) {
   return `${ratioToPercent(value)}%`;
 }
 
+function normalizeBaseSymbol(symbol) {
+  const raw = String(symbol ?? '').trim().toUpperCase();
+  if (!raw) return 'UNKNOWN';
+  const quotes = ['USDT', 'USDC', 'BUSD', 'USD'];
+  for (const quote of quotes) {
+    if (raw.endsWith(quote) && raw.length > quote.length) {
+      return raw.slice(0, -quote.length) || raw;
+    }
+  }
+  return raw;
+}
+
+function formatTitlePrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  if (n === 0) return '0.00';
+  if (Math.abs(n) < 0.005) {
+    return n.toExponential(2).replace('e+', 'e');
+  }
+  return n.toFixed(2);
+}
+
+function resolveMarkPrice(raw) {
+  const candidates = [
+    raw?.current_price,
+    raw?.mark_price,
+    raw?.raw_blocks?.gate?.derived?.current_price,
+    raw?.raw_blocks?.gate?.current_price,
+    raw?.raw_blocks?.position?.mark_price,
+  ];
+  for (const candidate of candidates) {
+    const n = Number(candidate);
+    if (Number.isFinite(n)) {
+      return n;
+    }
+  }
+  return NaN;
+}
+
 function formatReportTime(date = new Date()) {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -331,6 +370,9 @@ export function buildModel(raw) {
   const indicator = agent.indicator ?? {};
   const mechanics = agent.mechanics ?? {};
   const structure = agent.structure ?? {};
+  const symbol = normalizeBaseSymbol(raw?.symbol || 'UNKNOWN');
+  const markPrice = resolveMarkPrice(raw);
+  const titlePrice = formatTitlePrice(markPrice);
 
   const consensusRaw = gate.direction_consensus ?? {};
   const fallbackConsensusScore = Math.max(
@@ -364,7 +406,7 @@ export function buildModel(raw) {
       key: 'score',
       title: '共识总分',
       value: `当前 ${consensusScore.toFixed(3)} / 达成率 ${withPercent(scoreRate)}`,
-      progressPct: ratioToPercent(scoreRate),
+      progressPct: ratioToPercent(Math.abs(consensusScore)),
       thresholdPct: ratioToPercent(consensusScoreThreshold),
       thresholdLabel: '方向阈值',
       thresholdText: consensusScoreThreshold.toFixed(3),
@@ -376,7 +418,7 @@ export function buildModel(raw) {
       key: 'confidence',
       title: '共识置信度',
       value: `当前 ${consensusConfidence.toFixed(3)} / 达成率 ${withPercent(confidenceRate)}`,
-      progressPct: ratioToPercent(confidenceRate),
+      progressPct: ratioToPercent(consensusConfidence),
       thresholdPct: ratioToPercent(consensusConfidenceThreshold),
       thresholdLabel: '置信阈值',
       thresholdText: consensusConfidenceThreshold.toFixed(3),
@@ -396,7 +438,7 @@ export function buildModel(raw) {
       key: 'structure',
       title: '结构判断',
       value: `regime ${emptyDash(mapValue(structure.regime))} • quality ${emptyDash(mapValue(structure.quality))} • 可靠度 ${structureCurrent.toFixed(3)}`,
-      progressPct: ratioToPercent(structureCurrent / Math.max(structureTarget, 0.001)),
+      progressPct: ratioToPercent(structureCurrent),
       thresholdPct: ratioToPercent(structureTarget),
       thresholdLabel: '可靠度阈值',
       thresholdText: structureTarget.toFixed(2),
@@ -408,7 +450,7 @@ export function buildModel(raw) {
       key: 'mechanics',
       title: '清算风险判断',
       value: `risk ${emptyDash(mapValue(mechanics.risk_level))} • crowding ${emptyDash(mapValue(mechanics.crowding))} • 可靠度 ${mechanicsCurrent.toFixed(3)}`,
-      progressPct: ratioToPercent(mechanicsCurrent / Math.max(mechanicsTarget, 0.001)),
+      progressPct: ratioToPercent(mechanicsCurrent),
       thresholdPct: ratioToPercent(mechanicsTarget),
       thresholdLabel: '可靠度阈值',
       thresholdText: mechanicsTarget.toFixed(2),
@@ -575,8 +617,9 @@ export function buildModel(raw) {
   ];
 
   return {
-    symbol: emptyDash(raw?.symbol || 'UNKNOWN'),
-    title: `${emptyDash(raw?.symbol || 'UNKNOWN')} 的决策报告`,
+    symbol,
+    title: `${symbol} 的决策报告`,
+    titlePrice,
     reportTimeCN: formatReportTime(),
     sourceCard,
     progressCards: [...summaryCards, ...evidenceCards],
@@ -631,6 +674,7 @@ function normalTagStyle(variant) {
 
 function progressCard(card, scale) {
   const tone = tonePalette(card.tone);
+  const thresholdColor = '#2563eb';
   return h(
     'div',
     {
@@ -752,7 +796,7 @@ function progressCard(card, scale) {
           left: `${card.thresholdPct}%`,
           width: 2,
           transform: 'translateX(-50%)',
-          background: '#6b7280',
+          background: thresholdColor,
         },
       }),
     ),
@@ -768,8 +812,8 @@ function progressCard(card, scale) {
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
         },
       },
-      h('div', { style: { display: 'flex' } }, `进度 ${card.progressPct}%`),
-      h('div', { style: { display: 'flex' } }, `${card.thresholdLabel || '阈值'} ${card.thresholdText}`),
+      h('div', { style: { display: 'flex' } }, `当前 ${card.progressPct}%`),
+      h('div', { style: { display: 'flex', color: thresholdColor, fontWeight: 700 } }, `${card.thresholdLabel || '阈值'} ${card.thresholdText}`),
     ),
   );
 }
@@ -1242,16 +1286,18 @@ function buildTree(model, meta, canvasHeight) {
             {
               style: {
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 18,
+                width: '100%',
               },
             },
             h(
               'div',
-              { style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, alignItems: 'flex-start' } },
+              { style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, alignItems: 'flex-start', flex: 1 } },
               h('div', {
                 style: {
-                  display: 'flex', fontSize: Math.max(36, scale.title - 6), lineHeight: 1.1, letterSpacing: '-0.03em', color: '#0f172a', fontWeight: 900, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  display: 'flex', fontSize: Math.max(32, scale.title - 12), lineHeight: 1.05, letterSpacing: '-0.045em', color: '#0f172a', fontWeight: 900, whiteSpace: 'nowrap', wordBreak: 'normal', overflow: 'hidden',
                 },
               }, model.title),
               h(
@@ -1265,6 +1311,53 @@ function buildTree(model, meta, canvasHeight) {
                 h('div', { style: { display: 'flex' } }, model.reportTimeCN),
               ),
             ),
+            model.titlePrice
+              ? h(
+                'div',
+                {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexShrink: 0,
+                    alignSelf: 'flex-start',
+                    alignItems: 'flex-end',
+                    gap: 6,
+                    marginTop: 8,
+                    minWidth: 140,
+                  },
+                },
+                h(
+                  'div',
+                  {
+                    style: {
+                      display: 'flex',
+                      color: '#94a3b8',
+                      fontSize: Math.max(11, scale.tiny - 1),
+                      lineHeight: 1,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    },
+                  },
+                  '当前标记价格',
+                ),
+                h(
+                  'div',
+                  {
+                    style: {
+                      display: 'flex',
+                      color: '#64748b',
+                      fontSize: Math.max(16, scale.small - 1),
+                      lineHeight: 1,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    },
+                  },
+                  model.titlePrice,
+                ),
+              )
+              : null,
           ),
           sourceCard(model.sourceCard, scale),
         ),
