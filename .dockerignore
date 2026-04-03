@@ -18,4 +18,3 @@ docs/
 configs/symbols/ETHUSDT.toml
 configs/symbols-index.toml
 configs/freqtrade/config.base.json
-internal/onboarding/templates/freqtrade-config.base.json
