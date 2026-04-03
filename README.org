@@ -124,12 +124,34 @@ Brale 当前配置分为四层：
 - 持仓收紧（tighten）参数
 - sieve 二次风控规则
 
-如果你准备做多币种扩展，推荐复制：
+如果你准备做多币种扩展，推荐使用 =bralectl= 工具一键添加：
 
-- configs/symbols/default.toml
-- configs/strategies/default.toml
+#+begin_src bash
+# 交互式：从已有币种中选择模板
+make add-symbol SYMBOL=XAGUSDT
 
-按 symbol 新建独立配置，再把它们加入 configs/symbols-index.toml。
+# 指定模板币种（适合脚本 / CI）
+make add-symbol SYMBOL=XAGUSDT TEMPLATE_SYMBOL=ETHUSDT
+
+# 预览模式：只打印将要生成的文件，不实际写入
+make add-symbol SYMBOL=XAGUSDT TEMPLATE_SYMBOL=ETHUSDT DRY_RUN=1
+#+end_src
+
+该命令会自动完成以下操作：
+
+1. 从模板币种派生 =configs/symbols/XAGUSDT.toml=
+2. 从模板币种派生 =configs/strategies/XAGUSDT.toml=
+3. 追加条目到 =configs/symbols-index.toml=
+4. 追加 =XAG/USDT:USDT= 到 =configs/freqtrade/config.base.json= 的 =pair_whitelist=
+
+添加完成后运行 =make prepare= 重新生成运行时配置，再 =make restart= 使新币种生效。
+
+也可以直接使用 CLI：
+
+#+begin_src bash
+go build -o bralectl ./cmd/bralectl
+./bralectl add-symbol XAGUSDT --template-symbol ETHUSDT --repo .
+#+end_src
 
 *** 开仓说明
 
@@ -480,12 +502,34 @@ It defines trading and risk-control parameters, such as:
 - in-position tightening parameters
 - sieve secondary risk-control rules
 
-If you plan to extend to multiple symbols, it is recommended to copy:
+If you plan to extend to multiple symbols, use the =bralectl= tool for one-step setup:
 
-- configs/symbols/default.toml
-- configs/strategies/default.toml
+#+begin_src bash
+# Interactive: select an existing symbol as template
+make add-symbol SYMBOL=XAGUSDT
 
-Create independent configurations for each symbol and then add them into configs/symbols-index.toml.
+# Specify template symbol (for scripts / CI)
+make add-symbol SYMBOL=XAGUSDT TEMPLATE_SYMBOL=ETHUSDT
+
+# Dry-run: preview files to be generated without writing
+make add-symbol SYMBOL=XAGUSDT TEMPLATE_SYMBOL=ETHUSDT DRY_RUN=1
+#+end_src
+
+This command will automatically:
+
+1. Derive =configs/symbols/XAGUSDT.toml= from the template symbol
+2. Derive =configs/strategies/XAGUSDT.toml= from the template symbol
+3. Append an entry to =configs/symbols-index.toml=
+4. Append =XAG/USDT:USDT= to =pair_whitelist= in =configs/freqtrade/config.base.json=
+
+After adding, run =make prepare= to regenerate runtime configs, then =make restart= for the new symbol to take effect.
+
+You can also use the CLI directly:
+
+#+begin_src bash
+go build -o bralectl ./cmd/bralectl
+./bralectl add-symbol XAGUSDT --template-symbol ETHUSDT --repo .
+#+end_src
 
 *** Entry and Position Opening
 
