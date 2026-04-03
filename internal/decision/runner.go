@@ -64,6 +64,7 @@ type TightenRiskUpdateInput struct {
 type TightenRiskUpdatePatch struct {
 	StopLoss    *float64
 	TakeProfits []float64
+	Trace       *execution.LLMRiskTrace
 }
 
 type TightenRiskUpdateLLM func(ctx context.Context, input TightenRiskUpdateInput) (*TightenRiskUpdatePatch, error)
@@ -105,6 +106,9 @@ func appendPlanDerived(gate *fund.GateDecision, plan *execution.ExecutionPlan) {
 		"take_profits":       append([]float64(nil), plan.TakeProfits...),
 		"take_profit_ratios": append([]float64(nil), plan.TakeProfitRatios...),
 		"plan_source":        planSource,
+	}
+	if trace := llmRiskTraceMap(plan.LLMRiskTrace); trace != nil {
+		gate.Derived["plan"].(map[string]any)["llm_trace"] = trace
 	}
 }
 

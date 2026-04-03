@@ -22,6 +22,7 @@ type tightenUpdateResult struct {
 	PlanSource     string
 	StopLoss       float64
 	TakeProfits    []float64
+	LLMRiskTrace   *execution.LLMRiskTrace
 }
 
 func newTightenUpdateResult(planSource string, stopLoss float64, takeProfits []float64) tightenUpdateResult {
@@ -85,13 +86,14 @@ func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.Position
 		}
 	}
 	planSource := resolveTightenPlanSource(updateCtx.Binding)
-	tightenPlan, tpTightened, err := p.buildTightenPlan(ctx, pos, plan, updateCtx, newStop)
+	tightenPlan, tpTightened, llmTrace, err := p.buildTightenPlan(ctx, pos, plan, updateCtx, newStop)
 	if err != nil {
 		return baseResult, err
 	}
 	plan = tightenPlan
 	_, err = p.riskPlans().ApplyUpdate(ctx, pos.PositionID, plan, "monitor-tighten")
 	result := newTightenUpdateResult(planSource, plan.StopPrice, riskPlanTakeProfits(plan))
+	result.LLMRiskTrace = cloneLLMRiskTrace(llmTrace)
 	result.Executed = err == nil && plan.StopPrice != oldStop
 	result.TPTightened = tpTightened
 	if result.Executed {
@@ -100,13 +102,13 @@ func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.Position
 	return result, err
 }
 
-func (p *Pipeline) buildTightenPlan(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, updateCtx tightenContext, newStop float64) (risk.RiskPlan, bool, error) {
+func (p *Pipeline) buildTightenPlan(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, updateCtx tightenContext, newStop float64) (risk.RiskPlan, bool, *execution.LLMRiskTrace, error) {
 	planSource := resolveTightenPlanSource(updateCtx.Binding)
 	tightenPlan := plan
 	tightenPlan.StopPrice = newStop
 	if planSource == execution.PlanSourceLLM {
 		if p.TightenRiskLLM == nil {
-			return plan, false, fmt.Errorf("tighten risk llm callback is required")
+			return plan, false, nil, fmt.Errorf("tighten risk llm callback is required")
 		}
 		runCtx := llm.WithSessionSymbol(ctx, pos.Symbol)
 		runCtx = llm.WithSessionFlow(runCtx, llm.LLMFlowInPosition)
@@ -124,9 +126,10 @@ func (p *Pipeline) buildTightenPlan(ctx context.Context, pos store.PositionRecor
 			InPositionMechanics: updateCtx.InPosMechanics,
 		})
 		if err != nil {
-			return plan, false, err
+			return plan, false, nil, err
 		}
-		return applyTightenRiskPatch(tightenPlan, pos.Side, pos.AvgEntry, updateCtx.MarkPrice, patch)
+		nextPlan, tpTightened, err := applyTightenRiskPatch(tightenPlan, pos.Side, pos.AvgEntry, updateCtx.MarkPrice, patch)
+		return nextPlan, tpTightened, cloneLLMRiskTrace(patch.Trace), err
 	}
 	tightenPlan, tpTightened := risk.TightenTPLevels(
 		tightenPlan,
@@ -138,7 +141,7 @@ func (p *Pipeline) buildTightenPlan(ctx context.Context, pos store.PositionRecor
 		updateCtx.Binding.RiskManagement.TightenATR.MinTPDistancePct,
 		updateCtx.Binding.RiskManagement.TightenATR.MinTPGapPct,
 	)
-	return tightenPlan, tpTightened, nil
+	return tightenPlan, tpTightened, nil, nil
 }
 
 func (p *Pipeline) applyWatermarkUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, source string, updated bool) error {

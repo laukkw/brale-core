@@ -63,6 +63,13 @@ func TestRunnerFlatRiskInitSetsPlanSourceLLM(t *testing.T) {
 			TakeProfits:      []float64{101, 102},
 			TakeProfitRatios: []float64{0.5, 0.5},
 			Reason:           &reason,
+			Trace: &execution.LLMRiskTrace{
+				Stage:        "risk_flat_init",
+				Flow:         "flat",
+				SystemPrompt: "risk-system",
+				UserPrompt:   "risk-user",
+				RawOutput:    `{"entry":100.6}`,
+			},
 		}, nil
 	})
 
@@ -104,6 +111,16 @@ func TestRunnerFlatRiskInitSetsPlanSourceLLM(t *testing.T) {
 	}
 	if got := planDerived["entry"]; got != entry {
 		t.Fatalf("gate derived entry=%v, want %v", got, entry)
+	}
+	trace, ok := planDerived["llm_trace"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected gate derived llm_trace map, got %#v", planDerived["llm_trace"])
+	}
+	if trace["stage"] != "risk_flat_init" {
+		t.Fatalf("trace stage=%v, want risk_flat_init", trace["stage"])
+	}
+	if trace["system_prompt"] != "risk-system" {
+		t.Fatalf("trace system_prompt=%v, want risk-system", trace["system_prompt"])
 	}
 }
 

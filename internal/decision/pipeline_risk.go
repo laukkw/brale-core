@@ -8,6 +8,7 @@ import (
 	"brale-core/internal/decision/features"
 	"brale-core/internal/decision/fund"
 	"brale-core/internal/decision/provider"
+	"brale-core/internal/execution"
 	"brale-core/internal/strategy"
 )
 
@@ -56,6 +57,7 @@ func (p *Pipeline) applyRiskPlanUpdate(ctx context.Context, res SymbolResult, co
 	exec.PlanSource = updateResult.PlanSource
 	exec.StopLoss = updateResult.StopLoss
 	exec.TakeProfits = append([]float64(nil), updateResult.TakeProfits...)
+	exec.LLMRiskTrace = cloneLLMRiskTrace(updateResult.LLMRiskTrace)
 	if !updateResult.Executed {
 		exec.addBlocked(tightenBlockNoTightenNeeded)
 	}
@@ -101,6 +103,7 @@ type tightenExecution struct {
 	PlanSource     string
 	StopLoss       float64
 	TakeProfits    []float64
+	LLMRiskTrace   *execution.LLMRiskTrace
 }
 
 const (
@@ -184,6 +187,9 @@ func (e tightenExecution) toMap() map[string]any {
 	}
 	if len(e.TakeProfits) > 0 {
 		out["take_profits"] = append([]float64(nil), e.TakeProfits...)
+	}
+	if trace := llmRiskTraceMap(e.LLMRiskTrace); trace != nil {
+		out["llm_trace"] = trace
 	}
 	if e.ExitConfirmHit {
 		out["exit_confirm_requested"] = true

@@ -3,7 +3,6 @@ package decisionview
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"brale-core/internal/decision/decisionfmt"
@@ -123,38 +122,16 @@ func addGateNodes(acc *roundAccumulator, df decisionfmt.Formatter, logger *zap.L
 	}
 }
 
-func addLLMRiskTraceNodes(acc *roundAccumulator, logger *zap.Logger, symbol string, providers []store.ProviderEventRecord, openPos store.PositionRecord, hasOpenPos bool) {
+func addLLMRiskTraceNodes(acc *roundAccumulator, logger *zap.Logger, symbol string, gates []store.GateEventRecord) {
 	if acc == nil {
 		return
 	}
-	if !hasOpenPos || strings.TrimSpace(openPos.PositionID) == "" || len(openPos.RiskJSON) == 0 {
-		return
-	}
-	traceBySnapshot := make(map[uint][]llmRiskTraceRecord)
-	positionOpenTS := openPos.CreatedAt.Unix()
-	hasPositionOpenTS := !openPos.CreatedAt.IsZero() && positionOpenTS > 0
-	for _, rec := range providers {
-		if !isInPositionProviderRole(rec.Role) {
+	for _, gate := range gates {
+		trace := llmRiskTraceFromGate(gate)
+		if trace == nil {
 			continue
 		}
-		if hasPositionOpenTS && rec.Timestamp < positionOpenTS {
-			continue
-		}
-		if strings.TrimSpace(rec.SystemPrompt) == "" && strings.TrimSpace(rec.UserPrompt) == "" && len(rec.OutputJSON) == 0 {
-			continue
-		}
-		traceBySnapshot[rec.SnapshotID] = append(traceBySnapshot[rec.SnapshotID], llmRiskTraceRecord{
-			Role:         strings.TrimSpace(rec.Role),
-			Timestamp:    rec.Timestamp,
-			SystemPrompt: rec.SystemPrompt,
-			UserPrompt:   rec.UserPrompt,
-			Output:       decodeAnyJSON(rec.OutputJSON),
-		})
-	}
-	if len(traceBySnapshot) == 0 {
-		return
-	}
-	for snapshotID, traces := range traceBySnapshot {
+		snapshotID := gate.SnapshotID
 		rb := acc.rounds[snapshotID]
 		if rb == nil {
 			continue
@@ -165,28 +142,25 @@ func addLLMRiskTraceNodes(acc *roundAccumulator, logger *zap.Logger, symbol stri
 		if !roundHasGateNode(rb.Nodes) {
 			continue
 		}
-		sort.Slice(traces, func(i, j int) bool {
-			return traces[i].Timestamp < traces[j].Timestamp
-		})
-		latestTs := traces[len(traces)-1].Timestamp
-		summary := fmt.Sprintf("%d 条止盈止损 LLM 记录", len(traces))
+		latestTs := gate.Timestamp
+		title, summary := llmRiskNodePresentation(gate)
 		rb.Nodes = append(rb.Nodes, nodeWithOrder{
 			Node: Node{
 				ID:       fmt.Sprintf("%s-%d-llm-risk", symbol, snapshotID),
-				Title:    "LLM 止盈止损",
+				Title:    title,
 				Summary:  summary,
 				Stage:    "llm_risk",
 				Type:     "llm_risk",
 				AgentKey: "llm_risk",
 				Output: map[string]any{
-					"position_id":     openPos.PositionID,
-					"position_status": openPos.Status,
 					"snapshot_id":     snapshotID,
-					"records":         traces,
+					"decision_action": gate.DecisionAction,
+					"plan_source":     "llm",
+					"trace":           trace,
 				},
 				Meta: map[string]any{
 					"timestamp": latestTs,
-					"source":    "provider_in_position",
+					"source":    "gate_llm_trace",
 				},
 			},
 			Order:     stageOrder("llm_risk"),
@@ -195,9 +169,79 @@ func addLLMRiskTraceNodes(acc *roundAccumulator, logger *zap.Logger, symbol stri
 		if logger != nil {
 			logger.Debug("attached llm risk trace node",
 				zap.Uint("snapshot_id", snapshotID),
-				zap.Int("records", len(traces)),
+				zap.String("action", strings.TrimSpace(gate.DecisionAction)),
 			)
 		}
+	}
+}
+
+func llmRiskPlanSource(gate store.GateEventRecord) string {
+	derived := decodeMapJSON(gate.DerivedJSON)
+	if len(derived) == 0 {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(gate.DecisionAction), "tighten") {
+		execRaw, ok := derived["execution"].(map[string]any)
+		if !ok {
+			return ""
+		}
+		return normalizePlanSourceValue(execRaw["plan_source"])
+	}
+	planRaw, ok := derived["plan"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return normalizePlanSourceValue(planRaw["plan_source"])
+}
+
+func llmRiskTraceFromGate(gate store.GateEventRecord) map[string]any {
+	if llmRiskPlanSource(gate) != "llm" {
+		return nil
+	}
+	derived := decodeMapJSON(gate.DerivedJSON)
+	if len(derived) == 0 {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(gate.DecisionAction), "tighten") {
+		execRaw, ok := derived["execution"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		trace, _ := execRaw["llm_trace"].(map[string]any)
+		if len(trace) == 0 {
+			return nil
+		}
+		return trace
+	}
+	planRaw, ok := derived["plan"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	trace, _ := planRaw["llm_trace"].(map[string]any)
+	if len(trace) == 0 {
+		return nil
+	}
+	return trace
+}
+
+func normalizePlanSourceValue(value any) string {
+	switch strings.ToLower(strings.TrimSpace(fmt.Sprint(value))) {
+	case "llm":
+		return "llm"
+	case "go":
+		return "go"
+	default:
+		return ""
+	}
+}
+
+func llmRiskNodePresentation(gate store.GateEventRecord) (string, string) {
+	action := strings.ToUpper(strings.TrimSpace(gate.DecisionAction))
+	switch action {
+	case "TIGHTEN":
+		return "LLM 止盈止损", "LLM 持仓风控"
+	default:
+		return "LLM 开仓风控", "LLM 开仓风控计划"
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"brale-core/internal/decision"
 	"brale-core/internal/decision/fund"
+	"brale-core/internal/execution"
 	"brale-core/internal/llm"
 	"brale-core/internal/pkg/llmclean"
 	"brale-core/internal/risk/initexit"
@@ -45,6 +46,20 @@ func (s LLMRiskService) FlatRiskInitLLM() decision.FlatRiskInitLLM {
 			TakeProfits:      append([]float64(nil), parsed.TakeProfits...),
 			TakeProfitRatios: append([]float64(nil), parsed.TakeProfitRatios...),
 			Reason:           parsed.Reason,
+			Trace: &execution.LLMRiskTrace{
+				Stage:        llm.LLMStageRiskFlatInit.String(),
+				Flow:         llm.LLMFlowFlat.String(),
+				SystemPrompt: system,
+				UserPrompt:   user,
+				RawOutput:    raw,
+				ParsedOutput: map[string]any{
+					"entry":              optionalFloat(parsed.Entry),
+					"stop_loss":          optionalFloat(parsed.StopLoss),
+					"take_profits":       append([]float64(nil), parsed.TakeProfits...),
+					"take_profit_ratios": append([]float64(nil), parsed.TakeProfitRatios...),
+					"reason":             optionalString(parsed.Reason),
+				},
+			},
 		}, nil
 	}
 }
@@ -73,8 +88,33 @@ func (s LLMRiskService) TightenRiskLLM() decision.TightenRiskUpdateLLM {
 		return &decision.TightenRiskUpdatePatch{
 			StopLoss:    parsed.StopLoss,
 			TakeProfits: append([]float64(nil), parsed.TakeProfits...),
+			Trace: &execution.LLMRiskTrace{
+				Stage:        llm.LLMStageRiskTighten.String(),
+				Flow:         llm.LLMFlowInPosition.String(),
+				SystemPrompt: system,
+				UserPrompt:   user,
+				RawOutput:    raw,
+				ParsedOutput: map[string]any{
+					"stop_loss":    optionalFloat(parsed.StopLoss),
+					"take_profits": append([]float64(nil), parsed.TakeProfits...),
+				},
+			},
 		}, nil
 	}
+}
+
+func optionalFloat(value *float64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func optionalString(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func buildFlatRiskPromptInput(input decision.FlatRiskInitInput) (FlatRiskPromptInput, error) {

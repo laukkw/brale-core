@@ -1,5 +1,7 @@
 package initexit
 
+import "brale-core/internal/execution"
+
 // BuildPatch is a narrow patch surface reserved for LLM post-processing.
 type BuildPatch struct {
 	Entry            *float64
@@ -7,6 +9,7 @@ type BuildPatch struct {
 	TakeProfits      []float64
 	TakeProfitRatios []float64
 	Reason           *string
+	Trace            *execution.LLMRiskTrace
 }
 
 func ApplyPatch(base BuildOutput, patch *BuildPatch) BuildOutput {

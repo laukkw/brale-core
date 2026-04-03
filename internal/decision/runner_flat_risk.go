@@ -53,6 +53,7 @@ func (r *Runner) buildFlatLLMPlan(ctx context.Context, symbol string, gate fund.
 	if err := rescaleFlatPlan(&resolved, bind, acct, stopReason); err != nil {
 		return nil, wrapLLMRiskFailure(symbol, llmRiskStageFlatInit, llmRiskReasonSchemaFailure, err)
 	}
+	resolved.LLMRiskTrace = cloneLLMRiskTrace(patch.Trace)
 	return &resolved, nil
 }
 

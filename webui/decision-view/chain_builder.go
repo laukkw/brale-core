@@ -43,7 +43,7 @@ func buildChain(ctx context.Context, symbol string, events symbolEvents, openPos
 	addProviderNodes(acc, df, logger, symbol, events.providers)
 	addAgentNodes(acc, df, logger, symbol, events.agents)
 	addGateNodes(acc, df, logger, symbol, events.gates)
-	addLLMRiskTraceNodes(acc, logger, symbol, events.providers, openPos, hasOpenPos)
+	addLLMRiskTraceNodes(acc, logger, symbol, events.gates)
 	roundList := acc.sorted(limit)
 	return buildSymbolChainFromRounds(df, symbol, roundList)
 }

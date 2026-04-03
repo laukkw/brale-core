@@ -1574,30 +1574,20 @@ function renderStageHTML(stage) {
 
 function renderLLMRiskHTML(stage, ts) {
   const payload = stage.output && typeof stage.output === "object" ? stage.output : {};
-  const records = Array.isArray(payload.records) ? payload.records : [];
-  const positionId = payload.position_id || "—";
-  const positionStatus = payload.position_status || "—";
   const snapshotId = payload.snapshot_id ?? "—";
-
-  const recordsHTML = records.length
-    ? records
-        .map((rec, idx) => {
-          const role = rec?.role || `trace_${idx + 1}`;
-          const recordTs = rec?.timestamp
-            ? new Date(Number(rec.timestamp) * 1000).toLocaleString()
-            : "—";
-          return `
-            <div class="block">
-              <strong>${escapeHTML(gateRoleLabel(role))}</strong>
-              <div class="note-meta"><span class="tag">${escapeHTML(String(role))}</span><span class="tag">时间 ${escapeHTML(recordTs)}</span></div>
-              <div class="code-block"><strong>System</strong>\n${escapeHTML(formatRawData(rec?.system_prompt))}</div>
-              <div class="code-block"><strong>User</strong>\n${escapeHTML(formatRawData(rec?.user_prompt))}</div>
-              <div class="code-block"><strong>Output</strong>\n${escapeHTML(formatRawData(rec?.output))}</div>
-            </div>
-          `;
-        })
-        .join("")
-    : '<div class="placeholder">暂无 in-position LLM 记录</div>';
+  const trace = payload.trace && typeof payload.trace === "object" ? payload.trace : null;
+  const traceHTML = trace
+    ? `
+        <div class="block"><strong>LLM 输入</strong>
+          <div class="code-block"><strong>System</strong>\n${escapeHTML(formatRawData(trace.system_prompt))}</div>
+          <div class="code-block"><strong>User</strong>\n${escapeHTML(formatRawData(trace.user_prompt))}</div>
+        </div>
+        <div class="block"><strong>LLM 输出</strong>
+          <div class="code-block"><strong>Raw</strong>\n${escapeHTML(formatRawData(trace.raw_output))}</div>
+          <div class="code-block"><strong>Parsed</strong>\n${escapeHTML(formatRawData(trace.parsed_output))}</div>
+        </div>
+      `
+    : '<div class="placeholder">该轮没有持久化风险 LLM 请求</div>';
 
   return `
     <div class="note-title">${escapeHTML(stage.title || "LLM 止盈止损")}</div>
@@ -1606,10 +1596,8 @@ function renderLLMRiskHTML(stage, ts) {
       <span class="tag">时间 ${escapeHTML(ts)}</span>
       <span class="tag">snapshot ${escapeHTML(String(snapshotId))}</span>
     </div>
-    <div class="block"><strong>持仓</strong> id=${escapeHTML(String(positionId))} / status=${escapeHTML(
-    String(positionStatus)
-  )}</div>
-    ${recordsHTML}
+    <div class="block"><strong>类型</strong> ${escapeHTML(String(trace?.stage || payload.decision_action || "risk"))}</div>
+    ${traceHTML}
     <div class="block"><strong>指纹</strong> ${escapeHTML(
       stage.meta?.fingerprint || "—"
     )} | 源 ${escapeHTML(stage.meta?.source || "—")}</div>

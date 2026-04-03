@@ -22,6 +22,15 @@ type RiskAnnotations struct {
 	Fee          float64
 }
 
+type LLMRiskTrace struct {
+	Stage        string
+	Flow         string
+	SystemPrompt string
+	UserPrompt   string
+	RawOutput    string
+	ParsedOutput any
+}
+
 type ExecutionPlan struct {
 	Symbol             string
 	Valid              bool
@@ -41,6 +50,7 @@ type ExecutionPlan struct {
 	SystemConfigHash   string
 	StrategyConfigHash string
 	PositionID         string
+	LLMRiskTrace       *LLMRiskTrace
 	RiskAnnotations    RiskAnnotations
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
