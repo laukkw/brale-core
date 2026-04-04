@@ -14,7 +14,3 @@ dist/
 *.out
 webui/og-card-demo/node_modules/
 docs/
-
-configs/symbols/ETHUSDT.toml
-configs/symbols-index.toml
-configs/freqtrade/config.base.json
