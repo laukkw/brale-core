@@ -98,7 +98,7 @@ make init
 
 ** 开源协议
 
-MIT License，详见 [[file:LICENSE][LICENSE]]。
+GNU Affero General Public License v3.0 only (AGPL-3.0-only)，详见 [[file:LICENSE][LICENSE]]。
 
 ** 支持
 
@@ -199,7 +199,7 @@ If you don't need the onboarding UI, just run =make start= to launch Freqtrade a
 
 ** License
 
-MIT License. See [[file:LICENSE][LICENSE]].
+GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [[file:LICENSE][LICENSE]].
 
 ** Support
 
