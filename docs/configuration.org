@@ -29,7 +29,7 @@ Brale 的配置分为四层，从全局到单币种逐级细化。
 
 控制单个币种的数据采集方式和 Agent 行为：
 
-- K 线周期（intervals）与数量限制（kline_limit）
+- K 线周期（intervals）与数量限制（kline_limit）。=intervals= 的第一个元素（最短周期）同时作为 =decisionInterval= 注入到 Agent prompt 中，告知 LLM 当前决策窗口的时间尺度。
 - 启用哪些 Agent（indicator / structure / mechanics）
 - 是否要求 OI、funding rate、多空比、恐惧贪婪指数等数据
 - 技术指标窗口参数（EMA / RSI / ATR / MACD）
@@ -110,7 +110,7 @@ Determines which trading pairs the system actually runs. Each entry requires at 
 
 Controls data collection and Agent behavior for a single symbol:
 
-- candlestick intervals and kline_limit
+- candlestick intervals and kline_limit. The first element of =intervals= (shortest timeframe) is also injected into Agent prompts as =decisionInterval=, informing the LLM of the current decision window's time scale.
 - which Agents to enable (indicator / structure / mechanics)
 - whether to require OI, funding rate, long-short ratio, fear-greed index, etc.
 - technical indicator window parameters (EMA / RSI / ATR / MACD)
