@@ -20,6 +20,7 @@ docs/project_introduction_technical.md
 !internal/decision/decisionutil/runner_test.go
 !internal/llm/openai_test.go
 !internal/llm/schema_test.go
+!internal/llmctl/probe_test.go
 AGENTS.md
 webui/og-card-demo/node_modules/*
 webui/landing-page/
