@@ -1,0 +1,313 @@
+symbol = "XAGUSDT"
+id = "default-xagusdt"
+rule_chain = "configs/rules/default.json"
+
+[risk_management]
+# ======================================================================
+# A. 基础风险参数（Base Risk）
+# ======================================================================
+
+# 单笔风险占比（占账户权益的百分比）
+# 例：0.1 表示每笔交易最多承担账户权益的 10% 风险
+# 范围：0.01 ~ 1.0，建议 0.05 ~ 0.15
+risk_per_trade_pct = 0.1
+
+# 最大可用资金占比（占账户总权益的百分比）
+# 例：0.9 表示最多动用 90% 的资金，保留 10% 作为安全垫
+# 范围：0.1 ~ 1.0
+max_invest_pct = 0.9
+
+# 最大有效杠杆倍数
+# 例：10 表示最大 10x 杠杆
+# 超过此倍数时系统会自动缩减仓位
+max_leverage = 10
+
+# 信号质量与风险系数的映射关系
+# 引擎根据建仓质量（setup_quality）自动评定 Grade：
+#   Grade 3 (High)   = setup_quality >= 0.75（最佳 setup，满系数）
+#   Grade 2 (Medium)  = setup_quality >= 0.55（中等 setup）
+#   Grade 1 (Low)     = setup_quality >= 0.35（及格 setup）
+#   Grade 0 (None)    = setup_quality < 0.35（不开仓）
+# 最终风险 = risk_per_trade_pct × grade_factor × sieve_size_factor
+# 例：risk=0.1, grade_3_factor=1.0, sieve=0.7 → 实际风险=0.07 (7%)
+grade_3_factor = 1.0
+grade_2_factor = 0.70
+grade_1_factor = 0.40
+
+# ======================================================================
+# B. 入场模式（Entry Mode）
+# ======================================================================
+
+# 入场价格的确定方式
+# 可选值：
+#   orderbook   — 使用订单簿第 N 档价格（需配 orderbook_depth）
+#                  若订单簿不可用，自动回退到 atr_offset
+#   atr_offset  — 基于 ATR 偏移入场（需配 entry_offset_atr）
+#                  long: entry = min(前低, close) - ATR × offset
+#                  short: entry = max(前高, close) + ATR × offset
+#   market      — 直接用最新 close 价入场（最简单但滑点不可控）
+entry_mode = "orderbook"
+
+# orderbook 模式：使用第几档深度的价格
+# 推荐值：5 / 10 / 20 / 50 / 100
+# 值越大入场越保守（挂单越深），成交概率越低
+orderbook_depth = 5
+
+# atr_offset 模式：ATR 偏移倍数
+# 例：0.1 表示入场价偏移 0.1 倍 ATR
+# 值越大入场越保守，等待更深的回调
+# 范围：0 ~ 1.0
+entry_offset_atr = 0.1
+
+# ======================================================================
+# C. 出场模式（Exit / TP-SL）
+# ======================================================================
+
+# TP1 命中后移动止损到保本位时的手续费补偿
+# 例：0.001 表示保本位 = 入场价 ± 0.1% 手续费
+# 设为 0 表示不补偿手续费（保本 = 入场价）
+breakeven_fee_pct = 0.0
+
+# 止损执行时的滑点缓冲比例
+# 例：0.0005 表示实际止损单价格额外偏移 0.05%
+# 用于应对市价单的滑点
+slippage_buffer_pct = 0.0005
+
+# 风险策略模式
+# 可选值：
+#   llm    — 开仓与持仓收紧的 TP/SL 由 LLM 生成（更灵活但不可复现）
+#   native — 使用 Go 内置规则计算 TP/SL（确定性强，可回测）
+[risk_management.risk_strategy]
+mode = "llm"
+
+# ----------------------------------------------------------------------
+# C1. 初始止盈止损（Initial TP/SL）
+# ----------------------------------------------------------------------
+[risk_management.initial_exit]
+
+# 止盈止损策略
+# 可选值：
+#   atr_structure_v1 — 综合结构位 + ATR 计算止损，按 R 倍数计算止盈
+#     止损距离 = max(结构位距离, ATR × multiplier, 入场价 × min_distance_pct)
+#   fixed_rr_v1      — 纯 ATR 止损（不使用结构位），按 R 倍数计算止盈
+#     止损距离 = max(ATR × multiplier, 入场价 × min_distance_pct)
+#   structure_tp_v1  — 止损同 atr_structure_v1；止盈尝试用结构位替换固定 R 倍数
+policy = "atr_structure_v1"
+
+# 结构位来源周期
+#   auto — 自动使用 symbols.ETHUSDT.intervals 中的最小周期
+#   或指定具体周期（如 "1h" / "4h"），必须存在于该币种 intervals 列表中
+#   当 policy = fixed_rr_v1 时此字段无效
+structure_interval = "auto"
+
+[risk_management.initial_exit.params]
+
+# ATR 止损倍数
+# 例：2 表示止损候选距离 = ATR × 2
+# 值越大止损越宽（容忍更大波动），但仓位会相应缩小
+stop_atr_multiplier = 2
+
+# 最小止损距离百分比（兜底，防止止损太近被扫）
+# 例：0.008 表示止损距离至少为入场价的 0.8%
+stop_min_distance_pct = 0.008
+
+# 止盈 R 倍数数组
+# 每个值表示几倍风险距离（R）处设止盈
+# 例：[2, 2.5] → TP1 在 2R 处，TP2 在 2.5R 处
+# 至少 1 项，每项 > 0
+take_profit_rr = [2, 2.5]
+
+# 分批止盈比例（长度必须与 take_profit_rr 一致）
+# 例：[0.6, 0.4] → TP1 平 60%，TP2 平剩余 40%
+# 会自动归一化
+take_profit_ratios = [0.6, 0.4]
+
+# [仅 structure_tp_v1] 结构位缓冲比例
+# long: TP = 结构位 × (1 - buffer)
+# short: TP = 结构位 × (1 + buffer)
+# 例：0.001 表示 TP 比结构位保守 0.1%
+#structure_buffer_pct = 0.001
+
+# ----------------------------------------------------------------------
+# C2. 持仓收紧（Tighten ATR）
+# ----------------------------------------------------------------------
+[risk_management.tighten_atr]
+
+# 结构受威胁时的收紧 ATR 倍数
+# 例：1.5 表示收紧到 1.5 倍 ATR
+structure_threatened = 1.5
+
+# TP1 命中后的收紧 ATR 倍数
+tp1_atr = 1.5
+
+# TP2 命中后的收紧 ATR 倍数
+tp2_atr = 2
+
+# 止盈点之间的最小距离百分比
+# 例：0.006 表示相邻 TP 间距至少 0.6%
+min_tp_distance_pct = 0.006
+
+# 收紧后 TP 与当前价的最小间距百分比
+# 例：0.005 表示收紧后的 TP 至少比当前价远 0.5%
+min_tp_gap_pct = 0.005
+
+# 收紧操作最小间隔（秒）
+# 例：300 表示两次收紧至少间隔 5 分钟；0 = 不限制
+min_update_interval_sec = 300
+
+# ======================================================================
+# D. Gate 决策阈值（Gate Decision Thresholds）
+# ======================================================================
+# Gate 决定"做不做"。只有 4 种硬停（直接 VETO）：
+#   方向不明确 / 数据缺失 / 结构硬失效 / 连锁清算
+# 其余情况通过 setup_quality 和 entry_edge 两个连续分数判断。
+[risk_management.gate]
+
+# 建仓质量阈值
+# setup_quality 公式（范围 [0, 1]）：
+#   +0.30 结构清晰 +0.25 结构完整 +0.20 指标对齐
+#   +0.15 动能扩张 +0.10×脚本加分 -0.20 噪音 -0.25 tag矛盾
+# 调参：0.20 激进 / 0.35 默认 / 0.55 保守 / 0.75 极保守
+quality_threshold = 0.35
+
+# 执行价值阈值
+# entry_edge = |方向分数| × setup_quality × (1 - risk_penalty)
+# 调参：0.05 激进 / 0.10 默认 / 0.20 保守 / 0.30 极保守
+edge_threshold = 0.10
+
+# ======================================================================
+# E. Sieve 仓位缩放（Position Sizing Filter）
+# ======================================================================
+# Gate 决定"做"之后，Sieve 控制"做多大"。
+# 最终仓位 = risk_per_trade_pct × grade_factor × size_factor
+[risk_management.sieve]
+
+# 最小仓位比例下限
+# 例：0.35 表示不论匹配结果如何，仓位不低于满仓的 35%
+min_size_factor = 0.35
+
+# 未命中任何行时的默认动作和仓位比例
+default_gate_action = "ALLOW"
+default_size_factor = 1.0
+
+# --- Sieve 匹配行 ---
+# mechanics_tag: fuel_ready/neutral/crowded_long/crowded_short
+# liq_confidence: high/low
+# crowding_align: true(同向拥挤)/false(反向或无关)
+# size_factor: 仓位比例 [0,1]，1.0=满仓
+
+# --- 最佳环境 ---
+
+[[risk_management.sieve.rows]]
+# 杠杆健康 + 高置信 → 满仓
+mechanics_tag = "fuel_ready"
+liq_confidence = "high"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 1.0
+reason_code = "FUEL_HIGH"
+
+[[risk_management.sieve.rows]]
+# 杠杆健康 + 低置信 → 七成仓
+mechanics_tag = "fuel_ready"
+liq_confidence = "low"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.7
+reason_code = "FUEL_LOW"
+
+# --- 中性环境 ---
+
+[[risk_management.sieve.rows]]
+# 中性 + 高置信 → 七成仓
+mechanics_tag = "neutral"
+liq_confidence = "high"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.7
+reason_code = "NEUTRAL_HIGH"
+
+[[risk_management.sieve.rows]]
+# 中性 + 低置信 → 半仓
+mechanics_tag = "neutral"
+liq_confidence = "low"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.5
+reason_code = "NEUTRAL_LOW"
+
+# --- 同向拥挤（赔率差，缩仓）---
+
+[[risk_management.sieve.rows]]
+# 多头同向拥挤 + 高置信 → 四成仓
+mechanics_tag = "crowded_long"
+liq_confidence = "high"
+crowding_align = true
+gate_action = "ALLOW"
+size_factor = 0.4
+reason_code = "CROWD_LONG_ALIGN_HIGH"
+
+[[risk_management.sieve.rows]]
+# 多头同向拥挤 + 低置信 → 半仓
+mechanics_tag = "crowded_long"
+liq_confidence = "low"
+crowding_align = true
+gate_action = "ALLOW"
+size_factor = 0.5
+reason_code = "CROWD_LONG_ALIGN_LOW"
+
+[[risk_management.sieve.rows]]
+# 空头同向拥挤 + 高置信 → 四成仓
+mechanics_tag = "crowded_short"
+liq_confidence = "high"
+crowding_align = true
+gate_action = "ALLOW"
+size_factor = 0.4
+reason_code = "CROWD_SHORT_ALIGN_HIGH"
+
+[[risk_management.sieve.rows]]
+# 空头同向拥挤 + 低置信 → 半仓
+mechanics_tag = "crowded_short"
+liq_confidence = "low"
+crowding_align = true
+gate_action = "ALLOW"
+size_factor = 0.5
+reason_code = "CROWD_SHORT_ALIGN_LOW"
+
+# --- 反向拥挤 ---
+
+[[risk_management.sieve.rows]]
+# 多头反向拥挤 + 高置信 → 三成五仓
+mechanics_tag = "crowded_long"
+liq_confidence = "high"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.35
+reason_code = "CROWD_LONG_COUNTER_HIGH"
+
+[[risk_management.sieve.rows]]
+# 多头反向拥挤 + 低置信 → 半仓
+mechanics_tag = "crowded_long"
+liq_confidence = "low"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.5
+reason_code = "CROWD_LONG_COUNTER_LOW"
+
+[[risk_management.sieve.rows]]
+# 空头反向拥挤 + 高置信 → 三成五仓
+mechanics_tag = "crowded_short"
+liq_confidence = "high"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.35
+reason_code = "CROWD_SHORT_COUNTER_HIGH"
+
+[[risk_management.sieve.rows]]
+# 空头反向拥挤 + 低置信 → 半仓
+mechanics_tag = "crowded_short"
+liq_confidence = "low"
+crowding_align = false
+gate_action = "ALLOW"
+size_factor = 0.5
+reason_code = "CROWD_SHORT_COUNTER_LOW"
