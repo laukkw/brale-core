@@ -270,7 +270,13 @@ func (p *Pipeline) judgeInPositionWithFallback(ctx context.Context, symbol strin
 	}
 	runCtx := llm.WithSessionSymbol(ctx, symbol)
 	runCtx = llm.WithSessionFlow(runCtx, llm.LLMFlowInPosition)
-	dataCtx := BuildProviderDataContext(comp, symbol)
+	decisionInterval := ""
+	if p.Runner != nil {
+		if cfg, ok := p.Runner.Configs[symbol]; ok {
+			decisionInterval = selectDecisionInterval(cfg.Intervals)
+		}
+	}
+	dataCtx := BuildProviderDataContext(comp, symbol, decisionInterval)
 	indOut, stOut, mechOut, prompts, err := p.Runner.Provider.JudgeInPosition(runCtx, symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, summary, providerEnabled, dataCtx)
 	if err != nil {
 		if provider.IsDecodeError(err) {

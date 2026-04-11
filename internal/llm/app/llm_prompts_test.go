@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"brale-core/internal/decision"
 	"brale-core/internal/decision/agent"
 	"brale-core/internal/decision/features"
 )
@@ -206,5 +207,43 @@ func TestProviderExamplesUseSafeDefaultTags(t *testing.T) {
 	}
 	if !strings.Contains(providerExampleInPositionStructure(), `"monitor_tag":"keep"`) {
 		t.Fatalf("unexpected in-position structure example: %s", providerExampleInPositionStructure())
+	}
+}
+
+func TestProviderPromptsCarryMovementFieldsAndDataAnchors(t *testing.T) {
+	builder := LLMPromptBuilder{
+		ProviderIndicatorSystem: "provider-indicator-system",
+		UserFormat:              UserPromptFormatBullet,
+	}
+
+	ind := agent.IndicatorSummary{
+		Expansion:          agent.ExpansionExpanding,
+		Alignment:          agent.AlignmentAligned,
+		Noise:              agent.NoiseLow,
+		MomentumDetail:     "rsi_slope_state=rising",
+		ConflictDetail:     "未观察到明显冲突",
+		MovementScore:      0.42,
+		MovementConfidence: 0.73,
+	}
+	prompts, err := builder.ProviderPrompts(ind, agent.StructureSummary{}, agent.MechanicsSummary{}, decision.AgentEnabled{Indicator: true}, decision.ProviderDataContext{
+		IndicatorCrossTF: &decision.IndicatorCrossTFContext{
+			DecisionTFBias: "up",
+			Alignment:      "aligned",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ProviderPrompts: %v", err)
+	}
+	if !strings.Contains(prompts.IndicatorUser, `- movement_score: 0.42`) {
+		t.Fatalf("provider user missing movement_score: %s", prompts.IndicatorUser)
+	}
+	if !strings.Contains(prompts.IndicatorUser, `- movement_confidence: 0.73`) {
+		t.Fatalf("provider user missing movement_confidence: %s", prompts.IndicatorUser)
+	}
+	if !strings.Contains(prompts.IndicatorUser, `代码计算数据锚点(仅供交叉验证):`) {
+		t.Fatalf("provider user missing data anchor block: %s", prompts.IndicatorUser)
+	}
+	if !strings.Contains(prompts.IndicatorUser, `- decision_tf_bias: "up"`) {
+		t.Fatalf("provider user missing indicator anchor payload: %s", prompts.IndicatorUser)
 	}
 }

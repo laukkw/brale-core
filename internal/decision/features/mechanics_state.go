@@ -16,7 +16,6 @@ type MechanicsStateSummary struct {
 	FundingState      *mechanicsFundingState     `json:"funding_state,omitempty"`
 	CrowdingState     *mechanicsCrowdingState    `json:"crowding_state,omitempty"`
 	LiquidationState  *mechanicsLiquidationState `json:"liquidation_state,omitempty"`
-	CVDState          *mechanicsCVDState         `json:"cvd_state,omitempty"`
 	SentimentState    *mechanicsSentimentState   `json:"sentiment_state,omitempty"`
 	MechanicsConflict []string                   `json:"mechanics_conflict,omitempty"`
 	Missing           []string                   `json:"missing,omitempty"`
@@ -51,16 +50,9 @@ type mechanicsLiquidationState struct {
 	Imbalance float64 `json:"imbalance,omitempty"`
 }
 
-type mechanicsCVDState struct {
-	MomentumState string `json:"momentum_state"`
-	Divergence    string `json:"divergence"`
-	PeakFlip      string `json:"peak_flip"`
-}
-
 type mechanicsSentimentState struct {
-	FearGreed      string `json:"fear_greed"`
-	FearGreedValue int    `json:"fear_greed_value,omitempty"`
-	TopTraderBias  string `json:"top_trader_bias"`
+	FearGreed     string `json:"fear_greed"`
+	TopTraderBias string `json:"top_trader_bias"`
 }
 
 func BuildMechanicsStateSummary(input MechanicsCompressedInput) (MechanicsStateSummary, error) {
@@ -71,7 +63,6 @@ func BuildMechanicsStateSummary(input MechanicsCompressedInput) (MechanicsStateS
 	summary.FundingState = classifyFundingState(input)
 	summary.LiquidationState = classifyLiquidationState(input)
 	summary.CrowdingState = classifyCrowdingState(input, summary.FundingState, summary.LiquidationState)
-	summary.CVDState = classifyCVDState(input)
 	summary.SentimentState = classifySentimentState(input)
 	summary.MechanicsConflict = detectMechanicsConflicts(summary)
 	summary.Missing = detectMechanicsMissing(summary)
@@ -97,7 +88,6 @@ func hasMechanicsStateSummary(summary MechanicsStateSummary) bool {
 		summary.FundingState != nil ||
 		summary.CrowdingState != nil ||
 		summary.LiquidationState != nil ||
-		summary.CVDState != nil ||
 		summary.SentimentState != nil
 }
 
@@ -188,27 +178,6 @@ func classifyLiquidationState(input MechanicsCompressedInput) *mechanicsLiquidat
 	return best
 }
 
-func classifyCVDState(input MechanicsCompressedInput) *mechanicsCVDState {
-	entry, ok := pickPrimaryCVD(input.CVDByInterval)
-	if !ok {
-		return nil
-	}
-	momentumState := "neutral"
-	switch {
-	case entry.Momentum > 0:
-		momentumState = "positive"
-	case entry.Momentum < 0:
-		momentumState = "negative"
-	}
-	divergence := normalizedMechanicsToken(entry.Divergence, "none")
-	peakFlip := normalizedMechanicsToken(entry.PeakFlip, "none")
-	return &mechanicsCVDState{
-		MomentumState: momentumState,
-		Divergence:    divergence,
-		PeakFlip:      peakFlip,
-	}
-}
-
 func classifySentimentState(input MechanicsCompressedInput) *mechanicsSentimentState {
 	var (
 		hasFearGreed bool
@@ -255,9 +224,8 @@ func classifySentimentState(input MechanicsCompressedInput) *mechanicsSentimentS
 		}
 	}
 	return &mechanicsSentimentState{
-		FearGreed:      fearGreed,
-		FearGreedValue: fearValue,
-		TopTraderBias:  topTraderBias,
+		FearGreed:     fearGreed,
+		TopTraderBias: topTraderBias,
 	}
 }
 
@@ -285,19 +253,11 @@ func detectMechanicsConflicts(summary MechanicsStateSummary) []string {
 			conflicts = append(conflicts, "funding_short_but_oi_rising")
 		}
 	}
-	if summary.CVDState != nil {
-		switch summary.CVDState.Divergence {
-		case "bullish":
-			conflicts = append(conflicts, "cvd_divergence_bullish")
-		case "bearish":
-			conflicts = append(conflicts, "cvd_divergence_bearish")
-		}
-	}
 	return conflicts
 }
 
 func detectMechanicsMissing(summary MechanicsStateSummary) []string {
-	missing := make([]string, 0, 6)
+	missing := make([]string, 0, 5)
 	if summary.OIState == nil {
 		missing = append(missing, "oi_state")
 	}
@@ -309,9 +269,6 @@ func detectMechanicsMissing(summary MechanicsStateSummary) []string {
 	}
 	if summary.LiquidationState == nil {
 		missing = append(missing, "liquidation_state")
-	}
-	if summary.CVDState == nil {
-		missing = append(missing, "cvd_state")
 	}
 	if summary.SentimentState == nil {
 		missing = append(missing, "sentiment_state")

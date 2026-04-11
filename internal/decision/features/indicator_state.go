@@ -3,65 +3,59 @@ package features
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"slices"
+	"sort"
 	"strings"
 
 	"brale-core/internal/interval"
 )
 
 type indicatorStateInput struct {
-	DecisionInterval string                    `json:"decision_interval"`
-	MultiTF          []indicatorTFState        `json:"multi_tf"`
-	CrossTFSummary   indicatorCrossTFSummary   `json:"cross_tf_summary"`
-	Missing          []string                  `json:"missing,omitempty"`
+	DecisionInterval string                  `json:"decision_interval"`
+	MultiTF          []indicatorTFState      `json:"multi_tf"`
+	CrossTFSummary   indicatorCrossTFSummary `json:"cross_tf_summary"`
+	Missing          []string                `json:"missing,omitempty"`
 }
 
 type indicatorTFState struct {
-	Interval    string                   `json:"interval"`
-	FreshnessSec int64                   `json:"freshness_sec,omitempty"`
-	Missing     []string                 `json:"missing,omitempty"`
-	Trend       indicatorTrendState      `json:"trend"`
-	Momentum    indicatorMomentumState   `json:"momentum"`
-	Volatility  indicatorVolatilityState `json:"volatility"`
-	Bias        string                   `json:"bias"`
-	Events      []string                 `json:"events,omitempty"`
+	Interval     string                   `json:"interval"`
+	FreshnessSec int64                    `json:"freshness_sec,omitempty"`
+	Missing      []string                 `json:"missing,omitempty"`
+	Trend        indicatorTrendState      `json:"trend"`
+	Momentum     indicatorMomentumState   `json:"momentum"`
+	Volatility   indicatorVolatilityState `json:"volatility"`
+	Bias         string                   `json:"bias"`
+	Events       []string                 `json:"events,omitempty"`
 }
 
 type indicatorTrendState struct {
-	PriceVsEMAFast    string  `json:"price_vs_ema_fast"`
-	PriceVsEMAMid     string  `json:"price_vs_ema_mid"`
-	PriceVsEMASlow    string  `json:"price_vs_ema_slow"`
-	EMAStack          string  `json:"ema_stack"`
+	PriceVsEMAFast     string  `json:"price_vs_ema_fast"`
+	PriceVsEMAMid      string  `json:"price_vs_ema_mid"`
+	PriceVsEMASlow     string  `json:"price_vs_ema_slow"`
+	EMAStack           string  `json:"ema_stack"`
 	EMADistanceFastATR float64 `json:"ema_distance_fast_atr"`
 	EMADistanceMidATR  float64 `json:"ema_distance_mid_atr"`
 	EMADistanceSlowATR float64 `json:"ema_distance_slow_atr"`
 }
 
 type indicatorMomentumState struct {
-	RSIZone       string  `json:"rsi_zone"`
-	RSISlopeState string  `json:"rsi_slope_state"`
-	STCState      string  `json:"stc_state"`
-	OBVSlopeState string  `json:"obv_slope_state"`
-	StochRSIZone  string  `json:"stoch_rsi_zone,omitempty"`
-	AroonSignal   string  `json:"aroon_signal,omitempty"`
+	RSIZone       string `json:"rsi_zone"`
+	RSISlopeState string `json:"rsi_slope_state"`
+	STCState      string `json:"stc_state"`
+	OBVSlopeState string `json:"obv_slope_state"`
 }
 
 type indicatorVolatilityState struct {
-	ATRRaw         float64 `json:"atr_raw"`
 	ATRExpandState string  `json:"atr_expand_state"`
 	ATRChangePct   float64 `json:"atr_change_pct,omitempty"`
-	BBZone         string  `json:"bb_zone,omitempty"`
-	BBWidthState   string  `json:"bb_width_state,omitempty"`
-	CHOPRegime     string  `json:"chop_regime,omitempty"`
 }
 
 type indicatorCrossTFSummary struct {
-	DecisionTFBias   string `json:"decision_tf_bias"`
-	LowerTFAgreement bool   `json:"lower_tf_agreement"`
-	HigherTFAgreement bool  `json:"higher_tf_agreement"`
-	Alignment        string `json:"alignment"`
-	ConflictCount    int    `json:"conflict_count"`
+	DecisionTFBias    string `json:"decision_tf_bias"`
+	LowerTFAgreement  bool   `json:"lower_tf_agreement"`
+	HigherTFAgreement bool   `json:"higher_tf_agreement"`
+	Alignment         string `json:"alignment"`
+	ConflictCount     int    `json:"conflict_count"`
 }
 
 func BuildIndicatorStateJSON(symbol string, byInterval map[string]IndicatorJSON, decisionInterval string) (IndicatorJSON, error) {
@@ -182,16 +176,10 @@ func summarizeIndicatorPayload(payload IndicatorCompressedInput) indicatorTFStat
 			RSISlopeState: classifyRSISlope(payload.Data.RSI),
 			STCState:      classifySTCState(payload.Data.STC),
 			OBVSlopeState: classifyOBVSlope(payload.Data.OBV),
-			StochRSIZone:  classifyStochRSIZone(payload.Data.StochRSI),
-			AroonSignal:   classifyAroonSignal(payload.Data.Aroon),
 		},
 		Volatility: indicatorVolatilityState{
-			ATRRaw:         atr,
 			ATRExpandState: classifyATRExpansion(payload.Data.ATR),
 			ATRChangePct:   atrChangePct(payload.Data.ATR),
-			BBZone:         classifyBBZone(payload.Data.BB),
-			BBWidthState:   classifyBBWidthState(payload.Data.BB),
-			CHOPRegime:     classifyCHOPRegime(payload.Data.CHOP),
 		},
 	}
 	state.Bias = computeIndicatorBias(state)
@@ -422,11 +410,6 @@ func detectIndicatorEvents(payload IndicatorCompressedInput) []string {
 	appendEvent("ema_stack_bull_flip", prevStack != "bull" && currentStack == "bull")
 	appendEvent("ema_stack_bear_flip", prevStack != "bear" && currentStack == "bear")
 
-	// TD Sequential events (setup completion at 9)
-	if td := payload.Data.TDSequential; td != nil {
-		appendEvent("td_buy_setup_9", td.BuySetup >= 9)
-		appendEvent("td_sell_setup_9", td.SellSetup >= 9)
-	}
 	return events
 }
 

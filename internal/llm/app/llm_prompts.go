@@ -295,20 +295,24 @@ type providerSummary struct {
 }
 
 type providerIndicatorSummary struct {
-	Expansion      agent.Expansion `json:"expansion"`
-	Alignment      agent.Alignment `json:"alignment"`
-	Noise          agent.Noise     `json:"noise"`
-	MomentumDetail string          `json:"momentum_detail"`
-	ConflictDetail string          `json:"conflict_detail"`
+	Expansion          agent.Expansion `json:"expansion"`
+	Alignment          agent.Alignment `json:"alignment"`
+	Noise              agent.Noise     `json:"noise"`
+	MomentumDetail     string          `json:"momentum_detail"`
+	ConflictDetail     string          `json:"conflict_detail"`
+	MovementScore      float64         `json:"movement_score"`
+	MovementConfidence float64         `json:"movement_confidence"`
 }
 
 type providerStructureSummary struct {
-	Regime         agent.Regime    `json:"regime"`
-	LastBreak      agent.LastBreak `json:"last_break"`
-	Quality        agent.Quality   `json:"quality"`
-	Pattern        agent.Pattern   `json:"pattern"`
-	VolumeAction   string          `json:"volume_action"`
-	CandleReaction string          `json:"candle_reaction"`
+	Regime             agent.Regime    `json:"regime"`
+	LastBreak          agent.LastBreak `json:"last_break"`
+	Quality            agent.Quality   `json:"quality"`
+	Pattern            agent.Pattern   `json:"pattern"`
+	VolumeAction       string          `json:"volume_action"`
+	CandleReaction     string          `json:"candle_reaction"`
+	MovementScore      float64         `json:"movement_score"`
+	MovementConfidence float64         `json:"movement_confidence"`
 }
 
 type providerMechanicsSummary struct {
@@ -317,26 +321,32 @@ type providerMechanicsSummary struct {
 	RiskLevel           agent.RiskLevel     `json:"risk_level"`
 	OpenInterestContext string              `json:"open_interest_context"`
 	AnomalyDetail       string              `json:"anomaly_detail"`
+	MovementScore       float64             `json:"movement_score"`
+	MovementConfidence  float64             `json:"movement_confidence"`
 }
 
 func toProviderIndicatorSummary(ind agent.IndicatorSummary) providerIndicatorSummary {
 	return providerIndicatorSummary{
-		Expansion:      ind.Expansion,
-		Alignment:      ind.Alignment,
-		Noise:          ind.Noise,
-		MomentumDetail: ind.MomentumDetail,
-		ConflictDetail: ind.ConflictDetail,
+		Expansion:          ind.Expansion,
+		Alignment:          ind.Alignment,
+		Noise:              ind.Noise,
+		MomentumDetail:     ind.MomentumDetail,
+		ConflictDetail:     ind.ConflictDetail,
+		MovementScore:      ind.MovementScore,
+		MovementConfidence: ind.MovementConfidence,
 	}
 }
 
 func toProviderStructureSummary(st agent.StructureSummary) providerStructureSummary {
 	return providerStructureSummary{
-		Regime:         st.Regime,
-		LastBreak:      st.LastBreak,
-		Quality:        st.Quality,
-		Pattern:        st.Pattern,
-		VolumeAction:   st.VolumeAction,
-		CandleReaction: st.CandleReaction,
+		Regime:             st.Regime,
+		LastBreak:          st.LastBreak,
+		Quality:            st.Quality,
+		Pattern:            st.Pattern,
+		VolumeAction:       st.VolumeAction,
+		CandleReaction:     st.CandleReaction,
+		MovementScore:      st.MovementScore,
+		MovementConfidence: st.MovementConfidence,
 	}
 }
 
@@ -347,6 +357,8 @@ func toProviderMechanicsSummary(mech agent.MechanicsSummary) providerMechanicsSu
 		RiskLevel:           mech.RiskLevel,
 		OpenInterestContext: mech.OpenInterestContext,
 		AnomalyDetail:       mech.AnomalyDetail,
+		MovementScore:       mech.MovementScore,
+		MovementConfidence:  mech.MovementConfidence,
 	}
 }
 

@@ -3,18 +3,20 @@ package decision
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/decision/features"
+	"brale-core/internal/interval"
 )
 
 // BuildProviderDataContext extracts code-computed quantitative summaries
 // from CompressionResult for Provider grounding. It reads the multi-TF
 // indicator state, trend structure data, and mechanics state.
-func BuildProviderDataContext(comp features.CompressionResult, symbol string) ProviderDataContext {
+func BuildProviderDataContext(comp features.CompressionResult, symbol string, decisionInterval string) ProviderDataContext {
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
 	ctx := ProviderDataContext{}
-	ctx.IndicatorCrossTF = buildIndicatorCrossTFFromComp(comp, symbol)
+	ctx.IndicatorCrossTF = buildIndicatorCrossTFFromComp(comp, symbol, decisionInterval)
 	ctx.StructureAnchorCtx = buildStructureAnchorFromComp(comp, symbol)
 	ctx.MechanicsCtx = buildMechanicsDataFromComp(comp, symbol)
 	return ctx
@@ -22,14 +24,12 @@ func BuildProviderDataContext(comp features.CompressionResult, symbol string) Pr
 
 // buildIndicatorCrossTFFromComp builds the cross-TF summary by calling
 // BuildIndicatorStateJSON and extracting the cross_tf_summary field.
-func buildIndicatorCrossTFFromComp(comp features.CompressionResult, symbol string) *IndicatorCrossTFContext {
+func buildIndicatorCrossTFFromComp(comp features.CompressionResult, symbol string, decisionInterval string) *IndicatorCrossTFContext {
 	byInterval, ok := comp.Indicators[symbol]
 	if !ok || len(byInterval) == 0 {
 		return nil
 	}
-	// Build the multi-TF state to extract the cross-TF summary.
-	// We use an empty decision interval and let it auto-select.
-	multiJSON, err := features.BuildIndicatorStateJSON(symbol, byInterval, "")
+	multiJSON, err := features.BuildIndicatorStateJSON(symbol, byInterval, decisionInterval)
 	if err != nil {
 		return nil
 	}
@@ -82,7 +82,7 @@ func buildStructureAnchorFromComp(comp features.CompressionResult, symbol string
 			SuperTrend *struct {
 				State    string `json:"state"`
 				Interval string `json:"interval"`
-			} `json:"super_trend"`
+			} `json:"supertrend"`
 		}
 		if err := json.Unmarshal(raw, &block); err != nil {
 			continue
@@ -111,12 +111,13 @@ func buildMechanicsDataFromComp(comp features.CompressionResult, symbol string) 
 	if !ok || len(mech.RawJSON) == 0 {
 		return nil
 	}
-	var input features.MechanicsCompressedInput
-	if err := json.Unmarshal(mech.RawJSON, &input); err != nil {
-		return nil
+	var state struct {
+		MechanicsConflict []string `json:"mechanics_conflict"`
+		CrowdingState     *struct {
+			ReversalRisk string `json:"reversal_risk"`
+		} `json:"crowding_state"`
 	}
-	state, err := features.BuildMechanicsStateSummary(input)
-	if err != nil {
+	if err := json.Unmarshal(mech.RawJSON, &state); err != nil {
 		return nil
 	}
 	if len(state.MechanicsConflict) == 0 && (state.CrowdingState == nil || state.CrowdingState.ReversalRisk == "") {
@@ -129,4 +130,26 @@ func buildMechanicsDataFromComp(comp features.CompressionResult, symbol string) 
 		ctx.ReversalRisk = state.CrowdingState.ReversalRisk
 	}
 	return ctx
+}
+
+func selectDecisionInterval(intervals []string) string {
+	shortest := ""
+	var shortestDur time.Duration
+	for _, candidate := range intervals {
+		dur, err := interval.ParseInterval(candidate)
+		if err != nil {
+			continue
+		}
+		if shortest == "" || dur < shortestDur {
+			shortest = candidate
+			shortestDur = dur
+		}
+	}
+	if shortest != "" {
+		return shortest
+	}
+	if len(intervals) == 0 {
+		return ""
+	}
+	return intervals[0]
 }
