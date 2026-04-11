@@ -61,6 +61,7 @@ type indicatorMarket struct {
 	Symbol         string  `json:"symbol"`
 	Interval       string  `json:"interval"`
 	CurrentPrice   float64 `json:"current_price"`
+	PreviousPrice  float64 `json:"previous_price,omitempty"`
 	PriceTimestamp string  `json:"price_timestamp"`
 }
 
@@ -128,7 +129,7 @@ func BuildIndicatorCompressedInput(symbol, interval string, candles []snapshot.C
 	opts = normalizeIndicatorCompressOptions(opts)
 	last, closes, highs, lows, volumes := buildIndicatorSeries(candles)
 	meta := buildIndicatorMeta(last)
-	market := buildIndicatorMarket(symbol, interval, last)
+	market := buildIndicatorMarket(symbol, interval, candles)
 	data := buildIndicatorData(closes, highs, lows, volumes, last.Close, opts)
 	return IndicatorCompressedInput{Meta: meta, Market: market, Data: data}, nil
 }
@@ -165,13 +166,18 @@ func buildIndicatorMeta(last snapshot.Candle) indicatorMeta {
 	return meta
 }
 
-func buildIndicatorMarket(symbol, interval string, last snapshot.Candle) indicatorMarket {
-	return indicatorMarket{
+func buildIndicatorMarket(symbol, interval string, candles []snapshot.Candle) indicatorMarket {
+	last := candles[len(candles)-1]
+	market := indicatorMarket{
 		Symbol:         strings.ToUpper(strings.TrimSpace(symbol)),
 		Interval:       strings.ToLower(strings.TrimSpace(interval)),
 		CurrentPrice:   roundFloat(last.Close, 4),
 		PriceTimestamp: candleTimestamp(last),
 	}
+	if len(candles) > 1 {
+		market.PreviousPrice = roundFloat(candles[len(candles)-2].Close, 4)
+	}
+	return market
 }
 
 func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float64, opts IndicatorCompressOptions) indicatorData {
