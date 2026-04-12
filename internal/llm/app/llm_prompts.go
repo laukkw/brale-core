@@ -362,42 +362,35 @@ func toProviderMechanicsSummary(mech agent.MechanicsSummary) providerMechanicsSu
 	}
 }
 
-func buildProviderUser(format UserPromptFormat, summary providerSummary, example string) string {
-	raw, _ := json.Marshal(summary)
-	return formatPayloads(
-		format,
-		payloadBlock{label: "摘要输入:", payload: string(raw)},
-		payloadBlock{label: "约束: 输出示例 JSON 仅用于展示固定字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。", payload: ""},
-		payloadBlock{label: "输出示例(JSON):", payload: example},
-	)
+const providerDataAnchorLabel = "代码计算数据锚点(仅供交叉验证):"
+
+func appendProviderDataAnchor(blocks []payloadBlock, dataCtx any) []payloadBlock {
+	if dataCtx == nil {
+		return blocks
+	}
+	dataRaw, _ := json.Marshal(dataCtx)
+	if len(dataRaw) <= 2 { // not just "{}" or "null"
+		return blocks
+	}
+	return append(blocks, payloadBlock{label: providerDataAnchorLabel, payload: string(dataRaw)})
+}
+
+func providerConstraintPayload(inPosition bool) string {
+	if inPosition {
+		return "仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。最终输出必须完全基于本轮输入独立生成。"
+	}
+	return "输出示例 JSON 仅用于展示固定字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。"
 }
 
 func buildProviderUserWithData(format UserPromptFormat, summary providerSummary, dataCtx any, example string) string {
 	raw, _ := json.Marshal(summary)
 	blocks := []payloadBlock{{label: "摘要输入:", payload: string(raw)}}
-	if dataCtx != nil {
-		dataRaw, _ := json.Marshal(dataCtx)
-		if len(dataRaw) > 2 { // not just "{}" or "null"
-			blocks = append(blocks, payloadBlock{label: "代码计算数据锚点(仅供交叉验证):", payload: string(dataRaw)})
-		}
-	}
+	blocks = appendProviderDataAnchor(blocks, dataCtx)
 	blocks = append(blocks,
-		payloadBlock{label: "约束: 输出示例 JSON 仅用于展示固定字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。", payload: ""},
+		payloadBlock{label: "约束:", payload: providerConstraintPayload(false)},
 		payloadBlock{label: "输出示例(JSON):", payload: example},
 	)
 	return formatPayloads(format, blocks...)
-}
-
-func buildInPositionProviderUser(format UserPromptFormat, summary providerSummary, pos positionprompt.Summary, example string) string {
-	raw, _ := json.Marshal(summary)
-	posRaw, _ := json.Marshal(pos)
-	return formatPayloads(
-		format,
-		payloadBlock{label: "摘要输入:", payload: string(raw)},
-		payloadBlock{label: "仓位摘要:", payload: string(posRaw)},
-		payloadBlock{label: "约束: 仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。输出示例 JSON 仅用于展示字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。", payload: ""},
-		payloadBlock{label: "输出示例(JSON):", payload: example},
-	)
 }
 
 func buildInPositionProviderUserWithData(format UserPromptFormat, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
@@ -407,14 +400,9 @@ func buildInPositionProviderUserWithData(format UserPromptFormat, summary provid
 		{label: "摘要输入:", payload: string(raw)},
 		{label: "仓位摘要:", payload: string(posRaw)},
 	}
-	if dataCtx != nil {
-		dataRaw, _ := json.Marshal(dataCtx)
-		if len(dataRaw) > 2 {
-			blocks = append(blocks, payloadBlock{label: "代码计算数据锚点(仅供交叉验证):", payload: string(dataRaw)})
-		}
-	}
+	blocks = appendProviderDataAnchor(blocks, dataCtx)
 	blocks = append(blocks,
-		payloadBlock{label: "约束: 仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。最终输出必须完全基于本轮输入独立生成。", payload: ""},
+		payloadBlock{label: "约束:", payload: providerConstraintPayload(true)},
 		payloadBlock{label: "输出示例(JSON):", payload: example},
 	)
 	return formatPayloads(format, blocks...)

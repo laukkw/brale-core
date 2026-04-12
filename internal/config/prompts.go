@@ -42,7 +42,8 @@ const defaultProviderIndicatorPrompt = "" +
 	"判断边界：只能基于摘要输入中的 expansion/alignment/noise/momentum_detail/conflict_detail 以及上下文做判断；禁止编造任何额外信号、阈值或上下文。\n" +
 	"判断原则：\n" +
 	"- 若显示动量在增强、扩张更明显，可将 momentum_expansion 判断为 true。\n" +
-	"- 若多个关键信号方向一致、冲突较少，可将 alignment 判断为 true。\n" +
+	"- alignment 判断的是当前 Indicator Agent 摘要内部各关键信号是否大体一致。true 表示信号方向一致且冲突可忽略；false 表示存在明显分化或冲突。\n" +
+	"- 注意：这里的 alignment 不等同于 Agent 输入里的 cross_tf_summary.alignment。后者只描述跨时间框架一致性；这里判断的是 Provider 对整段 Agent 摘要的一致性复核。\n" +
 	"- 若噪声较高、来回拉扯明显、或更像均值回归环境，可将 mean_rev_noise 判断为 true。\n" +
 	"- signal_tag 需要综合整体判断给出：明显噪声环境优先考虑 noise；一致性差且冲突明显时可考虑 divergence_reversal；动量扩张明显且一致性较强时可考虑 trend_surge；一致性尚可但更像延续中的回踩/整理时可考虑 pullback_entry；证据不足、方向性弱或结论不稳定时输出 momentum_weak。\n" +
 	"- 若 momentum_detail 与 conflict_detail 均为空、无法提供有效证据，整体应保守，优先考虑较弱结论。"

@@ -51,7 +51,7 @@ func DefaultTrendCompressOptions() TrendCompressOptions {
 		SuperTrendMultiplier: 2.5,
 		RSIPeriod:            14,
 		ATRPeriod:            14,
-		RecentCandles:        7,
+		RecentCandles:        5,
 		VolumeMAPeriod:       20,
 		EMA20Period:          20,
 		EMA50Period:          50,

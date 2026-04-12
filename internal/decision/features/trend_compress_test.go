@@ -133,6 +133,41 @@ func TestBuildTrendCompressedInputSuperTrendNoNaNOnSideways(t *testing.T) {
 	}
 }
 
+func TestDefaultTrendCompressOptionsUseFiveRecentCandles(t *testing.T) {
+	if got := DefaultTrendCompressOptions().RecentCandles; got != 5 {
+		t.Fatalf("RecentCandles=%d want 5", got)
+	}
+}
+
+func TestBuildTrendCompressedInputLimitsStructureCandidatesPerSide(t *testing.T) {
+	opts := DefaultTrendCompressOptions()
+	opts.SkipSuperTrend = true
+
+	got, err := BuildTrendCompressedInput("BTCUSDT", "1h", oscillatingTrendTestCandles(260), opts)
+	if err != nil {
+		t.Fatalf("BuildTrendCompressedInput() error = %v", err)
+	}
+	if len(got.StructureCandidates) > 6 {
+		t.Fatalf("structure_candidates len=%d want <= 6", len(got.StructureCandidates))
+	}
+	current := got.RecentCandles[len(got.RecentCandles)-1].C
+	below := 0
+	above := 0
+	for _, candidate := range got.StructureCandidates {
+		if candidate.Price <= current {
+			below++
+		} else {
+			above++
+		}
+	}
+	if below > 3 {
+		t.Fatalf("below candidates=%d want <= 3", below)
+	}
+	if above > 3 {
+		t.Fatalf("above candidates=%d want <= 3", above)
+	}
+}
+
 func trendTestCandles(n int) []snapshot.Candle {
 	if n < 1 {
 		return nil
@@ -170,6 +205,25 @@ func sidewaysTrendTestCandles(n int) []snapshot.Candle {
 			Low:      base - 0.8,
 			Close:    base + 0.1,
 			Volume:   1000,
+		}
+	}
+	return candles
+}
+
+func oscillatingTrendTestCandles(n int) []snapshot.Candle {
+	if n < 1 {
+		return nil
+	}
+	candles := make([]snapshot.Candle, n)
+	for i := range n {
+		base := 100.0 + math.Sin(float64(i)/7.0)*6 + math.Cos(float64(i)/13.0)*2
+		candles[i] = snapshot.Candle{
+			OpenTime: int64(i) * 60_000,
+			Open:     base - 0.6,
+			High:     base + 1.4,
+			Low:      base - 1.5,
+			Close:    base + math.Sin(float64(i)/5.0)*0.5,
+			Volume:   1000 + math.Cos(float64(i)/11.0)*40,
 		}
 	}
 	return candles

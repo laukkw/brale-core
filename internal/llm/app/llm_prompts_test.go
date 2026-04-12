@@ -246,4 +246,10 @@ func TestProviderPromptsCarryMovementFieldsAndDataAnchors(t *testing.T) {
 	if !strings.Contains(prompts.IndicatorUser, `- decision_tf_bias: "up"`) {
 		t.Fatalf("provider user missing indicator anchor payload: %s", prompts.IndicatorUser)
 	}
+	if !strings.Contains(prompts.IndicatorUser, "约束:\n") {
+		t.Fatalf("provider user missing constraint block label: %s", prompts.IndicatorUser)
+	}
+	if !strings.Contains(prompts.IndicatorUser, `最终输出必须完全基于本轮输入独立生成。`) {
+		t.Fatalf("provider user missing shared constraint payload: %s", prompts.IndicatorUser)
+	}
 }

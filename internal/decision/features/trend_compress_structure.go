@@ -276,7 +276,7 @@ func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []floa
 		})
 	}
 
-	return dedupCandidates(cands, atrLatest, opts)
+	return pruneStructureCandidates(dedupCandidates(cands, atrLatest, opts), candles[n-1].Close, 3)
 }
 
 func extractCloses(candles []snapshot.Candle) []float64 {
@@ -319,6 +319,54 @@ func dedupCandidates(in []TrendStructureCandidate, atr float64, opts TrendCompre
 			return out[i].AgeCandles < out[j].AgeCandles
 		}
 		return out[i].Price < out[j].Price
+	})
+	return out
+}
+
+func pruneStructureCandidates(in []TrendStructureCandidate, currentPrice float64, perSide int) []TrendStructureCandidate {
+	if len(in) == 0 || currentPrice <= 0 || perSide <= 0 {
+		return in
+	}
+	below := make([]TrendStructureCandidate, 0, len(in))
+	above := make([]TrendStructureCandidate, 0, len(in))
+	for _, candidate := range in {
+		if candidate.Price <= 0 {
+			continue
+		}
+		if candidate.Price <= currentPrice {
+			below = append(below, candidate)
+			continue
+		}
+		above = append(above, candidate)
+	}
+	sort.Slice(below, func(i, j int) bool {
+		left := math.Abs(currentPrice - below[i].Price)
+		right := math.Abs(currentPrice - below[j].Price)
+		if left != right {
+			return left < right
+		}
+		return below[i].Price > below[j].Price
+	})
+	sort.Slice(above, func(i, j int) bool {
+		left := math.Abs(above[i].Price - currentPrice)
+		right := math.Abs(above[j].Price - currentPrice)
+		if left != right {
+			return left < right
+		}
+		return above[i].Price < above[j].Price
+	})
+	if len(below) > perSide {
+		below = below[:perSide]
+	}
+	if len(above) > perSide {
+		above = above[:perSide]
+	}
+	out := append(below, above...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Price != out[j].Price {
+			return out[i].Price < out[j].Price
+		}
+		return out[i].AgeCandles < out[j].AgeCandles
 	})
 	return out
 }
