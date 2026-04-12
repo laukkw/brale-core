@@ -60,10 +60,10 @@ docker-compose.yml 默认编排 3 个服务：
 
 支持两个消息渠道：
 
-- Telegram Bot
-- 飞书 Bot
+- Telegram Bot — 支持决策推送、命令交互（如 /observe）
+- 飞书 Bot — 支持决策推送
 
-系统启动后会自动拉起已配置的 Bot，启动通知由 =startup_notify_enabled= 控制。
+系统启动后自动拉起已配置的 Bot。启动通知由 =startup_notify_enabled= 控制。
 
 ** 数据存储
 
@@ -132,8 +132,8 @@ When =enable_scheduled_decision=true= and =[webhook].enabled=true=, these routes
 
 Two messaging channels are supported:
 
-- Telegram Bot
-- Feishu Bot
+- Telegram Bot — decision push and command interaction (e.g., /observe)
+- Feishu Bot — decision push
 
 Configured bots start automatically on launch. Startup notifications are controlled by =startup_notify_enabled=.
 

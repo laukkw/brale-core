@@ -2,20 +2,18 @@
 
 * 中文版
 
-Brale 的配置分为四层，从全局到单币种逐级细化。
+Brale 的配置分为四层，从全局到单币种逐级细化。所有配置均为 TOML 格式。
 
 ** 1) 系统配置：configs/system.toml
 
-全局运行参数，包括：
+全局运行参数：
 
-- 日志格式、级别、输出路径
-- 数据库路径
-- 执行系统类型（当前默认 Freqtrade）
-- 执行 API 地址与认证
-- 定时决策开关
-- LLM 调用最小间隔
-- Webhook 监听地址、队列、回退轮询参数
-- 通知总开关（Telegram / 飞书）
+- 日志：格式、级别、输出路径
+- 数据库：SQLite 存储路径
+- 执行系统：类型（默认 Freqtrade）、API 地址、认证信息
+- 调度：定时决策开关、LLM 调用最小间隔
+- Webhook：监听地址、任务队列、回退轮询参数
+- 通知：总开关（Telegram / 飞书）
 
 ** 2) 币种索引：configs/symbols-index.toml
 
@@ -100,20 +98,18 @@ go build -o bralectl ./cmd/bralectl
 
 * English Version
 
-Brale uses four configuration layers, from global settings down to per-symbol details.
+Brale uses four configuration layers, all in TOML format, from global settings down to per-symbol details.
 
 ** 1) System Configuration: configs/system.toml
 
-Global runtime parameters, including:
+Global runtime parameters:
 
-- log format, level, and output path
-- database path
-- execution system type (defaults to Freqtrade)
-- execution API endpoint and authentication
-- scheduled decision toggle
-- minimum interval between LLM calls
-- webhook listening address, queue, and fallback polling
-- notification master switch (Telegram / Feishu)
+- Logging: format, level, output path
+- Database: SQLite storage path
+- Execution: system type (defaults to Freqtrade), API endpoint, authentication
+- Scheduling: decision toggle, minimum LLM call interval
+- Webhook: listening address, task queue, fallback polling
+- Notifications: master switch (Telegram / Feishu)
 
 ** 2) Symbol Index: configs/symbols-index.toml
 

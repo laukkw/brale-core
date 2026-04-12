@@ -33,12 +33,12 @@ Brale 是一个 AI 驱动的量化交易引擎。它把一轮交易决策拆成 
 
 ** 核心特点
 
-- *LLM 出主意，代码做裁判* — 模型给出止盈止损方案后，Go 代码会强制校验价格序列、杠杆上限、清算安全距离。模型可以犯错，代码不让它真的亏钱。
-- *三路 Agent 独立决策* — 指标分析、市场结构、衍生品力学各自独立运行，通过共识阈值避免单一模型误判。
-- *Provider 不是只听摘要* — Provider 除了读取 Agent 文本摘要，还会收到代码提取的结构化锚点，例如多周期指标一致性、结构突破锚点、机制冲突与反转风险，用来交叉验证 Agent 结论。
-- *全自动调度* — 定时决策、价格监控、状态对账都由内置调度器完成，不需要外部 cron。
-- *执行层可替换* — 当前对接 Freqtrade，接口解耦，可以换成其他交易后端。
-- *通知开箱即用* — 内置 Telegram 和飞书 Bot。
+- *LLM 出主意，代码做裁判* — 模型给出止盈止损方案后，Go 代码强制校验价格序列、杠杆上限、清算安全距离。模型可以犯错，代码负责兜底。
+- *三路 Agent 独立决策* — 指标分析（indicator）、市场结构（structure）、衍生品力学（mechanics）各自独立运行，通过共识阈值避免单一模型误判。
+- *Provider 代码锚点交叉验证* — Provider 除了读取 Agent 文本摘要，还会收到代码直接提取的结构化锚点（多周期指标一致性、结构突破位、机制冲突信号），用来交叉验证 Agent 结论，降低 LLM 幻觉风险。
+- *全自动调度* — 定时决策、价格监控、状态对账均由内置调度器驱动，无需外部 cron。
+- *执行层可替换* — 当前对接 Freqtrade，接口解耦，可替换为其他交易后端。
+- *通知开箱即用* — 内置 Telegram 和飞书 Bot，支持决策推送和命令交互。
 
 ** 快速启动
 
@@ -101,6 +101,17 @@ make init
 
 GNU Affero General Public License v3.0 only (AGPL-3.0-only)，详见 [[file:LICENSE][LICENSE]]。
 
+** LLM Token 用量参考
+
+以下数据基于实测，供成本估算参考。单次决策周期指所有 Agent + Provider + 风控 LLM 调用的合计：
+
+| 配置 | 单次输入 | 单次输出 | 日均 Token |
+|------+----------+----------+------------|
+| 单币种 × 3 周期 × 1h 间隔 | 11K–12K | 1.1K–1.2K | ≈ 30 万 |
+| 单币种 × 3 周期 × 15min 间隔 | 11K–12K | 1.1K–1.2K | ≈ 110–120 万 |
+
+多币种按线性倍数估算。实际用量受 Agent 启用数量、持仓状态（flat vs in-position）和 LLM 风控模式影响。
+
 ** 支持
 
 #+begin_example
@@ -135,12 +146,12 @@ Brale is an AI-driven quantitative trading engine. It breaks a trading decision 
 
 ** Core Features
 
-- *LLM proposes, code disposes* — after the model suggests TP/SL levels, Go code enforces price sequence validity, leverage caps, and liquidation safety. The model can be wrong; the code won't let it lose real money.
+- *LLM proposes, code disposes* — after the model suggests TP/SL levels, Go code enforces price sequence validity, leverage caps, and liquidation safety margins. The model can be wrong; the code catches it.
 - *Three independent Agent lanes* — indicator analysis, market structure, and derivatives mechanics each run separately. Consensus thresholds prevent single-model misjudgment.
-- *Providers get grounding anchors, not just summaries* — each Provider receives its Agent summary plus code-computed anchors such as multi-timeframe indicator alignment, structure breaks, and mechanics conflict signals for cross-checking.
-- *Fully automated scheduling* — decision cycles, price monitoring, and state reconciliation are all handled by a built-in scheduler. No external cron needed.
-- *Swappable execution layer* — currently wired to Freqtrade, but the interface is decoupled and can be replaced with another trading backend.
-- *Notifications out of the box* — built-in Telegram and Feishu bots.
+- *Provider grounding via code anchors* — each Provider receives its Agent summary plus code-extracted structured anchors (multi-timeframe indicator alignment, structure break points, mechanics conflict signals) for cross-verification, reducing LLM hallucination risk.
+- *Fully automated scheduling* — decision cycles, price monitoring, and state reconciliation are driven by a built-in scheduler. No external cron needed.
+- *Swappable execution layer* — currently wired to Freqtrade; the interface is decoupled and can be replaced with another trading backend.
+- *Notifications out of the box* — built-in Telegram and Feishu bots with decision push and command interaction.
 
 ** Quick Start
 
@@ -202,6 +213,17 @@ If you don't need the onboarding UI, just run =make start= to launch Freqtrade a
 ** License
 
 GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [[file:LICENSE][LICENSE]].
+
+** LLM Token Usage Reference
+
+Based on production measurements. A single decision cycle includes all Agent + Provider + risk LLM calls combined:
+
+| Configuration | Input / cycle | Output / cycle | Daily tokens |
+|---------------+---------------+----------------+--------------|
+| 1 symbol × 3 timeframes × 1h interval | 11K–12K | 1.1K–1.2K | ≈ 300K |
+| 1 symbol × 3 timeframes × 15min interval | 11K–12K | 1.1K–1.2K | ≈ 1.1M–1.2M |
+
+Scale linearly for multiple symbols. Actual usage varies with enabled Agents, position state (flat vs in-position), and LLM risk mode.
 
 ** Support
 
