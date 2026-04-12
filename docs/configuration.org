@@ -32,10 +32,27 @@ Brale 的配置分为四层，从全局到单币种逐级细化。
 - K 线周期（intervals）与数量限制（kline_limit）。=intervals= 的第一个元素（最短周期）同时作为 =decisionInterval= 注入到 Agent prompt 中，告知 LLM 当前决策窗口的时间尺度。
 - 启用哪些 Agent（indicator / structure / mechanics）
 - 是否要求 OI、funding rate、多空比、恐惧贪婪指数等数据
-- 技术指标窗口参数（EMA / RSI / ATR / STC）
+- 技术指标参数（EMA / RSI / ATR / STC / BB / CHOP / StochRSI / Aroon）
 - 共识阈值
 - 开仓冷却时间
 - 各 Agent 的模型路由与温度
+
+当前 =indicators= 段已暴露的字段包括：
+
+- =ema_fast= / =ema_mid= / =ema_slow=
+- =rsi_period= / =atr_period=
+- =stc_fast= / =stc_slow= / =skip_stc=
+- =bb_period= / =bb_multiplier=
+- =chop_period=
+- =stoch_rsi_period=
+- =aroon_period=
+- =last_n= / =pretty=
+
+边界说明：
+
+- =TD Sequential= 当前没有对外暴露参数，仍使用代码内固定计算逻辑。
+- =SuperTrend= 不属于 =IndicatorConfig=，它来自结构侧的 =TrendPreset=。
+- =kline_limit= 必须覆盖最长指标 warmup；拉长 =stoch_rsi_period=、=aroon_period= 等参数时，配置校验也会同步提高最低要求。
 
 ** 4) 策略配置：configs/strategies/*.toml
 
@@ -113,10 +130,27 @@ Controls data collection and Agent behavior for a single symbol:
 - candlestick intervals and kline_limit. The first element of =intervals= (shortest timeframe) is also injected into Agent prompts as =decisionInterval=, informing the LLM of the current decision window's time scale.
 - which Agents to enable (indicator / structure / mechanics)
 - whether to require OI, funding rate, long-short ratio, fear-greed index, etc.
-- technical indicator window parameters (EMA / RSI / ATR / STC)
+- technical indicator parameters (EMA / RSI / ATR / STC / BB / CHOP / StochRSI / Aroon)
 - consensus thresholds
 - entry cooldown
 - model routing and temperature for each Agent
+
+The =indicators= section currently exposes:
+
+- =ema_fast= / =ema_mid= / =ema_slow=
+- =rsi_period= / =atr_period=
+- =stc_fast= / =stc_slow= / =skip_stc=
+- =bb_period= / =bb_multiplier=
+- =chop_period=
+- =stoch_rsi_period=
+- =aroon_period=
+- =last_n= / =pretty=
+
+Boundary notes:
+
+- =TD Sequential= does not expose tunable config yet and still uses code-level defaults.
+- =SuperTrend= is not part of =IndicatorConfig=; it comes from structure-side =TrendPreset= values.
+- =kline_limit= must cover the longest indicator warmup. If you increase =stoch_rsi_period=, =aroon_period=, or similar values, validation raises the minimum required history accordingly.
 
 ** 4) Strategy Configuration: configs/strategies/*.toml
 

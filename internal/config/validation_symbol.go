@@ -72,6 +72,21 @@ func validateIndicatorConfig(cfg IndicatorConfig) error {
 	if !cfg.SkipSTC && (cfg.STCFast <= 0 || cfg.STCSlow <= 0) {
 		return validationErrorf("indicators.stc_fast/stc_slow must be > 0 when STC is enabled")
 	}
+	if cfg.BBPeriod <= 0 {
+		return validationErrorf("indicators.bb_period must be > 0")
+	}
+	if cfg.BBMultiplier <= 0 {
+		return validationErrorf("indicators.bb_multiplier must be > 0")
+	}
+	if cfg.CHOPPeriod <= 1 {
+		return validationErrorf("indicators.chop_period must be > 1")
+	}
+	if cfg.StochRSIPeriod <= 0 {
+		return validationErrorf("indicators.stoch_rsi_period must be > 0")
+	}
+	if cfg.AroonPeriod <= 0 {
+		return validationErrorf("indicators.aroon_period must be > 0")
+	}
 	if cfg.LastN <= 0 {
 		return validationErrorf("indicators.last_n must be > 0")
 	}
@@ -137,6 +152,9 @@ func validateLLMRole(prefix string, cfg LLMRoleConfig) error {
 	if *cfg.Temperature < 0 {
 		return validationErrorf("%s.temperature must be >= 0", prefix)
 	}
+	if *cfg.Temperature > 2 {
+		return validationErrorf("%s.temperature must be <= 2", prefix)
+	}
 	return nil
 }
 
@@ -178,24 +196,18 @@ func requiredKlineLimit(cfg SymbolConfig) int {
 	if !cfg.Indicators.SkipSTC && cfg.Indicators.STCFast > 0 && cfg.Indicators.STCSlow > 0 {
 		stcRequired = STCRequiredBars(cfg.Indicators.STCFast, cfg.Indicators.STCSlow)
 	}
-	required := maxInt(
+	required := max(
 		EMARequiredBars(cfg.Indicators.EMAFast),
 		EMARequiredBars(cfg.Indicators.EMAMid),
 		EMARequiredBars(cfg.Indicators.EMASlow),
 		RSIRequiredBars(cfg.Indicators.RSIPeriod),
 		ATRRequiredBars(cfg.Indicators.ATRPeriod),
+		BBRequiredBars(cfg.Indicators.BBPeriod),
+		CHOPRequiredBars(cfg.Indicators.CHOPPeriod),
+		StochRSIRequiredBars(cfg.Indicators.RSIPeriod, cfg.Indicators.StochRSIPeriod),
+		AroonRequiredBars(cfg.Indicators.AroonPeriod),
 		stcRequired,
 		trendRequired,
 	)
 	return max(1, required)
-}
-
-func maxInt(values ...int) int {
-	maxVal := 0
-	for _, v := range values {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	return maxVal
 }

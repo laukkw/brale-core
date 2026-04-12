@@ -18,13 +18,18 @@ func TestValidateSymbolConfig_DoesNotRequireMACDFields(t *testing.T) {
 			Mechanics: &mechanicsEnabled,
 		},
 		Indicators: IndicatorConfig{
-			EMAFast:   21,
-			EMAMid:    50,
-			EMASlow:   200,
-			RSIPeriod: 14,
-			ATRPeriod: 14,
-			LastN:     5,
-			SkipSTC:   true,
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
+			SkipSTC:        true,
 		},
 		LLM: SymbolLLMConfig{
 			Agent: LLMRoleSet{
@@ -38,5 +43,101 @@ func TestValidateSymbolConfig_DoesNotRequireMACDFields(t *testing.T) {
 
 	if err := ValidateSymbolConfig(cfg); err != nil {
 		t.Fatalf("ValidateSymbolConfig() error = %v", err)
+	}
+}
+
+func TestValidateSymbolConfig_RejectsTemperatureAboveTwo(t *testing.T) {
+	indicatorEnabled := true
+	structureEnabled := false
+	mechanicsEnabled := false
+	temp := 2.1
+
+	cfg := SymbolConfig{
+		Symbol:     "BTCUSDT",
+		Intervals:  []string{"1h"},
+		KlineLimit: 250,
+		Agent: AgentConfig{
+			Indicator: &indicatorEnabled,
+			Structure: &structureEnabled,
+			Mechanics: &mechanicsEnabled,
+		},
+		Indicators: IndicatorConfig{
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
+			SkipSTC:        true,
+		},
+		LLM: SymbolLLMConfig{
+			Agent: LLMRoleSet{
+				Indicator: LLMRoleConfig{Model: "test-model", Temperature: &temp},
+			},
+			Provider: LLMRoleSet{
+				Indicator: LLMRoleConfig{Model: "test-model", Temperature: &temp},
+			},
+		},
+	}
+
+	err := ValidateSymbolConfig(cfg)
+	if err == nil {
+		t.Fatal("ValidateSymbolConfig() expected error")
+	}
+	if got := err.Error(); got != "llm.agent.indicator.temperature must be <= 2" {
+		t.Fatalf("ValidateSymbolConfig() error = %q", got)
+	}
+}
+
+func TestValidateSymbolConfig_RejectsNonPositiveBBMultiplier(t *testing.T) {
+	indicatorEnabled := true
+	structureEnabled := false
+	mechanicsEnabled := false
+	temp := 0.1
+
+	cfg := SymbolConfig{
+		Symbol:     "BTCUSDT",
+		Intervals:  []string{"1h"},
+		KlineLimit: 250,
+		Agent: AgentConfig{
+			Indicator: &indicatorEnabled,
+			Structure: &structureEnabled,
+			Mechanics: &mechanicsEnabled,
+		},
+		Indicators: IndicatorConfig{
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			BBPeriod:       20,
+			BBMultiplier:   0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
+			SkipSTC:        true,
+		},
+		LLM: SymbolLLMConfig{
+			Agent: LLMRoleSet{
+				Indicator: LLMRoleConfig{Model: "test-model", Temperature: &temp},
+			},
+			Provider: LLMRoleSet{
+				Indicator: LLMRoleConfig{Model: "test-model", Temperature: &temp},
+			},
+		},
+	}
+
+	err := ValidateSymbolConfig(cfg)
+	if err == nil {
+		t.Fatal("ValidateSymbolConfig() expected error")
+	}
+	if got := err.Error(); got != "indicators.bb_multiplier must be > 0" {
+		t.Fatalf("ValidateSymbolConfig() error = %q", got)
 	}
 }

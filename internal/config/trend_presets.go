@@ -186,7 +186,7 @@ func presetRequiredBars(preset TrendPreset) int {
 	if !preset.SkipSuperTrend && preset.SuperTrendPeriod > 0 {
 		stRequired = SuperTrendRequiredBars(preset.SuperTrendPeriod, preset.SuperTrendMultiplier)
 	}
-	return maxInt(
+	return max(
 		RSIRequiredBars(preset.RSIPeriod),
 		ATRRequiredBars(preset.ATRPeriod),
 		preset.VolumeMAPeriod,

@@ -41,6 +41,18 @@ type TrendCompressOptions struct {
 	IncludeStructureRSI  bool
 }
 
+const (
+	structurePointHigh = "High"
+	structurePointLow  = "Low"
+
+	trendBiasBullish = "bullish"
+	trendBiasBearish = "bearish"
+	trendTypeNone    = "none"
+
+	superTrendStateUp   = "UP"
+	superTrendStateDown = "DOWN"
+)
+
 func DefaultTrendCompressOptions() TrendCompressOptions {
 	return TrendCompressOptions{
 		FractalSpan:          2,
@@ -385,9 +397,9 @@ func buildSuperTrendSnapshot(interval string, stSeries, closes []float64) *Trend
 		if math.IsNaN(close) || math.IsInf(close, 0) || math.Abs(close) <= 1e-12 {
 			continue
 		}
-		state := "DOWN"
+		state := superTrendStateDown
 		if close >= level {
-			state = "UP"
+			state = superTrendStateUp
 		}
 		return &TrendSuperTrendSnapshot{
 			Interval:    strings.ToLower(strings.TrimSpace(interval)),
@@ -400,11 +412,11 @@ func buildSuperTrendSnapshot(interval string, stSeries, closes []float64) *Trend
 }
 
 func buildTrendSMC(candles []snapshot.Candle, closes []float64) TrendSMC {
-	bias := "bearish"
+	bias := trendBiasBearish
 	if len(closes) > 0 {
 		last := closes[len(closes)-1]
 		if last >= emaSpan(closes, 34) {
-			bias = "bullish"
+			bias = trendBiasBullish
 		}
 	}
 	return TrendSMC{
@@ -422,11 +434,11 @@ func buildTrendKeyLevels(points []TrendStructurePoint) *TrendKeyLevels {
 	for i := len(points) - 1; i >= 0; i-- {
 		p := points[i]
 		switch p.Type {
-		case "High":
+		case structurePointHigh:
 			if lastHigh == nil {
 				lastHigh = &TrendKeyLevel{Price: p.Price, Idx: p.Idx}
 			}
-		case "Low":
+		case structurePointLow:
 			if lastLow == nil {
 				lastLow = &TrendKeyLevel{Price: p.Price, Idx: p.Idx}
 			}
@@ -511,7 +523,7 @@ func emaSpan(series []float64, span int) float64 {
 }
 
 func detectOrderBlock(candles []snapshot.Candle, bias string) TrendOrderBlock {
-	block := TrendOrderBlock{Type: "none"}
+	block := TrendOrderBlock{Type: trendTypeNone}
 	if len(candles) == 0 {
 		return block
 	}
@@ -519,13 +531,13 @@ func detectOrderBlock(candles []snapshot.Candle, bias string) TrendOrderBlock {
 	if len(recent) > 8 {
 		recent = candles[len(candles)-8:]
 	}
-	if bias == "bullish" {
+	if bias == trendBiasBullish {
 		for i := len(recent) - 1; i >= 0; i-- {
 			c := recent[i]
 			if c.Close < c.Open {
 				upper := roundFloat(math.Max(c.Open, c.Close), 4)
 				lower := roundFloat(math.Min(c.Low, c.Open), 4)
-				block.Type = "bullish"
+				block.Type = trendBiasBullish
 				block.Upper = &upper
 				block.Lower = &lower
 				return block
@@ -538,7 +550,7 @@ func detectOrderBlock(candles []snapshot.Candle, bias string) TrendOrderBlock {
 		if c.Close > c.Open {
 			upper := roundFloat(math.Max(c.Open, c.High), 4)
 			lower := roundFloat(math.Min(c.Open, c.Close), 4)
-			block.Type = "bearish"
+			block.Type = trendBiasBearish
 			block.Upper = &upper
 			block.Lower = &lower
 			return block
@@ -548,7 +560,7 @@ func detectOrderBlock(candles []snapshot.Candle, bias string) TrendOrderBlock {
 }
 
 func detectFVG(candles []snapshot.Candle) TrendFVG {
-	fvg := TrendFVG{Type: "none"}
+	fvg := TrendFVG{Type: trendTypeNone}
 	if len(candles) < 5 {
 		return fvg
 	}
@@ -565,7 +577,7 @@ func detectFVG(candles []snapshot.Candle) TrendFVG {
 		if candles[idx-1].Low > highPrev && lowCurr > highPrev {
 			gapTop := roundFloat(lowCurr, 4)
 			gapBottom := roundFloat(highPrev, 4)
-			fvg.Type = "bullish"
+			fvg.Type = trendBiasBullish
 			fvg.GapTop = &gapTop
 			fvg.GapBottom = &gapBottom
 			return fvg
@@ -573,7 +585,7 @@ func detectFVG(candles []snapshot.Candle) TrendFVG {
 		if candles[idx-1].High < lowPrev && highCurr < lowPrev {
 			gapTop := roundFloat(lowPrev, 4)
 			gapBottom := roundFloat(highCurr, 4)
-			fvg.Type = "bearish"
+			fvg.Type = trendBiasBearish
 			fvg.GapTop = &gapTop
 			fvg.GapBottom = &gapBottom
 			return fvg

@@ -24,14 +24,19 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 			Liquidations: false,
 		},
 		Indicators: IndicatorConfig{
-			EMAFast:   21,
-			EMAMid:    50,
-			EMASlow:   200,
-			RSIPeriod: 14,
-			ATRPeriod: 14,
-			STCFast:   23,
-			STCSlow:   50,
-			LastN:     5,
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
 		},
 		Consensus: ConsensusConfig{
 			ScoreThreshold:      0.35,
@@ -75,7 +80,50 @@ func ApplyDecisionDefaults(cfg *SymbolConfig, defaults SymbolConfig) {
 	if cfg.Consensus.ConfidenceThreshold == 0 {
 		cfg.Consensus.ConfidenceThreshold = defaults.Consensus.ConfidenceThreshold
 	}
+	applyIndicatorDefaults(&cfg.Indicators, defaults.Indicators)
 	applyCooldownDefaults(&cfg.Cooldown, defaults.Cooldown)
+}
+
+func applyIndicatorDefaults(cfg *IndicatorConfig, defaults IndicatorConfig) {
+	if cfg.EMAFast == 0 {
+		cfg.EMAFast = defaults.EMAFast
+	}
+	if cfg.EMAMid == 0 {
+		cfg.EMAMid = defaults.EMAMid
+	}
+	if cfg.EMASlow == 0 {
+		cfg.EMASlow = defaults.EMASlow
+	}
+	if cfg.RSIPeriod == 0 {
+		cfg.RSIPeriod = defaults.RSIPeriod
+	}
+	if cfg.ATRPeriod == 0 {
+		cfg.ATRPeriod = defaults.ATRPeriod
+	}
+	if cfg.STCFast == 0 {
+		cfg.STCFast = defaults.STCFast
+	}
+	if cfg.STCSlow == 0 {
+		cfg.STCSlow = defaults.STCSlow
+	}
+	if cfg.BBPeriod == 0 {
+		cfg.BBPeriod = defaults.BBPeriod
+	}
+	if cfg.BBMultiplier == 0 {
+		cfg.BBMultiplier = defaults.BBMultiplier
+	}
+	if cfg.CHOPPeriod == 0 {
+		cfg.CHOPPeriod = defaults.CHOPPeriod
+	}
+	if cfg.StochRSIPeriod == 0 {
+		cfg.StochRSIPeriod = defaults.StochRSIPeriod
+	}
+	if cfg.AroonPeriod == 0 {
+		cfg.AroonPeriod = defaults.AroonPeriod
+	}
+	if cfg.LastN == 0 {
+		cfg.LastN = defaults.LastN
+	}
 }
 
 func applySystemDefaults(cfg *SystemConfig) {

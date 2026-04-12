@@ -1154,22 +1154,84 @@ function renderFlow(flow) {
 
   function formatFlowFieldKey(key) {
     const normalized = String(key || "").trim().toLowerCase();
-    if (normalized === "plan_source") {
-      return "plan来源";
+    const labels = {
+      direction: "方向",
+      entry: "入场价",
+      stop_loss: "止损价",
+      risk_pct: "风险比例",
+      position_size: "仓位大小",
+      leverage: "杠杆倍数",
+      tp1: "止盈目标1",
+      plan_source: "计划来源",
+      executed: "已执行",
+      eligible: "允许调整",
+      evaluated: "已评估",
+      tp_tightened: "止盈已收紧",
+      blocked_by: "阻断原因",
+      score: "评分",
+      threshold: "阈值",
+      score_threshold: "评分阈值",
+      tighten: "收紧决策",
+      momentum_expansion: "动量扩张",
+      alignment: "趋势对齐",
+      mean_rev_noise: "均值回归噪声",
+      signal_tag: "信号标签",
+      clear_structure: "结构清晰度",
+      integrity: "完整性",
+      value: "信号值",
+      confidence: "置信度",
+      momentum_sustaining: "动量维持",
+      divergence_detected: "检测到背离",
+      monitor_tag: "监控标签",
+      threat_level: "威胁等级",
+      adverse_liquidation: "不利清算",
+      crowding_reversal: "拥挤反转",
+      expansion: "扩张状态",
+      noise: "噪声水平",
+      movement_score: "运动评分",
+      movement_confidence: "运动置信度",
+      regime: "市场格局",
+      last_break: "最近突破",
+      quality: "结构质量",
+      pattern: "形态",
+      volume_action: "量能动作",
+      candle_reaction: "K线反应",
+      leverage_state: "杠杆状态",
+      crowding: "拥挤度",
+      risk_level: "风险等级",
+      open_interest_context: "持仓量上下文"
+    };
+    if (Object.prototype.hasOwnProperty.call(labels, normalized)) {
+      return labels[normalized];
     }
     return String(key || "");
   }
 
   function formatFlowFieldValue(key, value) {
     const normalizedKey = String(key || "").trim().toLowerCase();
-    const text = String(value || "");
+    if (value === true) {
+      return "是";
+    }
+    if (value === false) {
+      return "否";
+    }
+    const text = value === null || value === undefined ? "" : String(value);
+    if (normalizedKey === "direction") {
+      const direction = text.trim().toLowerCase();
+      if (direction === "long") {
+        return "做多";
+      }
+      if (direction === "short") {
+        return "做空";
+      }
+    }
     if (normalizedKey === "plan_source") {
       const source = text.trim().toLowerCase();
       if (source === "llm") {
-        return "llm自动生成";
+        return "LLM 自动生成";
       }
       if (source === "go") {
-        return "go计算得到";
+        return "Go 引擎计算";
       }
     }
     return text;

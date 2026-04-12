@@ -3,6 +3,8 @@ package telegrambot
 import (
 	"context"
 	"strings"
+
+	symbolpkg "brale-core/internal/pkg/symbol"
 )
 
 func (b *Bot) routeCallback(ctx context.Context, chatID, userID int64, data string) {
@@ -44,7 +46,7 @@ func (b *Bot) startManualObserveInput(ctx context.Context, chatID, userID int64)
 }
 
 func (b *Bot) handleObserveCallback(ctx context.Context, chatID, userID int64, rawSymbol string) {
-	symbol := normalizeSymbol(rawSymbol)
+	symbol := symbolpkg.Normalize(rawSymbol)
 	if symbol == "" {
 		b.sendText(ctx, chatID, "币种不能为空，请重新选择。")
 		return
@@ -55,7 +57,7 @@ func (b *Bot) handleObserveCallback(ctx context.Context, chatID, userID int64, r
 }
 
 func (b *Bot) handleLatestCallback(ctx context.Context, chatID int64, rawSymbol string) {
-	symbol := normalizeSymbol(rawSymbol)
+	symbol := symbolpkg.Normalize(rawSymbol)
 	if symbol == "" {
 		b.sendText(ctx, chatID, "币种不能为空，请重新选择。")
 		return

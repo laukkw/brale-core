@@ -22,14 +22,19 @@ func TestValidateSymbolConfigAcceptsSTCWithoutMACD(t *testing.T) {
 		KlineLimit: 300,
 		Agent:      AgentConfig{Indicator: boolPtr(true), Structure: boolPtr(true), Mechanics: boolPtr(true)},
 		Indicators: IndicatorConfig{
-			EMAFast:   21,
-			EMAMid:    50,
-			EMASlow:   200,
-			RSIPeriod: 14,
-			ATRPeriod: 14,
-			STCFast:   23,
-			STCSlow:   50,
-			LastN:     5,
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
 		},
 		Consensus: ConsensusConfig{ScoreThreshold: 0.3, ConfidenceThreshold: 0.6},
 		LLM: SymbolLLMConfig{
@@ -47,14 +52,19 @@ func TestRequiredKlineLimitIncludesSTCWarmup(t *testing.T) {
 	cfg := SymbolConfig{
 		Intervals: []string{"1h"},
 		Indicators: IndicatorConfig{
-			EMAFast:   21,
-			EMAMid:    50,
-			EMASlow:   200,
-			RSIPeriod: 14,
-			ATRPeriod: 14,
-			STCFast:   23,
-			STCSlow:   50,
-			LastN:     5,
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
 		},
 	}
 
@@ -72,15 +82,20 @@ func TestRequiredKlineLimitSkipsSTCWarmupWhenDisabled(t *testing.T) {
 	cfg := SymbolConfig{
 		Intervals: []string{"1h"},
 		Indicators: IndicatorConfig{
-			EMAFast:   21,
-			EMAMid:    50,
-			EMASlow:   200,
-			RSIPeriod: 14,
-			ATRPeriod: 14,
-			STCFast:   23,
-			STCSlow:   50,
-			SkipSTC:   true,
-			LastN:     5,
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			SkipSTC:        true,
+			LastN:          5,
 		},
 	}
 
@@ -138,6 +153,49 @@ func TestTalibRequiredBarsHelpers(t *testing.T) {
 	}
 	if got := ATRRequiredBars(14); got != 15 {
 		t.Fatalf("ATRRequiredBars(14)=%d want 15", got)
+	}
+	if got := BBRequiredBars(20); got != 20 {
+		t.Fatalf("BBRequiredBars(20)=%d want 20", got)
+	}
+	if got := CHOPRequiredBars(14); got != 15 {
+		t.Fatalf("CHOPRequiredBars(14)=%d want 15", got)
+	}
+	if got := StochRSIRequiredBars(14, 14); got != 28 {
+		t.Fatalf("StochRSIRequiredBars(14, 14)=%d want 28", got)
+	}
+	if got := AroonRequiredBars(25); got != 26 {
+		t.Fatalf("AroonRequiredBars(25)=%d want 26", got)
+	}
+}
+
+func TestRequiredKlineLimitIncludesNewIndicatorWarmups(t *testing.T) {
+	cfg := SymbolConfig{
+		Intervals: []string{"1h"},
+		Indicators: IndicatorConfig{
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			SkipSTC:        true,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 40,
+			AroonPeriod:    25,
+			LastN:          5,
+		},
+	}
+
+	got := requiredKlineLimit(cfg)
+	want := StochRSIRequiredBars(cfg.Indicators.RSIPeriod, cfg.Indicators.StochRSIPeriod)
+	if trend := TrendPresetRequiredBars(cfg.Intervals); trend > want {
+		want = trend
+	}
+	if got != want {
+		t.Fatalf("requiredKlineLimit()=%d want %d", got, want)
 	}
 }
 
@@ -272,7 +330,7 @@ func TestValidateSymbolConfigRejectsNonCanonicalSymbol(t *testing.T) {
 		Intervals:  []string{"1h"},
 		KlineLimit: 300,
 		Agent:      AgentConfig{Indicator: boolPtr(true), Structure: boolPtr(true), Mechanics: boolPtr(true)},
-		Indicators: IndicatorConfig{EMAFast: 21, EMAMid: 50, EMASlow: 200, RSIPeriod: 14, ATRPeriod: 14, STCFast: 23, STCSlow: 50, LastN: 5},
+		Indicators: IndicatorConfig{EMAFast: 21, EMAMid: 50, EMASlow: 200, RSIPeriod: 14, ATRPeriod: 14, STCFast: 23, STCSlow: 50, BBPeriod: 20, BBMultiplier: 2.0, CHOPPeriod: 14, StochRSIPeriod: 14, AroonPeriod: 25, LastN: 5},
 		Consensus:  ConsensusConfig{ScoreThreshold: 0.3, ConfidenceThreshold: 0.6},
 		LLM: SymbolLLMConfig{
 			Agent:    LLMRoleSet{Indicator: LLMRoleConfig{Model: "a", Temperature: &temp}, Structure: LLMRoleConfig{Model: "b", Temperature: &temp}, Mechanics: LLMRoleConfig{Model: "c", Temperature: &temp}},

@@ -40,6 +40,42 @@ func ATRRequiredBars(period int) int {
 	return period + 1
 }
 
+// BBRequiredBars returns the minimum number of bars needed before Bollinger
+// Bands can produce their first usable value.
+func BBRequiredBars(period int) int {
+	if period <= 0 {
+		return 0
+	}
+	return period
+}
+
+// CHOPRequiredBars returns the minimum number of bars needed before CHOP can
+// produce its first usable value.
+func CHOPRequiredBars(period int) int {
+	if period <= 1 {
+		return 0
+	}
+	return period + 1
+}
+
+// StochRSIRequiredBars returns the minimum number of bars needed before
+// Stochastic RSI can produce its first usable value.
+func StochRSIRequiredBars(rsiPeriod, stochPeriod int) int {
+	if rsiPeriod <= 0 || stochPeriod <= 0 {
+		return 0
+	}
+	return RSIRequiredBars(rsiPeriod) + stochPeriod - 1
+}
+
+// AroonRequiredBars returns the minimum number of bars needed before Aroon can
+// produce its first usable value.
+func AroonRequiredBars(period int) int {
+	if period <= 0 {
+		return 0
+	}
+	return period + 1
+}
+
 // SuperTrendRequiredBars returns the minimum number of bars needed before
 // SuperTrend can produce its first usable value.
 func SuperTrendRequiredBars(period int, multiplier float64) int {

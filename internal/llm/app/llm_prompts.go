@@ -180,50 +180,28 @@ type ProviderPromptSet struct {
 }
 
 func (b LLMPromptBuilder) ProviderPrompts(ind agent.IndicatorSummary, st agent.StructureSummary, mech agent.MechanicsSummary, enabled decision.AgentEnabled, dataCtx decision.ProviderDataContext) (ProviderPromptSet, error) {
-	var indicatorSys string
-	var structureSys string
-	var mechanicsSys string
-	var err error
-	if enabled.Indicator {
-		indicatorSys, err = requirePrompt("prompts.provider.indicator", b.ProviderIndicatorSystem)
-		if err != nil {
-			return ProviderPromptSet{}, err
-		}
+	indicatorSys, err := providerSystemPrompt(enabled.Indicator, "prompts.provider.indicator", b.ProviderIndicatorSystem)
+	if err != nil {
+		return ProviderPromptSet{}, err
 	}
-	if enabled.Structure {
-		structureSys, err = requirePrompt("prompts.provider.structure", b.ProviderStructureSystem)
-		if err != nil {
-			return ProviderPromptSet{}, err
-		}
+	structureSys, err := providerSystemPrompt(enabled.Structure, "prompts.provider.structure", b.ProviderStructureSystem)
+	if err != nil {
+		return ProviderPromptSet{}, err
 	}
-	if enabled.Mechanics {
-		mechanicsSys, err = requirePrompt("prompts.provider.mechanics", b.ProviderMechanicsSystem)
-		if err != nil {
-			return ProviderPromptSet{}, err
-		}
+	mechanicsSys, err := providerSystemPrompt(enabled.Mechanics, "prompts.provider.mechanics", b.ProviderMechanicsSystem)
+	if err != nil {
+		return ProviderPromptSet{}, err
 	}
-	indicatorUser := ""
-	structureUser := ""
-	mechanicsUser := ""
-	if enabled.Indicator {
-		indSummary := toProviderIndicatorSummary(ind)
-		indicatorUser = buildProviderUserWithData(b.UserFormat, providerSummary{Indicator: &indSummary}, dataCtx.IndicatorCrossTF, providerExampleIndicator())
-	}
-	if enabled.Structure {
-		stSummary := toProviderStructureSummary(st)
-		structureUser = buildProviderUserWithData(b.UserFormat, providerSummary{Structure: &stSummary}, dataCtx.StructureAnchorCtx, providerExampleStructure())
-	}
-	if enabled.Mechanics {
-		mechSummary := toProviderMechanicsSummary(mech)
-		mechanicsUser = buildProviderUserWithData(b.UserFormat, providerSummary{Mechanics: &mechSummary}, dataCtx.MechanicsCtx, providerExampleMechanics())
-	}
+	indSummary := toProviderIndicatorSummary(ind)
+	stSummary := toProviderStructureSummary(st)
+	mechSummary := toProviderMechanicsSummary(mech)
 	return ProviderPromptSet{
 		IndicatorSys:  indicatorSys,
 		StructureSys:  structureSys,
 		MechanicsSys:  mechanicsSys,
-		IndicatorUser: indicatorUser,
-		StructureUser: structureUser,
-		MechanicsUser: mechanicsUser,
+		IndicatorUser: providerUserPrompt(enabled.Indicator, b.UserFormat, providerSummary{Indicator: &indSummary}, dataCtx.IndicatorCrossTF, providerExampleIndicator()),
+		StructureUser: providerUserPrompt(enabled.Structure, b.UserFormat, providerSummary{Structure: &stSummary}, dataCtx.StructureAnchorCtx, providerExampleStructure()),
+		MechanicsUser: providerUserPrompt(enabled.Mechanics, b.UserFormat, providerSummary{Mechanics: &mechSummary}, dataCtx.MechanicsCtx, providerExampleMechanics()),
 	}, nil
 }
 
@@ -237,55 +215,54 @@ type InPositionPromptSet struct {
 }
 
 func (b LLMPromptBuilder) InPositionProviderPrompts(ind agent.IndicatorSummary, st agent.StructureSummary, mech agent.MechanicsSummary, summary positionprompt.Summary, enabled decision.AgentEnabled, dataCtx decision.ProviderDataContext) (InPositionPromptSet, error) {
-	var indicatorSys string
-	var structureSys string
-	var mechanicsSys string
-	var err error
-	if enabled.Indicator {
-		indicatorSys, err = requirePrompt("prompts.provider_in_position.indicator", b.ProviderInPosIndicatorSys)
-		if err != nil {
-			return InPositionPromptSet{}, err
-		}
+	indicatorSys, err := providerSystemPrompt(enabled.Indicator, "prompts.provider_in_position.indicator", b.ProviderInPosIndicatorSys)
+	if err != nil {
+		return InPositionPromptSet{}, err
 	}
-	if enabled.Structure {
-		structureSys, err = requirePrompt("prompts.provider_in_position.structure", b.ProviderInPosStructureSys)
-		if err != nil {
-			return InPositionPromptSet{}, err
-		}
+	structureSys, err := providerSystemPrompt(enabled.Structure, "prompts.provider_in_position.structure", b.ProviderInPosStructureSys)
+	if err != nil {
+		return InPositionPromptSet{}, err
 	}
-	if enabled.Mechanics {
-		mechanicsSys, err = requirePrompt("prompts.provider_in_position.mechanics", b.ProviderInPosMechanicsSys)
-		if err != nil {
-			return InPositionPromptSet{}, err
-		}
+	mechanicsSys, err := providerSystemPrompt(enabled.Mechanics, "prompts.provider_in_position.mechanics", b.ProviderInPosMechanicsSys)
+	if err != nil {
+		return InPositionPromptSet{}, err
 	}
-	indicatorUser := ""
-	structureUser := ""
-	mechanicsUser := ""
-	if enabled.Indicator {
-		indSummary := toProviderIndicatorSummary(ind)
-		indicatorUser = buildInPositionProviderUserWithData(b.UserFormat, providerSummary{Indicator: &indSummary}, summary, dataCtx.IndicatorCrossTF, providerExampleInPositionIndicator())
-	}
-	if enabled.Structure {
-		stSummary := toProviderStructureSummary(st)
-		structureUser = buildInPositionProviderUserWithData(b.UserFormat, providerSummary{Structure: &stSummary}, summary, dataCtx.StructureAnchorCtx, providerExampleInPositionStructure())
-	}
-	if enabled.Mechanics {
-		mechSummary := toProviderMechanicsSummary(mech)
-		mechanicsUser = buildInPositionProviderUserWithData(b.UserFormat, providerSummary{Mechanics: &mechSummary}, summary, dataCtx.MechanicsCtx, providerExampleInPositionMechanics())
-	}
+	indSummary := toProviderIndicatorSummary(ind)
+	stSummary := toProviderStructureSummary(st)
+	mechSummary := toProviderMechanicsSummary(mech)
 	return InPositionPromptSet{
 		IndicatorSys:  indicatorSys,
 		StructureSys:  structureSys,
 		MechanicsSys:  mechanicsSys,
-		IndicatorUser: indicatorUser,
-		StructureUser: structureUser,
-		MechanicsUser: mechanicsUser,
+		IndicatorUser: inPositionProviderUserPrompt(enabled.Indicator, b.UserFormat, providerSummary{Indicator: &indSummary}, summary, dataCtx.IndicatorCrossTF, providerExampleInPositionIndicator()),
+		StructureUser: inPositionProviderUserPrompt(enabled.Structure, b.UserFormat, providerSummary{Structure: &stSummary}, summary, dataCtx.StructureAnchorCtx, providerExampleInPositionStructure()),
+		MechanicsUser: inPositionProviderUserPrompt(enabled.Mechanics, b.UserFormat, providerSummary{Mechanics: &mechSummary}, summary, dataCtx.MechanicsCtx, providerExampleInPositionMechanics()),
 	}, nil
 }
 
 func joinUser(lines ...string) string {
 	return strings.Join(lines, "\n")
+}
+
+func providerSystemPrompt(enabled bool, name string, value string) (string, error) {
+	if !enabled {
+		return "", nil
+	}
+	return requirePrompt(name, value)
+}
+
+func providerUserPrompt(enabled bool, format UserPromptFormat, summary providerSummary, dataCtx any, example string) string {
+	if !enabled {
+		return ""
+	}
+	return buildProviderUserWithData(format, summary, dataCtx, example)
+}
+
+func inPositionProviderUserPrompt(enabled bool, format UserPromptFormat, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
+	if !enabled {
+		return ""
+	}
+	return buildInPositionProviderUserWithData(format, summary, pos, dataCtx, example)
 }
 
 type providerSummary struct {
@@ -415,9 +392,7 @@ func providerExampleIndicator() string {
 		MeanRevNoise:      false,
 		SignalTag:         "noise",
 	}
-
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func providerExampleStructure() string {
@@ -427,9 +402,7 @@ func providerExampleStructure() string {
 		Reason:         "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
 		SignalTag:      "support_retest",
 	}
-
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func providerExampleMechanics() string {
@@ -441,9 +414,7 @@ func providerExampleMechanics() string {
 		},
 		SignalTag: "neutral",
 	}
-
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func providerExampleInPositionIndicator() string {
@@ -453,8 +424,7 @@ func providerExampleInPositionIndicator() string {
 		Reason:             "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
 		MonitorTag:         "keep",
 	}
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func providerExampleInPositionStructure() string {
@@ -464,8 +434,7 @@ func providerExampleInPositionStructure() string {
 		Reason:      "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
 		MonitorTag:  "keep",
 	}
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func providerExampleInPositionMechanics() string {
@@ -475,8 +444,7 @@ func providerExampleInPositionMechanics() string {
 		Reason:             "ok",
 		MonitorTag:         "keep",
 	}
-	raw, _ := json.Marshal(ex)
-	return string(raw)
+	return marshalExample(ex)
 }
 
 func requirePrompt(name string, value string) (string, error) {

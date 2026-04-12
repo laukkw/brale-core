@@ -736,9 +736,10 @@ func (m Manager) send(ctx context.Context, msg Message) error {
 
 func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string) error {
 	now := time.Now()
+	logger := logging.FromContext(ctx).Named("notify")
 	if m.dedupe != nil {
 		if m.dedupe.shouldSkip(dedupeKey, now) {
-			logging.FromContext(ctx).Named("notify").Debug("notify skipped (dedupe)", zap.String("key", strings.TrimSpace(dedupeKey)), zap.String("title", strings.TrimSpace(msg.Title)))
+			logger.Debug("notify skipped (dedupe)", zap.String("key", strings.TrimSpace(dedupeKey)), zap.String("title", strings.TrimSpace(msg.Title)))
 			return nil
 		}
 	}
@@ -755,9 +756,16 @@ func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string)
 		m.dedupe.remember(dedupeKey, now)
 	}
 	if len(errDetails) > 0 {
+		logger.Warn("notify send partially failed",
+			zap.Int("success_count", successCount),
+			zap.Int("failed_count", len(errDetails)),
+			zap.String("title", strings.TrimSpace(msg.Title)),
+			zap.String("dedupe_key", strings.TrimSpace(dedupeKey)),
+			zap.Strings("error_details", errDetails),
+		)
 		return fmt.Errorf("notify send failed: %d (%s)", len(errDetails), strings.Join(errDetails, "; "))
 	}
-	logging.FromContext(ctx).Named("notify").Info("notify sent",
+	logger.Info("notify sent",
 		zap.Int("channels", len(m.senders)),
 		zap.String("title", strings.TrimSpace(msg.Title)),
 	)

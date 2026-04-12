@@ -20,7 +20,7 @@ func selectStructurePoints(candles []snapshot.Candle, highs, lows, rsi, atr []fl
 	selected := make([]TrendStructurePoint, 0, opts.MaxStructurePoints)
 	for idx := n - span - 1; idx >= span; idx-- {
 		if isFractalHigh(highs, idx, span) {
-			p := TrendStructurePoint{Idx: idx, Type: "High", Price: roundFloat(highs[idx], 4)}
+			p := TrendStructurePoint{Idx: idx, Type: structurePointHigh, Price: roundFloat(highs[idx], 4)}
 			if opts.IncludeStructureRSI && idx < len(rsi) {
 				v := roundFloat(rsi[idx], 1)
 				p.RSI = &v
@@ -28,7 +28,7 @@ func selectStructurePoints(candles []snapshot.Candle, highs, lows, rsi, atr []fl
 			selected = mergeStructurePoint(selected, p, atr, opts)
 		}
 		if isFractalLow(lows, idx, span) {
-			p := TrendStructurePoint{Idx: idx, Type: "Low", Price: roundFloat(lows[idx], 4)}
+			p := TrendStructurePoint{Idx: idx, Type: structurePointLow, Price: roundFloat(lows[idx], 4)}
 			if opts.IncludeStructureRSI && idx < len(rsi) {
 				v := roundFloat(rsi[idx], 1)
 				p.RSI = &v
@@ -67,11 +67,11 @@ func mergeStructurePoint(existing []TrendStructurePoint, candidate TrendStructur
 			continue
 		}
 		switch candidate.Type {
-		case "High":
+		case structurePointHigh:
 			if candidate.Price > other.Price {
 				existing[i] = candidate
 			}
-		case "Low":
+		case structurePointLow:
 			if candidate.Price < other.Price {
 				existing[i] = candidate
 			}
@@ -208,7 +208,7 @@ func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []floa
 		age := n - 1 - p.Idx
 		source := "fractal_low"
 		typ := "support"
-		if strings.EqualFold(p.Type, "High") {
+		if strings.EqualFold(p.Type, structurePointHigh) {
 			source = "fractal_high"
 			typ = "resistance"
 		}

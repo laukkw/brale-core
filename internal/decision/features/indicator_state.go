@@ -62,6 +62,36 @@ type indicatorCrossTFSummary struct {
 	ConflictCount     int    `json:"conflict_count"`
 }
 
+const (
+	priceVsEMANearATRRatio = 0.25
+
+	rsiZoneLowThreshold      = 35.0
+	rsiZoneWeakLowThreshold  = 45.0
+	rsiZoneWeakHighThreshold = 55.0
+	rsiZoneHighThreshold     = 65.0
+
+	rsiSlopeTrendThreshold = 0.15
+	obvSlopeTrendThreshold = 0.02
+
+	atrExpansionThresholdPct   = 5.0
+	atrContractionThresholdPct = -5.0
+
+	bbNearLowerPercentBThreshold  = 0.2
+	bbNearUpperPercentBThreshold  = 0.8
+	bbAboveUpperPercentBThreshold = 1.0
+	bbWidthSqueezeThresholdPct    = 2.0
+	bbWidthWideThresholdPct       = 6.0
+
+	chopTrendingThreshold = 38.2
+	chopChoppyThreshold   = 61.8
+
+	stochRSIOversoldThreshold   = 0.2
+	stochRSIOverboughtThreshold = 0.8
+
+	aroonStrongThreshold = 70.0
+	aroonWeakThreshold   = 30.0
+)
+
 func BuildIndicatorStateJSON(symbol string, byInterval map[string]IndicatorJSON, decisionInterval string) (IndicatorJSON, error) {
 	if len(byInterval) == 0 {
 		return IndicatorJSON{}, fmt.Errorf("indicator inputs missing for symbol=%s", symbol)
@@ -262,7 +292,7 @@ func classifyPriceVsEMA(price, ema, atr float64) string {
 		return "near"
 	}
 	diff := price - ema
-	if atr > 0 && absFloat(diff)/atr <= 0.25 {
+	if atr > 0 && absFloat(diff)/atr <= priceVsEMANearATRRatio {
 		return "near"
 	}
 	if diff > 0 {
@@ -284,13 +314,13 @@ func classifyEMAStack(fast, mid, slow float64) string {
 
 func classifyRSIZone(value float64) string {
 	switch {
-	case value < 35:
+	case value < rsiZoneLowThreshold:
 		return "<35"
-	case value < 45:
+	case value < rsiZoneWeakLowThreshold:
 		return "35_45"
-	case value < 55:
+	case value < rsiZoneWeakHighThreshold:
 		return "45_55"
-	case value < 65:
+	case value < rsiZoneHighThreshold:
 		return "55_65"
 	default:
 		return ">65"
@@ -302,9 +332,9 @@ func classifyRSISlope(rsi *rsiSnapshot) string {
 		return "flat"
 	}
 	switch {
-	case *rsi.NormalizedSlope >= 0.15:
+	case *rsi.NormalizedSlope >= rsiSlopeTrendThreshold:
 		return "rising"
-	case *rsi.NormalizedSlope <= -0.15:
+	case *rsi.NormalizedSlope <= -rsiSlopeTrendThreshold:
 		return "falling"
 	default:
 		return "flat"
@@ -323,9 +353,9 @@ func classifyOBVSlope(obv *obvSnapshot) string {
 		return "flat"
 	}
 	switch {
-	case *obv.ChangeRate >= 0.02:
+	case *obv.ChangeRate >= obvSlopeTrendThreshold:
 		return "up"
-	case *obv.ChangeRate <= -0.02:
+	case *obv.ChangeRate <= -obvSlopeTrendThreshold:
 		return "down"
 	default:
 		return "flat"
@@ -337,9 +367,9 @@ func classifyATRExpansion(atr *atrSnapshot) string {
 		return "stable"
 	}
 	switch {
-	case *atr.ChangePct >= 5:
+	case *atr.ChangePct >= atrExpansionThresholdPct:
 		return "expanding"
-	case *atr.ChangePct <= -5:
+	case *atr.ChangePct <= atrContractionThresholdPct:
 		return "contracting"
 	default:
 		return "stable"
@@ -490,11 +520,11 @@ func classifyBBZone(bb *bbSnapshot) string {
 	switch {
 	case bb.PercentB < 0:
 		return "below_lower"
-	case bb.PercentB <= 0.2:
+	case bb.PercentB <= bbNearLowerPercentBThreshold:
 		return "near_lower"
-	case bb.PercentB >= 1.0:
+	case bb.PercentB >= bbAboveUpperPercentBThreshold:
 		return "above_upper"
-	case bb.PercentB >= 0.8:
+	case bb.PercentB >= bbNearUpperPercentBThreshold:
 		return "near_upper"
 	default:
 		return "mid"
@@ -509,9 +539,9 @@ func classifyBBWidthState(bb *bbSnapshot) string {
 		return ""
 	}
 	switch {
-	case bb.Width < 2.0:
+	case bb.Width < bbWidthSqueezeThresholdPct:
 		return "squeeze"
-	case bb.Width > 6.0:
+	case bb.Width > bbWidthWideThresholdPct:
 		return "wide"
 	default:
 		return "normal"
@@ -526,9 +556,9 @@ func classifyCHOPRegime(chop *chopSnapshot) string {
 		return ""
 	}
 	switch {
-	case chop.Value < 38.2:
+	case chop.Value < chopTrendingThreshold:
 		return "trending"
-	case chop.Value > 61.8:
+	case chop.Value > chopChoppyThreshold:
 		return "choppy"
 	default:
 		return "transition"
@@ -541,9 +571,9 @@ func classifyStochRSIZone(sr *stochRSISnapshot) string {
 		return ""
 	}
 	switch {
-	case sr.Value <= 0.2:
+	case sr.Value <= stochRSIOversoldThreshold:
 		return "oversold"
-	case sr.Value >= 0.8:
+	case sr.Value >= stochRSIOverboughtThreshold:
 		return "overbought"
 	default:
 		return "neutral"
@@ -558,11 +588,11 @@ func classifyAroonSignal(aroon *aroonSnapshot) string {
 		return ""
 	}
 	switch {
-	case aroon.Up > 70 && aroon.Down < 30:
+	case aroon.Up > aroonStrongThreshold && aroon.Down < aroonWeakThreshold:
 		return "strong_up"
-	case aroon.Down > 70 && aroon.Up < 30:
+	case aroon.Down > aroonStrongThreshold && aroon.Up < aroonWeakThreshold:
 		return "strong_down"
-	case aroon.Up > 70 && aroon.Down > 70:
+	case aroon.Up > aroonStrongThreshold && aroon.Down > aroonStrongThreshold:
 		return "crossover"
 	default:
 		return "neutral"

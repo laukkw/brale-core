@@ -42,6 +42,16 @@ atr_period = 14
 stc_fast = 23
 # STC 慢线周期。
 stc_slow = 50
+# Bollinger Bands 周期。
+bb_period = 20
+# Bollinger Bands 标准差倍数。
+bb_multiplier = 2.0
+# CHOP（Choppiness Index）周期。
+chop_period = 14
+# Stoch RSI 周期。
+stoch_rsi_period = 14
+# Aroon 周期。
+aroon_period = 25
 # 指标序列取最近 N 根窗口用于 LLM 总结。
 last_n = 5
 # 是否格式化输出 JSON（会增加体积）。

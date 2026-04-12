@@ -45,51 +45,54 @@ func (p *Pipeline) handlePlan(ctx context.Context, out PersistResult, res Symbol
 }
 
 func (p *Pipeline) persistSymbolStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, logger *zap.Logger) error {
-	if p.AgentStore != nil {
-		if err := p.AgentStore(ctx, snap, snapID, res.Symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, res.AgentInputs, res.EnabledAgents, res.AgentPrompts); err != nil {
-			logger.Error("agent store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
+	return p.persistStores(ctx, snapID, snap, res, logger, func() error {
+		if p.ProviderStore == nil {
+			return nil
 		}
+		return p.ProviderStore(ctx, snap, snapID, res.Symbol, res.Providers, BuildProviderDataContext(res.AgentInputs), res.ProviderPrompts)
+	}, "provider store failed")
+}
+
+func (p *Pipeline) persistInPositionStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, ind provider.InPositionIndicatorOut, st provider.InPositionStructureOut, mech provider.InPositionMechanicsOut, prompts ProviderPromptSet, logger *zap.Logger) error {
+	return p.persistStores(ctx, snapID, snap, res, logger, func() error {
+		if p.ProviderInPositionStore == nil {
+			return nil
+		}
+		return p.ProviderInPositionStore(ctx, snap, snapID, res.Symbol, ind, st, mech, prompts, res.EnabledAgents)
+	}, "provider in position store failed")
+}
+
+func (p *Pipeline) persistStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, logger *zap.Logger, providerStore func() error, providerErrMsg string) error {
+	if err := p.runStore(ctx, logger, "agent store failed", func() error {
+		if p.AgentStore == nil {
+			return nil
+		}
+		return p.AgentStore(ctx, snap, snapID, res.Symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, res.AgentInputs, res.EnabledAgents, res.AgentPrompts)
+	}); err != nil {
+		return err
 	}
-	if p.ProviderStore != nil {
-		if err := p.ProviderStore(ctx, snap, snapID, res.Symbol, res.Providers, BuildProviderDataContext(res.AgentInputs), res.ProviderPrompts); err != nil {
-			logger.Error("provider store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
-		}
+	if err := p.runStore(ctx, logger, providerErrMsg, providerStore); err != nil {
+		return err
 	}
-	if p.GateStore != nil {
-		if err := p.GateStore(ctx, snap, snapID, res.Symbol, res.Gate, res.Providers); err != nil {
-			logger.Error("gate store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
+	if err := p.runStore(ctx, logger, "gate store failed", func() error {
+		if p.GateStore == nil {
+			return nil
 		}
+		return p.GateStore(ctx, snap, snapID, res.Symbol, res.Gate, res.Providers)
+	}); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (p *Pipeline) persistInPositionStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, ind provider.InPositionIndicatorOut, st provider.InPositionStructureOut, mech provider.InPositionMechanicsOut, prompts ProviderPromptSet, logger *zap.Logger) error {
-	if p.AgentStore != nil {
-		if err := p.AgentStore(ctx, snap, snapID, res.Symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, res.AgentInputs, res.EnabledAgents, res.AgentPrompts); err != nil {
-			logger.Error("agent store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
-		}
+func (p *Pipeline) runStore(ctx context.Context, logger *zap.Logger, msg string, fn func() error) error {
+	if fn == nil {
+		return nil
 	}
-	if p.ProviderInPositionStore != nil {
-		if err := p.ProviderInPositionStore(ctx, snap, snapID, res.Symbol, ind, st, mech, prompts, res.EnabledAgents); err != nil {
-			logger.Error("provider in position store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
-		}
-	}
-	if p.GateStore != nil {
-		if err := p.GateStore(ctx, snap, snapID, res.Symbol, res.Gate, res.Providers); err != nil {
-			logger.Error("gate store failed", zap.Error(err))
-			p.notifyError(ctx, err)
-			return err
-		}
+	if err := fn(); err != nil {
+		logger.Error(msg, zap.Error(err))
+		p.notifyError(ctx, err)
+		return err
 	}
 	return nil
 }

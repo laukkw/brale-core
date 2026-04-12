@@ -72,16 +72,21 @@ func buildCompressor(symbolCfg config.SymbolConfig, enabled config.AgentEnabled,
 
 func toIndicatorOptions(cfg config.IndicatorConfig, indicatorEnabled bool) decision.IndicatorCompressOptions {
 	opts := decision.IndicatorCompressOptions{
-		EMAFast:   cfg.EMAFast,
-		EMAMid:    cfg.EMAMid,
-		EMASlow:   cfg.EMASlow,
-		RSIPeriod: cfg.RSIPeriod,
-		ATRPeriod: cfg.ATRPeriod,
-		STCFast:   cfg.STCFast,
-		STCSlow:   cfg.STCSlow,
-		LastN:     cfg.LastN,
-		Pretty:    cfg.Pretty,
-		SkipSTC:   cfg.SkipSTC,
+		EMAFast:        cfg.EMAFast,
+		EMAMid:         cfg.EMAMid,
+		EMASlow:        cfg.EMASlow,
+		RSIPeriod:      cfg.RSIPeriod,
+		ATRPeriod:      cfg.ATRPeriod,
+		STCFast:        cfg.STCFast,
+		STCSlow:        cfg.STCSlow,
+		BBPeriod:       cfg.BBPeriod,
+		BBMultiplier:   cfg.BBMultiplier,
+		CHOPPeriod:     cfg.CHOPPeriod,
+		StochRSIPeriod: cfg.StochRSIPeriod,
+		AroonPeriod:    cfg.AroonPeriod,
+		LastN:          cfg.LastN,
+		Pretty:         cfg.Pretty,
+		SkipSTC:        cfg.SkipSTC,
 	}
 	if !indicatorEnabled {
 		opts.SkipEMA = true

@@ -35,6 +35,7 @@ Brale 是一个 AI 驱动的量化交易引擎。它把一轮交易决策拆成 
 
 - *LLM 出主意，代码做裁判* — 模型给出止盈止损方案后，Go 代码会强制校验价格序列、杠杆上限、清算安全距离。模型可以犯错，代码不让它真的亏钱。
 - *三路 Agent 独立决策* — 指标分析、市场结构、衍生品力学各自独立运行，通过共识阈值避免单一模型误判。
+- *Provider 不是只听摘要* — Provider 除了读取 Agent 文本摘要，还会收到代码提取的结构化锚点，例如多周期指标一致性、结构突破锚点、机制冲突与反转风险，用来交叉验证 Agent 结论。
 - *全自动调度* — 定时决策、价格监控、状态对账都由内置调度器完成，不需要外部 cron。
 - *执行层可替换* — 当前对接 Freqtrade，接口解耦，可以换成其他交易后端。
 - *通知开箱即用* — 内置 Telegram 和飞书 Bot。
@@ -82,8 +83,8 @@ make init
 
 ** 详细文档
 
-- [[file:docs/configuration.org][配置体系]] — 四层 TOML 配置详解、添加新币种
-- [[file:docs/trading-logic.org][交易逻辑]] — 入场方式、止盈止损策略、仓位计算
+- [[file:docs/configuration.org][配置体系]] — 四层 TOML 配置详解、指标参数边界、添加新币种
+- [[file:docs/trading-logic.org][交易逻辑]] — 入场方式、Provider 锚点、trace 持久化、仓位计算
 - [[file:docs/runtime-api.org][运行时 API]] — API 端点、webhook、通知、数据存储
 
 ** 扩展方向
@@ -136,6 +137,7 @@ Brale is an AI-driven quantitative trading engine. It breaks a trading decision 
 
 - *LLM proposes, code disposes* — after the model suggests TP/SL levels, Go code enforces price sequence validity, leverage caps, and liquidation safety. The model can be wrong; the code won't let it lose real money.
 - *Three independent Agent lanes* — indicator analysis, market structure, and derivatives mechanics each run separately. Consensus thresholds prevent single-model misjudgment.
+- *Providers get grounding anchors, not just summaries* — each Provider receives its Agent summary plus code-computed anchors such as multi-timeframe indicator alignment, structure breaks, and mechanics conflict signals for cross-checking.
 - *Fully automated scheduling* — decision cycles, price monitoring, and state reconciliation are all handled by a built-in scheduler. No external cron needed.
 - *Swappable execution layer* — currently wired to Freqtrade, but the interface is decoupled and can be replaced with another trading backend.
 - *Notifications out of the box* — built-in Telegram and Feishu bots.
@@ -183,8 +185,8 @@ If you don't need the onboarding UI, just run =make start= to launch Freqtrade a
 
 ** Documentation
 
-- [[file:docs/configuration.org][Configuration]] — four-layer TOML config system, adding new symbols
-- [[file:docs/trading-logic.org][Trading Logic]] — entry modes, TP/SL strategies, position sizing
+- [[file:docs/configuration.org][Configuration]] — four-layer TOML config system, indicator parameter boundaries, adding new symbols
+- [[file:docs/trading-logic.org][Trading Logic]] — entry modes, Provider anchors, trace persistence, position sizing
 - [[file:docs/runtime-api.org][Runtime API]] — API endpoints, webhooks, notifications, data storage
 
 ** Extension Points

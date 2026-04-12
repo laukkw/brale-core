@@ -228,7 +228,7 @@ func (b *Bot) handleMessage(ctx context.Context, msg *message) {
 
 	sess, ok := b.sessions.get(chatID, userID)
 	if ok && sess.Step == stepAwaitSymbol {
-		symbol := normalizeSymbol(text)
+		symbol := symbolpkg.Normalize(text)
 		if symbol == "" {
 			b.sendTextWithReply(ctx, chatID, "币种不能为空，请重新输入。")
 			return
@@ -339,7 +339,7 @@ func (b *Bot) sendImage(ctx context.Context, chatID int64, asset *cardimage.Imag
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			return
+			b.logger.Debug("telegram send image response body close failed", zap.Error(err))
 		}
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -400,7 +400,7 @@ func (b *Bot) sendObserveOptionsFromMonitor(ctx context.Context, chatID int64, s
 	row := make([]inlineButton, 0, 2)
 	added := 0
 	for _, item := range symbols {
-		symbol := normalizeSymbol(item.Symbol)
+		symbol := symbolpkg.Normalize(item.Symbol)
 		if symbol == "" {
 			continue
 		}
@@ -600,7 +600,9 @@ func (b *Bot) answerCallback(ctx context.Context, id string) {
 	}
 	payload := answerCallbackRequest{CallbackQueryID: id}
 	var resp baseResponse
-	_ = b.doTelegramRequest(ctx, http.MethodPost, "answerCallbackQuery", payload, &resp)
+	if err := b.doTelegramRequest(ctx, http.MethodPost, "answerCallbackQuery", payload, &resp); err != nil {
+		b.logger.Warn("telegram answer callback failed", zap.Error(err))
+	}
 }
 
 func (b *Bot) getUpdates(ctx context.Context, offset int) ([]update, error) {
@@ -631,7 +633,7 @@ func (b *Bot) doTelegramRequest(ctx context.Context, method, path string, payloa
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			return
+			b.logger.Debug("telegram request response body close failed", zap.Error(err))
 		}
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -646,10 +648,6 @@ func (b *Bot) doTelegramRequest(ctx context.Context, method, path string, payloa
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
-}
-
-func normalizeSymbol(symbol string) string {
-	return symbolpkg.Normalize(symbol)
 }
 
 func (b *Bot) effectiveRequestTimeout() time.Duration {

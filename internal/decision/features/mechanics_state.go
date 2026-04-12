@@ -55,6 +55,29 @@ type mechanicsSentimentState struct {
 	TopTraderBias string `json:"top_trader_bias"`
 }
 
+const (
+	fundingBiasThreshold = 0.0001
+	fundingHotThreshold  = 0.0005
+
+	crowdingLongLSRatioThreshold     = 1.2
+	crowdingLongTakerRatioThreshold  = 1.1
+	crowdingShortLSRatioThreshold    = 0.8
+	crowdingShortTakerRatioThreshold = 0.9
+
+	fearGreedFearThreshold    = 25
+	fearGreedNeutralThreshold = 55
+	fearGreedGreedThreshold   = 75
+	topTraderLongThreshold    = 1.1
+	topTraderShortThreshold   = 0.9
+
+	liquidationHighZScoreThreshold        = 2.5
+	liquidationHighVolOverOIThreshold     = 0.08
+	liquidationElevatedZScoreThreshold    = 1.5
+	liquidationElevatedVolOverOIThreshold = 0.04
+
+	oiChangeTrendThresholdPct = 2.0
+)
+
 func BuildMechanicsStateSummary(input MechanicsCompressedInput) (MechanicsStateSummary, error) {
 	summary := MechanicsStateSummary{
 		FreshnessSec: computeMechanicsFreshness(input),
@@ -111,13 +134,13 @@ func classifyFundingState(input MechanicsCompressedInput) *mechanicsFundingState
 	rate := roundFloat(input.Funding.Rate, 6)
 	bias := "neutral"
 	switch {
-	case rate > 0.0001:
+	case rate > fundingBiasThreshold:
 		bias = "long"
-	case rate < -0.0001:
+	case rate < -fundingBiasThreshold:
 		bias = "short"
 	}
 	heat := "neutral"
-	if absFloat(rate) >= 0.0005 {
+	if absFloat(rate) >= fundingHotThreshold {
 		heat = "hot"
 	}
 	return &mechanicsFundingState{
@@ -134,9 +157,9 @@ func classifyCrowdingState(input MechanicsCompressedInput, funding *mechanicsFun
 	}
 	bias := "balanced"
 	switch {
-	case lsRatio > 1.2 && takerRatio > 1.1:
+	case lsRatio > crowdingLongLSRatioThreshold && takerRatio > crowdingLongTakerRatioThreshold:
 		bias = "long_crowded"
-	case lsRatio < 0.8 && takerRatio < 0.9:
+	case lsRatio < crowdingShortLSRatioThreshold && takerRatio < crowdingShortTakerRatioThreshold:
 		bias = "short_crowded"
 	}
 	reversalRisk := "low"
@@ -202,11 +225,11 @@ func classifySentimentState(input MechanicsCompressedInput) *mechanicsSentimentS
 	fearGreed := "unknown"
 	if hasFearGreed {
 		switch {
-		case fearValue <= 25:
+		case fearValue <= fearGreedFearThreshold:
 			fearGreed = "fear"
-		case fearValue <= 55:
+		case fearValue <= fearGreedNeutralThreshold:
 			fearGreed = "neutral"
-		case fearValue <= 75:
+		case fearValue <= fearGreedGreedThreshold:
 			fearGreed = "greed"
 		default:
 			fearGreed = "extreme_greed"
@@ -215,9 +238,9 @@ func classifySentimentState(input MechanicsCompressedInput) *mechanicsSentimentS
 	topTraderBias := "unknown"
 	if hasTopTrader {
 		switch {
-		case topTraderLSR > 1.1:
+		case topTraderLSR > topTraderLongThreshold:
 			topTraderBias = "long"
-		case topTraderLSR < 0.9:
+		case topTraderLSR < topTraderShortThreshold:
 			topTraderBias = "short"
 		default:
 			topTraderBias = "neutral"
@@ -360,9 +383,9 @@ func summarizeLiquidationWindow(name string, payload liqWindowPayload) mechanics
 		spike = payload.Rel.Spike
 	}
 	switch {
-	case spike || zscore >= 2.5 || volOverOI >= 0.08:
+	case spike || zscore >= liquidationHighZScoreThreshold || volOverOI >= liquidationHighVolOverOIThreshold:
 		stress = "high"
-	case zscore >= 1.5 || volOverOI >= 0.04:
+	case zscore >= liquidationElevatedZScoreThreshold || volOverOI >= liquidationElevatedVolOverOIThreshold:
 		stress = "elevated"
 	}
 	return mechanicsLiquidationState{
@@ -394,9 +417,9 @@ func liquidationTieBreaker(state mechanicsLiquidationState) float64 {
 
 func classifyOIChangeState(changePct float64) string {
 	switch {
-	case changePct >= 2:
+	case changePct >= oiChangeTrendThresholdPct:
 		return "rising"
-	case changePct <= -2:
+	case changePct <= -oiChangeTrendThresholdPct:
 		return "falling"
 	default:
 		return "flat"
