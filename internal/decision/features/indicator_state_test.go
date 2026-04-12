@@ -69,6 +69,51 @@ func TestBuildIndicatorStateJSONBuildsMultiTFSummary(t *testing.T) {
 	}
 }
 
+func TestBuildIndicatorStateJSONIncludesExtendedIndicatorFieldsAndEvents(t *testing.T) {
+	data := indicatorDataForStateTest(101, []float64{99, 101}, 100, []float64{99, 100}, 98, []float64{99, 98}, 61, 0.2, 8, 7, 0.04, "rising")
+	data.BB = &bbSnapshot{PercentB: 0.91, Width: 1.5}
+	data.CHOP = &chopSnapshot{Value: 65}
+	data.StochRSI = &stochRSISnapshot{Value: 0.1}
+	data.Aroon = &aroonSnapshot{Up: 80, Down: 20}
+	data.TDSequential = &tdSequentialSnapshot{BuySetup: 8}
+
+	byInterval := map[string]IndicatorJSON{
+		"15m": buildIndicatorJSONForStateTest(t, "BTCUSDT", "15m", 103, 99, 12, data),
+	}
+
+	got, err := BuildIndicatorStateJSON("BTCUSDT", byInterval, "15m")
+	if err != nil {
+		t.Fatalf("BuildIndicatorStateJSON() error = %v", err)
+	}
+
+	var payload indicatorStateInput
+	if err := json.Unmarshal(got.RawJSON, &payload); err != nil {
+		t.Fatalf("unmarshal state input: %v", err)
+	}
+	if len(payload.MultiTF) != 1 {
+		t.Fatalf("multi_tf len=%d want 1", len(payload.MultiTF))
+	}
+	state := payload.MultiTF[0]
+	if state.Momentum.StochRSIZone != "oversold" {
+		t.Fatalf("stoch_rsi_zone=%q want oversold", state.Momentum.StochRSIZone)
+	}
+	if state.Volatility.BBZone != "near_upper" {
+		t.Fatalf("bb_zone=%q want near_upper", state.Volatility.BBZone)
+	}
+	if state.Volatility.BBWidthState != "squeeze" {
+		t.Fatalf("bb_width_state=%q want squeeze", state.Volatility.BBWidthState)
+	}
+	if state.Volatility.CHOPRegime != "choppy" {
+		t.Fatalf("chop_regime=%q want choppy", state.Volatility.CHOPRegime)
+	}
+	if !containsString(state.Events, "aroon_strong_bullish") {
+		t.Fatalf("events=%v should contain aroon_strong_bullish", state.Events)
+	}
+	if !containsString(state.Events, "td_buy_setup_8") {
+		t.Fatalf("events=%v should contain td_buy_setup_8", state.Events)
+	}
+}
+
 func buildIndicatorJSONForStateTest(t *testing.T, symbol, interval string, currentPrice, previousPrice float64, age int64, data indicatorData) IndicatorJSON {
 	t.Helper()
 

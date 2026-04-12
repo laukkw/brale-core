@@ -43,11 +43,15 @@ type indicatorMomentumState struct {
 	RSISlopeState string `json:"rsi_slope_state"`
 	STCState      string `json:"stc_state"`
 	OBVSlopeState string `json:"obv_slope_state"`
+	StochRSIZone  string `json:"stoch_rsi_zone,omitempty"`
 }
 
 type indicatorVolatilityState struct {
 	ATRExpandState string  `json:"atr_expand_state"`
 	ATRChangePct   float64 `json:"atr_change_pct,omitempty"`
+	BBZone         string  `json:"bb_zone,omitempty"`
+	BBWidthState   string  `json:"bb_width_state,omitempty"`
+	CHOPRegime     string  `json:"chop_regime,omitempty"`
 }
 
 type indicatorCrossTFSummary struct {
@@ -176,10 +180,14 @@ func summarizeIndicatorPayload(payload IndicatorCompressedInput) indicatorTFStat
 			RSISlopeState: classifyRSISlope(payload.Data.RSI),
 			STCState:      classifySTCState(payload.Data.STC),
 			OBVSlopeState: classifyOBVSlope(payload.Data.OBV),
+			StochRSIZone:  classifyStochRSIZone(payload.Data.StochRSI),
 		},
 		Volatility: indicatorVolatilityState{
 			ATRExpandState: classifyATRExpansion(payload.Data.ATR),
 			ATRChangePct:   atrChangePct(payload.Data.ATR),
+			BBZone:         classifyBBZone(payload.Data.BB),
+			BBWidthState:   classifyBBWidthState(payload.Data.BB),
+			CHOPRegime:     classifyCHOPRegime(payload.Data.CHOP),
 		},
 	}
 	state.Bias = computeIndicatorBias(state)
@@ -409,6 +417,20 @@ func detectIndicatorEvents(payload IndicatorCompressedInput) []string {
 	currentStack := classifyEMAStack(emaLatest(payload.Data.EMAFast), emaLatest(payload.Data.EMAMid), emaLatest(payload.Data.EMASlow))
 	appendEvent("ema_stack_bull_flip", prevStack != "bull" && currentStack == "bull")
 	appendEvent("ema_stack_bear_flip", prevStack != "bear" && currentStack == "bear")
+	switch classifyAroonSignal(payload.Data.Aroon) {
+	case "strong_up":
+		events = append(events, "aroon_strong_bullish")
+	case "strong_down":
+		events = append(events, "aroon_strong_bearish")
+	}
+	if td := payload.Data.TDSequential; td != nil {
+		if td.BuySetup >= 8 {
+			events = append(events, fmt.Sprintf("td_buy_setup_%d", td.BuySetup))
+		}
+		if td.SellSetup >= 8 {
+			events = append(events, fmt.Sprintf("td_sell_setup_%d", td.SellSetup))
+		}
+	}
 
 	return events
 }
