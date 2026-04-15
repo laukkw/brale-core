@@ -74,6 +74,16 @@ func (p *Pipeline) runObserveWithDecisionCtx(ctx context.Context, symbols []stri
 	}
 	ctx = llm.WithSessionRoundID(ctx, roundID)
 	logger = logger.With(zap.String("round_id", roundID.String()))
+	ctx, recorder := p.attachRoundRecorder(ctx, roundID, "observe", symbols)
+	roundOutcome := "ok"
+	defer func() {
+		if recorder == nil {
+			return
+		}
+		if err := recorder.Finish(ctx, roundOutcome); err != nil {
+			logger.Warn("save llm round failed", zap.Error(err))
+		}
+	}()
 	if decisionCtx == nil {
 		decisionCtx = make(map[string]symbolDecisionContext)
 	}
@@ -81,8 +91,11 @@ func (p *Pipeline) runObserveWithDecisionCtx(ctx context.Context, symbols []stri
 	if err != nil {
 		logger.Error("pipeline runner failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "runner_error"
 		return nil, err
 	}
+	snapID := resolveSnapshotID(snap)
+	applyRoundSummary(recorder, snapID, results)
 	for i := range results {
 		ctxInfo, ok := decisionCtx[results[i].Symbol]
 		state := fsm.PositionState("")
@@ -100,6 +113,7 @@ func (p *Pipeline) runObserveWithDecisionCtx(ctx context.Context, symbols []stri
 			if err != nil {
 				logger.Error("load state failed", zap.Error(err), zap.String("symbol", results[i].Symbol))
 				p.notifyError(ctx, err)
+				roundOutcome = "state_error"
 				return nil, err
 			}
 			ctxInfo = symbolDecisionContext{
@@ -116,6 +130,7 @@ func (p *Pipeline) runObserveWithDecisionCtx(ctx context.Context, symbols []stri
 		if err != nil {
 			logger.Error("hold gate build failed", zap.Error(err), zap.String("symbol", results[i].Symbol))
 			p.notifyError(ctx, err)
+			roundOutcome = "hold_error"
 			return nil, err
 		}
 		results[i].Gate = holdGate.Gate
@@ -136,6 +151,7 @@ func (p *Pipeline) runObserveWithDecisionCtx(ctx context.Context, symbols []stri
 		zap.Int("results", len(results)),
 		zap.Duration("latency", time.Since(start)),
 	)
+	applyRoundSummary(recorder, snapID, results)
 	return results, nil
 }
 
@@ -168,33 +184,49 @@ func (p *Pipeline) RunOnceObserveWithInjectedPosition(ctx context.Context, symbo
 	}
 	ctx = llm.WithSessionRoundID(ctx, roundID)
 	logger = logger.With(zap.String("round_id", roundID.String()))
+	ctx, recorder := p.attachRoundRecorder(ctx, roundID, "observe", []string{symbol})
+	roundOutcome := "ok"
+	defer func() {
+		if recorder == nil {
+			return
+		}
+		if err := recorder.Finish(ctx, roundOutcome); err != nil {
+			logger.Warn("save llm round failed", zap.Error(err))
+		}
+	}()
 	opts := p.enrichRunOptions(RunOptions{BuildPlan: true}, []string{symbol}, map[string]decisionmode.Mode{symbol: decisionmode.ModeInPosition})
 	results, _, comp, err := p.Runner.RunOnceWithOptions(ctx, []string{symbol}, intervals, limit, acct, risk, opts)
 	if err != nil {
 		logger.Error("pipeline runner failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "runner_error"
 		return SymbolResult{}, err
 	}
+	applyRoundSummary(recorder, 0, results)
 	if len(results) == 0 {
 		err := fmt.Errorf("symbol result is empty")
 		logger.Error("inject observe failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "empty_result"
 		return SymbolResult{}, err
 	}
 	res := results[0]
 	if res.Err != nil {
 		logger.Error("symbol result error", zap.Error(res.Err))
 		p.notifyError(ctx, res.Err)
+		roundOutcome = "symbol_error"
 		return res, res.Err
 	}
 	indOut, stOut, mechOut, prompts, evaluated, err := p.judgeInPositionWithFallback(ctx, symbol, res, pos, comp)
 	if err != nil {
 		logger.Error("provider judge failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "provider_error"
 		return res, err
 	}
 	gateDecision, err := p.evaluateRuleflowHoldGate(ctx, res.Symbol, res, indOut, stOut, mechOut, comp, "", evaluated, ruleflow.HardGuardPosition{})
 	if err != nil {
+		roundOutcome = "gate_error"
 		return res, err
 	}
 	res.Gate = gateDecision.Gate
@@ -205,6 +237,7 @@ func (p *Pipeline) RunOnceObserveWithInjectedPosition(ctx context.Context, symbo
 	res.InPositionPrompts = prompts
 	res.InPositionEvaluated = evaluated
 	p.applyReportMarkPrice(ctx, &res)
+	applyRoundSummary(recorder, 0, []SymbolResult{res})
 	return res, nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"brale-core/internal/pkg/errclass"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/snapshot"
+	"brale-core/internal/store"
 
 	"go.uber.org/zap"
 )
@@ -45,44 +46,51 @@ func (p *Pipeline) handlePlan(ctx context.Context, out PersistResult, res Symbol
 }
 
 func (p *Pipeline) persistSymbolStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, logger *zap.Logger) error {
-	return p.persistStores(ctx, snapID, snap, res, logger, func() error {
+	return p.persistStores(ctx, snapID, snap, res, logger, func(runCtx context.Context) error {
 		if p.ProviderStore == nil {
 			return nil
 		}
-		return p.ProviderStore(ctx, snap, snapID, res.Symbol, res.Providers, BuildProviderDataContext(res.AgentInputs), res.ProviderPrompts)
+		return p.ProviderStore(runCtx, snap, snapID, res.Symbol, res.Providers, BuildProviderDataContext(res.AgentInputs), res.ProviderPrompts)
 	}, "provider store failed")
 }
 
 func (p *Pipeline) persistInPositionStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, ind provider.InPositionIndicatorOut, st provider.InPositionStructureOut, mech provider.InPositionMechanicsOut, prompts ProviderPromptSet, logger *zap.Logger) error {
-	return p.persistStores(ctx, snapID, snap, res, logger, func() error {
+	return p.persistStores(ctx, snapID, snap, res, logger, func(runCtx context.Context) error {
 		if p.ProviderInPositionStore == nil {
 			return nil
 		}
-		return p.ProviderInPositionStore(ctx, snap, snapID, res.Symbol, ind, st, mech, prompts, res.EnabledAgents)
+		return p.ProviderInPositionStore(runCtx, snap, snapID, res.Symbol, ind, st, mech, prompts, res.EnabledAgents)
 	}, "provider in position store failed")
 }
 
-func (p *Pipeline) persistStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, logger *zap.Logger, providerStore func() error, providerErrMsg string) error {
-	if err := p.runStore(ctx, logger, "agent store failed", func() error {
-		if p.AgentStore == nil {
-			return nil
+func (p *Pipeline) persistStores(ctx context.Context, snapID uint, snap snapshot.MarketSnapshot, res SymbolResult, logger *zap.Logger, providerStore func(context.Context) error, providerErrMsg string) error {
+	return p.withStoreTx(ctx, func(runCtx context.Context) error {
+		if err := p.runStore(runCtx, logger, "agent store failed", func() error {
+			if p.AgentStore == nil {
+				return nil
+			}
+			return p.AgentStore(runCtx, snap, snapID, res.Symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, res.AgentInputs, res.EnabledAgents, res.AgentPrompts)
+		}); err != nil {
+			return err
 		}
-		return p.AgentStore(ctx, snap, snapID, res.Symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, res.AgentInputs, res.EnabledAgents, res.AgentPrompts)
-	}); err != nil {
-		return err
-	}
-	if err := p.runStore(ctx, logger, providerErrMsg, providerStore); err != nil {
-		return err
-	}
-	if err := p.runStore(ctx, logger, "gate store failed", func() error {
-		if p.GateStore == nil {
-			return nil
+		if err := p.runStore(runCtx, logger, providerErrMsg, func() error {
+			if providerStore == nil {
+				return nil
+			}
+			return providerStore(runCtx)
+		}); err != nil {
+			return err
 		}
-		return p.GateStore(ctx, snap, snapID, res.Symbol, res.Gate, res.Providers)
-	}); err != nil {
-		return err
-	}
-	return nil
+		if err := p.runStore(runCtx, logger, "gate store failed", func() error {
+			if p.GateStore == nil {
+				return nil
+			}
+			return p.GateStore(runCtx, snap, snapID, res.Symbol, res.Gate, res.Providers)
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (p *Pipeline) runStore(ctx context.Context, logger *zap.Logger, msg string, fn func() error) error {
@@ -95,6 +103,17 @@ func (p *Pipeline) runStore(ctx context.Context, logger *zap.Logger, msg string,
 		return err
 	}
 	return nil
+}
+
+func (p *Pipeline) withStoreTx(ctx context.Context, fn func(context.Context) error) error {
+	if fn == nil {
+		return nil
+	}
+	txRunner, ok := p.store().(store.TxRunner)
+	if !ok {
+		return fn(ctx)
+	}
+	return txRunner.WithinTx(ctx, fn)
 }
 
 func resolveSnapshotID(snap snapshot.MarketSnapshot) uint {

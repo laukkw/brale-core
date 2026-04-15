@@ -11,6 +11,7 @@ func NormalizeSystemConfig(cfg *SystemConfig) {
 		return
 	}
 	cfg.Notification.Feishu.BotMode = NormalizeFeishuBotMode(cfg.Notification.Feishu.BotMode)
+	cfg.Scheduler.Backend = strings.ToLower(strings.TrimSpace(cfg.Scheduler.Backend))
 }
 
 func NormalizeSymbolIndexConfig(cfg *SymbolIndexConfig) {

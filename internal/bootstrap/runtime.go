@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"brale-core/internal/config"
@@ -27,7 +28,7 @@ func newSymbolRuntimeBuilder(ctx context.Context, sys config.SystemConfig, symbo
 		ctx:             ctx,
 		sys:             sys,
 		symbolIndexPath: symbolIndexPath,
-		deps:            runtime.NewSymbolRuntimeBuildDeps(deps.persistence.store, deps.persistence.stateProvider, deps.position.positioner, deps.position.riskPlanSvc, deps.position.priceSource),
+		deps:            runtime.NewSymbolRuntimeBuildDeps(deps.persistence.store, deps.persistence.stateProvider, deps.position.positioner, deps.position.riskPlanSvc, deps.position.priceSource, deps.execution.notifier),
 	}
 }
 
@@ -72,6 +73,7 @@ func startScheduler(ctx context.Context, logger *zap.Logger, sys config.SystemCo
 		SyncOrderInterval: time.Duration(sys.Webhook.FallbackOrderPollSec) * time.Second,
 		ReconcileInterval: time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
 		PriceTickInterval: time.Second,
+		DisableTickerLoops: strings.EqualFold(sys.Scheduler.Backend, "river"),
 		Logger:            logger.Named("scheduler"),
 		PriceStream:       deps.position.priceSource,
 	}

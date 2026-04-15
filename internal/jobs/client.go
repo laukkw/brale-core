@@ -1,5 +1,6 @@
 // Package jobs defines River job types and workers for brale-core.
-// River replaces the built-in time.Ticker scheduler as the sole scheduling backend.
+// River scaffolding is present, but the legacy RuntimeScheduler still drives
+// the main observe/decide/reconcile loop until the migration is completed.
 package jobs
 
 import (

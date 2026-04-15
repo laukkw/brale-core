@@ -5,16 +5,21 @@ import (
 	"strings"
 	"time"
 
+	braleOtel "brale-core/internal/otel"
+
 	"brale-core/internal/decision/decisionmode"
 	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/decision/features"
 	"brale-core/internal/decision/fsm"
 	"brale-core/internal/execution"
 	"brale-core/internal/llm"
+	"brale-core/internal/llm/llmround"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/snapshot"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -44,10 +49,13 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 	}
 	ctx = llm.WithSessionRoundID(ctx, roundID)
 	logger = logger.With(zap.String("round_id", roundID.String()))
+	roundOutcome := "ok"
+	var recorder *llmround.Recorder
 	decisionCtx, err := p.resolveDecisionContexts(ctx, symbols)
 	if err != nil {
 		logger.Error("resolve decision context failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "context_error"
 		return nil, err
 	}
 	modeBySymbol := make(map[string]decisionmode.Mode, len(decisionCtx))
@@ -82,16 +90,30 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		)
 		return out, nil
 	}
+	ctx, recorder = p.attachRoundRecorder(ctx, roundID, "decide", runnableSymbols)
+	defer func() {
+		if recorder == nil {
+			return
+		}
+		if err := recorder.Finish(ctx, roundOutcome); err != nil {
+			logger.Warn("save llm round failed", zap.Error(err))
+		}
+	}()
 	runOpts := opts
 	runOpts = p.enrichRunOptions(runOpts, runnableSymbols, modeBySymbol)
 	results, snap, comp, err := p.Runner.RunOnceWithOptions(ctx, runnableSymbols, intervals, limit, acct, risk, runOpts)
 	if err != nil {
 		logger.Error("pipeline runner failed", zap.Error(err))
 		p.notifyError(ctx, err)
+		roundOutcome = "runner_error"
+		braleOtel.PipelineErrorsTotal.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("phase", "runner")))
 		return nil, err
 	}
+	snapID := resolveSnapshotID(snap)
+	applyRoundSummary(recorder, snapID, results)
 	if failed, ok := firstFailedSymbolResult(results); ok {
 		if err := p.handleSymbolError(ctx, logger.With(zap.String("symbol", failed.Symbol)), failed); err != nil {
+			roundOutcome = "symbol_error"
 			return nil, err
 		}
 	}
@@ -112,13 +134,14 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 				state = fsm.StateFlat
 			}
 		}
-		snapID := resolveSnapshotID(snap)
 		if state != fsm.StateInPosition {
 			p.applyReportMarkPrice(ctx, res)
 		}
 		pr, err := p.handleSymbol(ctx, *res, snapID, snap, comp, state, posID)
 		if err != nil {
 			logger.Error("persist error", zap.Error(err), zap.String("symbol", res.Symbol))
+			roundOutcome = "persist_error"
+			braleOtel.PipelineErrorsTotal.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("phase", "persist")))
 			return nil, err
 		}
 		outBySymbol[res.Symbol] = pr
@@ -137,6 +160,22 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		zap.Int("results", len(out)),
 		zap.Duration("latency", time.Since(start)),
 	)
+	applyRoundSummary(recorder, snapID, results)
+
+	// Record pipeline metrics
+	latencyMs := time.Since(start).Milliseconds()
+	attrs := otelmetric.WithAttributes(attribute.String("outcome", roundOutcome))
+	braleOtel.PipelineRoundsTotal.Add(ctx, 1, attrs)
+	braleOtel.PipelineLatencyMs.Record(ctx, latencyMs, attrs)
+	if recorder != nil {
+		braleOtel.PipelineTokensTotal.Add(ctx, int64(recorder.TotalTokenIn()+recorder.TotalTokenOut()), attrs)
+	}
+	for _, res := range results {
+		action := strings.TrimSpace(res.Gate.DecisionAction)
+		if action != "" {
+			braleOtel.PipelineGateDecisions.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("action", action)))
+		}
+	}
 	return out, nil
 }
 

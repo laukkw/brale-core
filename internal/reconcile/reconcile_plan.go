@@ -157,16 +157,65 @@ func (s *ReconcileService) openPositionFromPlan(ctx context.Context, plan execut
 		return err
 	}
 	rec.RiskJSON = raw
-	if err := s.Store.SavePosition(ctx, &rec); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return nil
+	stopPrice := riskPlan.StopPrice
+	tpPrices := make([]float64, 0, len(riskPlan.TPLevels))
+	for _, level := range riskPlan.TPLevels {
+		if level.Price > 0 {
+			tpPrices = append(tpPrices, level.Price)
 		}
-		return err
 	}
-	if s.RiskPlans != nil {
-		if _, err := s.RiskPlans.SaveHistory(ctx, rec.PositionID, riskPlan, "entry_fill"); err != nil {
+	symbol := strings.TrimSpace(plan.Symbol)
+	if symbol == "" {
+		symbol = strings.TrimSpace(ext.Symbol)
+	}
+	stopReason := strings.TrimSpace(plan.RiskAnnotations.StopReason)
+	if err := reconcileWithinStoreTx(ctx, s.Store, func(runCtx context.Context) error {
+		if err := s.Store.SavePosition(runCtx, &rec); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "unique") {
+				return nil
+			}
 			return err
 		}
+		if s.RiskPlans != nil {
+			if _, err := s.RiskPlans.SaveHistory(runCtx, rec.PositionID, riskPlan, "entry_fill"); err != nil {
+				return err
+			}
+		}
+		if stopPrice <= 0 && len(tpPrices) == 0 {
+			return nil
+		}
+		logger.Info("position open detail",
+			zap.String("symbol", symbol),
+			zap.String("direction", strings.TrimSpace(plan.Direction)),
+			zap.Float64("qty", ext.Quantity),
+			zap.Float64("entry", ext.AvgEntry),
+			zap.Float64("stop", stopPrice),
+			zap.Float64s("take_profits", tpPrices),
+			zap.String("stop_reason", stopReason),
+			zap.Float64("risk_pct", plan.RiskPct),
+			zap.Float64("leverage", plan.Leverage),
+		)
+		if s.Notifier == nil {
+			return nil
+		}
+		if err := s.Notifier.SendPositionOpen(runCtx, PositionOpenNotice{
+			Symbol:      symbol,
+			Direction:   strings.TrimSpace(plan.Direction),
+			Qty:         ext.Quantity,
+			EntryPrice:  ext.AvgEntry,
+			StopPrice:   stopPrice,
+			TakeProfits: tpPrices,
+			StopReason:  stopReason,
+			RiskPct:     plan.RiskPct,
+			Leverage:    plan.Leverage,
+			PositionID:  plan.PositionID,
+		}); err != nil {
+			logger.Error("position open notify failed", zap.Error(err))
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	if s.Cache != nil {
 		s.Cache.UpdateFromExternal(ext)
@@ -179,47 +228,16 @@ func (s *ReconcileService) openPositionFromPlan(ctx context.Context, plan execut
 		zap.Float64("qty", ext.Quantity),
 		zap.Float64("avg_entry", ext.AvgEntry),
 	)
-	stopPrice := riskPlan.StopPrice
-	tpPrices := make([]float64, 0, len(riskPlan.TPLevels))
-	for _, level := range riskPlan.TPLevels {
-		if level.Price > 0 {
-			tpPrices = append(tpPrices, level.Price)
-		}
-	}
-	if stopPrice > 0 || len(tpPrices) > 0 {
-		symbol := strings.TrimSpace(plan.Symbol)
-		if symbol == "" {
-			symbol = strings.TrimSpace(ext.Symbol)
-		}
-		stopReason := strings.TrimSpace(plan.RiskAnnotations.StopReason)
-		logger.Info("position open detail",
-			zap.String("symbol", symbol),
-			zap.String("direction", strings.TrimSpace(plan.Direction)),
-			zap.Float64("qty", ext.Quantity),
-			zap.Float64("entry", ext.AvgEntry),
-			zap.Float64("stop", stopPrice),
-			zap.Float64s("take_profits", tpPrices),
-			zap.String("stop_reason", stopReason),
-			zap.Float64("risk_pct", plan.RiskPct),
-			zap.Float64("leverage", plan.Leverage),
-		)
-		if s.Notifier != nil {
-			err := s.Notifier.SendPositionOpen(ctx, PositionOpenNotice{
-				Symbol:      symbol,
-				Direction:   strings.TrimSpace(plan.Direction),
-				Qty:         ext.Quantity,
-				EntryPrice:  ext.AvgEntry,
-				StopPrice:   stopPrice,
-				TakeProfits: tpPrices,
-				StopReason:  stopReason,
-				RiskPct:     plan.RiskPct,
-				Leverage:    plan.Leverage,
-				PositionID:  plan.PositionID,
-			})
-			if err != nil {
-				logger.Error("position open notify failed", zap.Error(err))
-			}
-		}
-	}
 	return nil
+}
+
+func reconcileWithinStoreTx(ctx context.Context, st store.Store, fn func(context.Context) error) error {
+	if fn == nil {
+		return nil
+	}
+	txRunner, ok := st.(store.TxRunner)
+	if !ok {
+		return fn(ctx)
+	}
+	return txRunner.WithinTx(ctx, fn)
 }

@@ -221,7 +221,7 @@ func TestLogRiskPlanUpdateCarriesOriginalPlanStopReason(t *testing.T) {
 		},
 	}
 
-	p.logRiskPlanUpdate(
+	if err := p.logRiskPlanUpdate(
 		context.Background(),
 		pos,
 		plan,
@@ -237,7 +237,9 @@ func TestLogRiskPlanUpdateCarriesOriginalPlanStopReason(t *testing.T) {
 		true,
 		"monitor-tighten",
 		false,
-	)
+	); err != nil {
+		t.Fatalf("log risk plan update: %v", err)
+	}
 
 	if !notifier.called {
 		t.Fatalf("expected SendRiskPlanUpdate to be called")

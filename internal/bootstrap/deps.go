@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"brale-core/internal/config"
@@ -142,13 +144,47 @@ func buildPersistence(ctx context.Context, sys config.SystemConfig, logger *zap.
 	if err := pgstore.RunMigrations(dsn, logger); err != nil {
 		return nil, nil, nil, fmt.Errorf("run migrations: %w", err)
 	}
-	pool, err := pgstore.OpenPool(ctx, dsn)
+	pool, err := pgstore.OpenPool(ctx, sys.Database)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("open pg pool: %w", err)
 	}
 	st := pgstore.New(pool, logger)
+	if err := seedPromptRegistryDefaults(ctx, st); err != nil {
+		st.Close()
+		return nil, nil, nil, fmt.Errorf("seed prompt registry defaults: %w", err)
+	}
 	closeFn := func() { st.Close() }
 	return st, pool, closeFn, nil
+}
+
+func seedPromptRegistryDefaults(ctx context.Context, st store.PromptRegistryStore) error {
+	if st == nil {
+		return nil
+	}
+	defaults := config.PromptRegistryDefaults()
+	keys := make([]string, 0, len(defaults))
+	for key := range defaults {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		role, stage, ok := strings.Cut(key, "/")
+		if !ok || strings.TrimSpace(role) == "" || strings.TrimSpace(stage) == "" {
+			return fmt.Errorf("invalid prompt registry key %q", key)
+		}
+		entry := store.PromptRegistryEntry{
+			Role:         role,
+			Stage:        stage,
+			Version:      "builtin",
+			SystemPrompt: defaults[key],
+			Description:  "Seeded from compiled-in prompt defaults.",
+			Active:       true,
+		}
+		if err := st.SavePromptEntry(ctx, &entry); err != nil {
+			return fmt.Errorf("save prompt %s: %w", key, err)
+		}
+	}
+	return nil
 }
 
 func buildExecutionAdapter(sys config.SystemConfig) *execution.FreqtradeAdapter {

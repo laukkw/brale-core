@@ -18,6 +18,7 @@ type SystemConfig struct {
 	Webhook                 WebhookConfig             `mapstructure:"webhook"`
 	Notification            NotificationConfig        `mapstructure:"notification"`
 	Telemetry               TelemetryConfig           `mapstructure:"telemetry"`
+	Scheduler               SchedulerConfig           `mapstructure:"scheduler"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
 }
 
@@ -32,6 +33,10 @@ type TelemetryConfig struct {
 	ExporterType string `mapstructure:"exporter"`
 	Endpoint     string `mapstructure:"endpoint"`
 	ServiceName  string `mapstructure:"service_name"`
+}
+
+type SchedulerConfig struct {
+	Backend string `mapstructure:"backend"`
 }
 
 type SystemLLMConfig struct {

@@ -28,6 +28,7 @@ type RuntimeScheduler struct {
 	SyncOrderInterval time.Duration
 	ReconcileInterval time.Duration
 	PriceTickInterval time.Duration
+	DisableTickerLoops bool
 	cancel            context.CancelFunc
 	streamCtx         context.Context
 	started           bool
@@ -99,7 +100,9 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	if shouldStartStream {
 		s.startPriceStream(runCtx)
 	}
-	s.startLoops(runCtx)
+	if !s.DisableTickerLoops {
+		s.startLoops(runCtx)
+	}
 	return nil
 }
 

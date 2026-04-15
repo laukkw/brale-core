@@ -261,3 +261,20 @@ func DefaultPromptDefaults() PromptDefaults {
 		RiskTightenUpdate:           defaultRiskTightenUpdatePrompt,
 	}
 }
+
+func PromptRegistryDefaults() map[string]string {
+	defaults := DefaultPromptDefaults()
+	return map[string]string{
+		"agent/indicator":               defaults.AgentIndicator,
+		"agent/structure":               defaults.AgentStructure,
+		"agent/mechanics":               defaults.AgentMechanics,
+		"provider/indicator":            defaults.ProviderIndicator,
+		"provider/structure":            defaults.ProviderStructure,
+		"provider/mechanics":            defaults.ProviderMechanics,
+		"provider_in_position/indicator": defaults.ProviderInPositionIndicator,
+		"provider_in_position/structure": defaults.ProviderInPositionStructure,
+		"provider_in_position/mechanics": defaults.ProviderInPositionMechanics,
+		"risk/flat_init":                defaults.RiskFlatInit,
+		"risk/tighten_update":           defaults.RiskTightenUpdate,
+	}
+}

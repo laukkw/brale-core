@@ -49,6 +49,11 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 	if err := validateNotificationConfig(cfg.Notification); err != nil {
 		return err
 	}
+	switch cfg.Scheduler.Backend {
+	case "", "river", "builtin":
+	default:
+		return validationErrorf("scheduler.backend must be one of river/builtin")
+	}
 	return nil
 }
 

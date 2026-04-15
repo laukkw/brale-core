@@ -56,7 +56,7 @@ func TestBuildSymbolRuntimeInjectsCoreDependencies(t *testing.T) {
 	sys := testRuntimeSystemConfig()
 	symbolCfg := testRuntimeSymbolConfig()
 
-	agentSvc, providerSvc, tracker := buildSymbolAgents(sys, symbolCfg)
+	agentSvc, providerSvc, tracker := buildSymbolAgents(context.Background(), sys, symbolCfg, nil)
 	if tracker == nil {
 		t.Fatalf("tracker should not be nil")
 	}
@@ -174,7 +174,7 @@ func TestBuildSymbolAgentsIncludesFlatRiskPromptDefault(t *testing.T) {
 	sys := testRuntimeSystemConfig()
 	symbolCfg := testRuntimeSymbolConfig()
 
-	agentSvc, providerSvc, _ := buildSymbolAgents(sys, symbolCfg)
+	agentSvc, providerSvc, _ := buildSymbolAgents(context.Background(), sys, symbolCfg, nil)
 	agentImpl, ok := agentSvc.(llmapp.LLMAgentService)
 	if !ok {
 		t.Fatalf("agent service type=%T, want llmapp.LLMAgentService", agentSvc)
@@ -196,7 +196,7 @@ func TestBuildSymbolAgentsInjectsDecisionInterval(t *testing.T) {
 	symbolCfg := testRuntimeSymbolConfig()
 	symbolCfg.Intervals = []string{"1h", "4h", "1d"}
 
-	agentSvc, _, _ := buildSymbolAgents(sys, symbolCfg)
+	agentSvc, _, _ := buildSymbolAgents(context.Background(), sys, symbolCfg, nil)
 	agentImpl, ok := agentSvc.(llmapp.LLMAgentService)
 	if !ok {
 		t.Fatalf("agent service type=%T, want llmapp.LLMAgentService", agentSvc)

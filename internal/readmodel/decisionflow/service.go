@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -102,23 +101,28 @@ func MapHistoryItems(gates []store.GateEventRecord) []HistoryItem {
 	}
 	out := make([]HistoryItem, 0, len(gates))
 	for _, gate := range gates {
-		at := ""
-		if gate.Timestamp > 0 {
-			at = time.Unix(gate.Timestamp, 0).UTC().Format(time.RFC3339)
-		}
 		consensus := dashboard.ExtractConsensusMetrics(json.RawMessage(gate.DerivedJSON))
 		tighten := dashboard.BuildDecisionTightenDetail(json.RawMessage(gate.DerivedJSON))
 		out = append(out, HistoryItem{
 			SnapshotID:          gate.SnapshotID,
 			Action:              strings.ToUpper(strings.TrimSpace(gate.DecisionAction)),
 			Reason:              DisplayReason(strings.ToUpper(strings.TrimSpace(gate.DecisionAction)), strings.TrimSpace(gate.GateReason), tighten),
-			At:                  at,
+			At:                  formatHistoryAt(gate),
 			ConsensusScore:      consensus.Score,
 			ConsensusConfidence: consensus.Confidence,
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].At > out[j].At })
 	return out
+}
+
+func formatHistoryAt(gate store.GateEventRecord) string {
+	if !gate.CreatedAt.IsZero() {
+		return gate.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if gate.Timestamp > 0 {
+		return time.Unix(gate.Timestamp, 0).UTC().Format(time.RFC3339)
+	}
+	return ""
 }
 
 func BuildDetail(ctx context.Context, st HistoryStore, cfg SymbolConfig, symbol string, snapshotID uint) (*Detail, error) {

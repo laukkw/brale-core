@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"path/filepath"
 	"time"
 
@@ -15,14 +16,14 @@ import (
 	"brale-core/internal/store"
 	"brale-core/internal/strategy"
 	"brale-core/internal/transport/notify"
+
+	"go.uber.org/zap"
 )
 
-func buildRunner(sys config.SystemConfig, fetcher *snapshot.Fetcher, compressor decision.Compressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, runtimeCfg symbolRuntimeConfig, workingMemory memory.Store, episodicMemory memory.EpisodicStore, semanticMemory memory.SemanticStore) decision.Runner {
-	defaults := config.DefaultPromptDefaults()
-	riskPrompts := llmapp.LLMPromptBuilder{
-		RiskFlatInitSystem: defaults.RiskFlatInit,
-		RiskTightenSystem:  defaults.RiskTightenUpdate,
-		UserFormat:         llmapp.UserPromptFormatBullet,
+func buildRunner(ctx context.Context, sys config.SystemConfig, promptStore store.PromptRegistryStore, fetcher *snapshot.Fetcher, compressor decision.Compressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, runtimeCfg symbolRuntimeConfig, workingMemory memory.Store, episodicMemory memory.EpisodicStore, semanticMemory memory.SemanticStore) decision.Runner {
+	riskPrompts, err := loadPromptBuilder(ctx, promptStore, zap.NewNop())
+	if err != nil {
+		riskPrompts = fallbackPromptBuilder()
 	}
 	riskSvc := llmapp.LLMRiskService{
 		Provider: newLLMClient(sys, runtimeCfg.Symbol.LLM.Provider.Structure),
@@ -51,15 +52,19 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		Binding:     bind,
 		BarInterval: barInterval,
 	}
-	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource)
+	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil)
 	return buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, runner, exitConfirmCache, workingMemory, episodicMemory, semanticMemory)
 }
 
 func buildPipelineFromRuntimeConfig(sys config.SystemConfig, deps SymbolRuntimeBuildDeps, runtimeCfg symbolRuntimeConfig, runner *decision.Runner, exitConfirmCache *decision.ExitConfirmCache, workingMemory memory.Store, episodicMemory memory.EpisodicStore, semanticMemory memory.SemanticStore) (*decision.Pipeline, error) {
 	formatter := decision.NewFormatter()
-	notifier, err := notify.NewManager(notify.FromConfig(sys.Notification), formatter)
-	if err != nil {
-		return nil, err
+	notifier := deps.Notifier
+	if notifier == nil {
+		var err error
+		notifier, err = notify.NewManager(notify.FromConfig(sys.Notification), formatter)
+		if err != nil {
+			return nil, err
+		}
 	}
 	hooks := decision.StoreHooks{
 		Store:         deps.Store,

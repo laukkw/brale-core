@@ -21,6 +21,9 @@ exporter = "otlp"
 endpoint = "localhost:4317"
 service_name = "brale-core"
 
+[scheduler]
+backend = "river"
+
 [llm_models.'${LLM_MODEL_INDICATOR}']
 endpoint = "${LLM_INDICATOR_ENDPOINT}"
 api_key = "${LLM_INDICATOR_API_KEY}"

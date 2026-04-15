@@ -14,6 +14,7 @@ import (
 	"brale-core/internal/reconcile"
 	"brale-core/internal/store"
 	"brale-core/internal/strategy"
+	"brale-core/internal/transport/notify"
 
 	symbolpkg "brale-core/internal/pkg/symbol"
 )
@@ -28,15 +29,17 @@ type SymbolRuntimeBuildDeps struct {
 	Positioner    *position.PositionService
 	RiskPlanSvc   *position.RiskPlanService
 	PriceSource   market.PriceSource
+	Notifier      notify.Notifier
 }
 
-func NewSymbolRuntimeBuildDeps(st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource) SymbolRuntimeBuildDeps {
+func NewSymbolRuntimeBuildDeps(st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource, notifier notify.Notifier) SymbolRuntimeBuildDeps {
 	return SymbolRuntimeBuildDeps{
 		Store:         st,
 		StateProvider: stateProvider,
 		Positioner:    positioner,
 		RiskPlanSvc:   riskPlanSvc,
 		PriceSource:   priceSource,
+		Notifier:      notifier,
 	}
 }
 
@@ -75,7 +78,7 @@ func buildSymbolRuntimeFromConfig(metricsCtx context.Context, sys config.SystemC
 		BarInterval:      barInterval,
 		RequireMechanics: requireMechanics,
 	}
-	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource)
+	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil)
 	return buildSymbolRuntimeFromRuntimeConfig(metricsCtx, sys, runtimeCfg, deps)
 }
 
@@ -83,14 +86,14 @@ func buildSymbolRuntimeFromRuntimeConfig(metricsCtx context.Context, sys config.
 	workingMemory := buildWorkingMemory(runtimeCfg.Symbol)
 	episodicMemory := buildEpisodicMemory(runtimeCfg.Symbol, deps.Store)
 	semanticMemory := buildSemanticMemory(runtimeCfg.Symbol, deps.Store)
-	agentSvc, providerSvc, tracker := buildSymbolAgents(sys, runtimeCfg.Symbol)
+	agentSvc, providerSvc, tracker := buildSymbolAgents(metricsCtx, sys, runtimeCfg.Symbol, deps.Store)
 	fetcher := buildSnapshotFetcher(runtimeCfg.Symbol, runtimeCfg.RequireMechanics)
 	compressor, services, err := buildCompressor(runtimeCfg.Symbol, runtimeCfg.EnabledConfig, runtimeCfg.EnabledMap)
 	if err != nil {
 		return SymbolRuntime{}, err
 	}
 	exitConfirmCache := decision.NewExitConfirmCache()
-	runner := buildRunner(sys, fetcher, compressor, agentSvc, providerSvc, runtimeCfg, workingMemory, episodicMemory, semanticMemory)
+	runner := buildRunner(metricsCtx, sys, deps.Store, fetcher, compressor, agentSvc, providerSvc, runtimeCfg, workingMemory, episodicMemory, semanticMemory)
 	pipeline, err := buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, &runner, exitConfirmCache, workingMemory, episodicMemory, semanticMemory)
 	if err != nil {
 		return SymbolRuntime{}, err

@@ -53,11 +53,16 @@ func (p *Pipeline) applyBreakevenUpdate(ctx context.Context, pos store.PositionR
 	if plan.StopPrice <= 0 {
 		return result, p.applyWatermarkUpdate(ctx, pos, plan, "monitor-breakeven", watermarksUpdated)
 	}
-	_, err := p.riskPlans().ApplyUpdate(ctx, pos.PositionID, plan, "monitor-breakeven")
+	err := p.withStoreTx(ctx, func(runCtx context.Context) error {
+		if _, err := p.riskPlans().ApplyUpdate(runCtx, pos.PositionID, plan, "monitor-breakeven"); err != nil {
+			return err
+		}
+		if plan.StopPrice == oldStop {
+			return nil
+		}
+		return p.logRiskPlanUpdate(runCtx, pos, plan, oldStop, "monitor-breakeven", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-breakeven", false)
+	})
 	result.Executed = err == nil && plan.StopPrice != oldStop
-	if result.Executed {
-		p.logRiskPlanUpdate(ctx, pos, plan, oldStop, "monitor-breakeven", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-breakeven", false)
-	}
 	return result, err
 }
 
@@ -95,14 +100,19 @@ func (p *Pipeline) applyStructureTighten(ctx context.Context, pos store.Position
 		return baseResult, err
 	}
 	plan = tightenPlan
-	_, err = p.riskPlans().ApplyUpdate(ctx, pos.PositionID, plan, "monitor-tighten")
 	result := newTightenUpdateResult(planSource, plan.StopPrice, riskPlanTakeProfits(plan))
 	result.LLMRiskTrace = cloneLLMRiskTrace(llmTrace)
+	err = p.withStoreTx(ctx, func(runCtx context.Context) error {
+		if _, err := p.riskPlans().ApplyUpdate(runCtx, pos.PositionID, plan, "monitor-tighten"); err != nil {
+			return err
+		}
+		if plan.StopPrice == oldStop {
+			return nil
+		}
+		return p.logRiskPlanUpdate(runCtx, pos, plan, oldStop, "monitor-tighten", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-tighten", tpTightened)
+	})
 	result.Executed = err == nil && plan.StopPrice != oldStop
 	result.TPTightened = tpTightened
-	if result.Executed {
-		p.logRiskPlanUpdate(ctx, pos, plan, oldStop, "monitor-tighten", updateCtx.MarkPrice, updateCtx.ATR, updateCtx.ATRChangePct, updateCtx.GateSatisfied, updateCtx.ScoreTotal, tightenV2ScoreThreshold, updateCtx.ScoreBreakdown, updateCtx.ScoreParseOK, "monitor-tighten", tpTightened)
-	}
 	return result, err
 }
 
@@ -208,7 +218,7 @@ func (p *Pipeline) applyWatermarkUpdate(ctx context.Context, pos store.PositionR
 	return err
 }
 
-func (p *Pipeline) logRiskPlanUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, source string, markPrice float64, atr float64, volatility float64, gateSatisfied bool, scoreTotal float64, scoreThreshold float64, scoreBreakdown []RiskPlanUpdateScoreItem, parseOK bool, tightenReason string, tpTightened bool) {
+func (p *Pipeline) logRiskPlanUpdate(ctx context.Context, pos store.PositionRecord, plan risk.RiskPlan, oldStop float64, source string, markPrice float64, atr float64, volatility float64, gateSatisfied bool, scoreTotal float64, scoreThreshold float64, scoreBreakdown []RiskPlanUpdateScoreItem, parseOK bool, tightenReason string, tpTightened bool) error {
 	logger := logging.FromContext(ctx).Named("risk")
 	stopReason := strings.TrimSpace(tightenReason)
 	if stopReason == "" {
@@ -241,7 +251,7 @@ func (p *Pipeline) logRiskPlanUpdate(ctx context.Context, pos store.PositionReco
 		zap.Float64("leverage", pos.Leverage),
 	)
 	if p.Notifier == nil {
-		return
+		return nil
 	}
 	if err := p.Notifier.SendRiskPlanUpdate(ctx, RiskPlanUpdateNotice{
 		Symbol:         pos.Symbol,
@@ -268,7 +278,9 @@ func (p *Pipeline) logRiskPlanUpdate(ctx context.Context, pos store.PositionReco
 		PositionID:     pos.PositionID,
 	}); err != nil {
 		logger.Error("risk plan notify failed", zap.Error(err))
+		return err
 	}
+	return nil
 }
 
 func (p *Pipeline) notifyMissingRiskPlan(ctx context.Context, pos store.PositionRecord) {

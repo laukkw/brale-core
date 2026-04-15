@@ -105,3 +105,30 @@ func (w *ReconcileWorker) Work(ctx context.Context, job *river.Job[ReconcileArgs
 	logger.Debug("reconcile job completed", zap.Duration("elapsed", time.Since(start)))
 	return nil
 }
+
+// ─── Risk Monitor Job ─────────────────────────────────────────────
+
+type RiskMonitorArgs struct {
+	Symbol string `json:"symbol"`
+}
+
+func (RiskMonitorArgs) Kind() string { return "risk_monitor" }
+
+type RiskMonitorWorker struct {
+	river.WorkerDefaults[RiskMonitorArgs]
+	Execute func(ctx context.Context, symbol string) error
+}
+
+func (w *RiskMonitorWorker) Work(ctx context.Context, job *river.Job[RiskMonitorArgs]) error {
+	logger := logging.FromContext(ctx).Named("jobs").With(zap.String("symbol", job.Args.Symbol))
+	start := time.Now()
+	if w.Execute == nil {
+		return fmt.Errorf("risk monitor executor not configured")
+	}
+	if err := w.Execute(ctx, job.Args.Symbol); err != nil {
+		logger.Error("risk monitor job failed", zap.Error(err), zap.Duration("elapsed", time.Since(start)))
+		return err
+	}
+	logger.Debug("risk monitor job completed", zap.Duration("elapsed", time.Since(start)))
+	return nil
+}

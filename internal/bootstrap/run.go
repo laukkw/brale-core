@@ -51,6 +51,17 @@ func Run(baseCtx context.Context, opts Options) error {
 	if deps.closeDB != nil {
 		defer deps.closeDB()
 	}
+	asyncNotifier := notify.NewAsyncManager(nil, env.notifier, env.logger.Named("notify-async"))
+	deps.execution.notifier = asyncNotifier
+	if deps.position.positioner != nil {
+		deps.position.positioner.Notifier = asyncNotifier
+	}
+	if deps.reconcile.reconciler != nil {
+		deps.reconcile.reconciler.Notifier = asyncNotifier
+	}
+	if deps.reconcile.recovery != nil {
+		deps.reconcile.recovery.Notifier = asyncNotifier
+	}
 
 	otelShutdown, otelErr := braleOtel.Init(env.ctx, env.sys.Telemetry, env.logger)
 	if otelErr != nil {
@@ -67,31 +78,6 @@ func Run(baseCtx context.Context, opts Options) error {
 
 	runScheduledWarmup(env.ctx, env.logger, deps)
 
-	// Initialize River job client for async job processing.
-	if migrateErr := jobs.RunMigrations(env.ctx, deps.persistence.pool); migrateErr != nil {
-		env.logger.Error("river migration failed", zap.Error(migrateErr))
-	}
-	// Register workers with no-op executors for now; pipeline tasks still
-	// run via the existing RuntimeScheduler.  River will process
-	// notify render/deliver jobs once the notification pipeline is wired.
-	noopExec := func(_ context.Context, _ string) error { return nil }
-	riverWorkers := jobs.RegisterWorkers(noopExec, noopExec, noopExec, nil, nil)
-	periodicJobs := jobs.BuildPeriodicJobs(nil, 0, 0, 0)
-	riverClient, err := jobs.NewClient(env.ctx, deps.persistence.pool, riverWorkers, periodicJobs, env.logger)
-	if err != nil {
-		env.logger.Error("river client init failed", zap.Error(err))
-	} else {
-		if startErr := riverClient.Start(env.ctx); startErr != nil {
-			env.logger.Error("river client start failed", zap.Error(startErr))
-		} else {
-			defer func() {
-				stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				_ = riverClient.Stop(stopCtx)
-			}()
-		}
-	}
-
 	viewerHandler := decisionview.StartDecisionViewer(env.logger, env.sys, symbolIndexPath, env.index, deps.persistence.store)
 	dashboardHandler := dashboard.Start()
 	runtimes := buildRuntimeMap(env.ctx, env.logger, env.sys, symbolIndexPath, env.index, deps)
@@ -100,6 +86,31 @@ func Run(baseCtx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	if migrateErr := jobs.RunMigrations(env.ctx, deps.persistence.pool); migrateErr != nil {
+		return fmt.Errorf("river migration failed: %w", migrateErr)
+	}
+	riverWorkers := jobs.RegisterWorkers(
+		func(ctx context.Context, symbol string) error { return runtime.RunObserveOnce(ctx, scheduler, symbol) },
+		func(ctx context.Context, symbol string) error { return runtime.RunDecideOnce(ctx, scheduler, symbol) },
+		func(ctx context.Context, symbol string) error { return runtime.RunReconcileOnce(ctx, scheduler, symbol) },
+		func(ctx context.Context, symbol string) error { return runtime.RunRiskMonitorOnce(ctx, scheduler, symbol) },
+		asyncNotifier.Render,
+		asyncNotifier.Deliver,
+	)
+	periodicJobs := jobs.BuildPeriodicJobs(buildRiverPeriodicSchedules(env.sys, runtimes))
+	riverClient, err := jobs.NewClient(env.ctx, deps.persistence.pool, riverWorkers, periodicJobs, env.logger)
+	if err != nil {
+		return fmt.Errorf("river client init failed: %w", err)
+	}
+	asyncNotifier.SetClient(riverClient.Inner())
+	if startErr := riverClient.Start(env.ctx); startErr != nil {
+		return fmt.Errorf("river client start failed: %w", startErr)
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = riverClient.Stop(stopCtx)
+	}()
 
 	sendStartupNotify(env.ctx, env.logger, env.sys, env.index, runtimes, scheduler, deps, env.notifier)
 
@@ -123,6 +134,26 @@ func Run(baseCtx context.Context, opts Options) error {
 	<-env.ctx.Done()
 	sendShutdownNotify(env.logger, env.notifier, startedAt)
 	return nil
+}
+
+func buildRiverPeriodicSchedules(sys config.SystemConfig, runtimes map[string]runtime.SymbolRuntime) []jobs.PeriodicSchedule {
+	if !strings.EqualFold(sys.Scheduler.Backend, "river") {
+		return nil
+	}
+	schedules := make([]jobs.PeriodicSchedule, 0, len(runtimes))
+	for symbol, rt := range runtimes {
+		if rt.BarInterval <= 0 {
+			continue
+		}
+		schedules = append(schedules, jobs.PeriodicSchedule{
+			Symbol:              symbol,
+			ObserveInterval:     rt.BarInterval,
+			DecideInterval:      rt.BarInterval,
+			ReconcileInterval:   time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
+			RiskMonitorInterval: time.Second,
+		})
+	}
+	return schedules
 }
 
 func sendStartupNotify(ctx context.Context, logger *zap.Logger, sys config.SystemConfig, index config.SymbolIndexConfig, runtimes map[string]runtime.SymbolRuntime, scheduler *runtime.RuntimeScheduler, deps coreDeps, notifier startupNotifier) {

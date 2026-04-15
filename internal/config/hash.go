@@ -58,6 +58,7 @@ type systemHashInput struct {
 	LLMMinInterval          string          `json:"llm_min_interval,omitempty"`
 	LLMModels               []llmModelEntry `json:"llm_models,omitempty"`
 	Webhook                 webhookHash     `json:"webhook,omitempty"`
+	SchedulerBackend        string          `json:"scheduler_backend,omitempty"`
 	EnableScheduledDecision bool            `json:"enable_scheduled_decision,omitempty"`
 }
 
@@ -137,6 +138,7 @@ func buildSystemHashInput(cfg SystemConfig) systemHashInput {
 		LLMMinInterval:          cfg.LLMMinInterval,
 		LLMModels:               sortedLLMModels(cfg.LLMModels),
 		Webhook:                 buildWebhookHash(cfg.Webhook),
+		SchedulerBackend:        cfg.Scheduler.Backend,
 		EnableScheduledDecision: cfg.EnableScheduledDecision != nil && *cfg.EnableScheduledDecision,
 	}
 }

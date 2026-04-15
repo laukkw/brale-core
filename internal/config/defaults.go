@@ -151,6 +151,9 @@ func applySystemDefaults(cfg *SystemConfig) {
 	if cfg.Telemetry.ExporterType == "" {
 		cfg.Telemetry.ExporterType = "otlp"
 	}
+	if cfg.Scheduler.Backend == "" {
+		cfg.Scheduler.Backend = "river"
+	}
 }
 
 func applyMemoryDefaults(cfg *MemoryConfig, defaults MemoryConfig) {
