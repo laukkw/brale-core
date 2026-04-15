@@ -6,11 +6,15 @@ import (
 	"strings"
 	"time"
 
+	braleOtel "brale-core/internal/otel"
+
 	"brale-core/internal/execution"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/store"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +34,10 @@ func (s *PositionService) ArmClose(ctx context.Context, pos store.PositionRecord
 		return intentID, err
 	}
 	s.logAndNotifyClose(ctx, pos, reason, triggerPrice, closeQty)
+	braleOtel.PositionCloseTotal.Add(ctx, 1, otelmetric.WithAttributes(
+		attribute.String("symbol", pos.Symbol),
+		attribute.String("side", pos.Side),
+	))
 	return intentID, nil
 }
 

@@ -7,12 +7,16 @@ import (
 	"strings"
 	"time"
 
+	braleOtel "brale-core/internal/otel"
+
 	"brale-core/internal/execution"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/risk"
 	"brale-core/internal/store"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -83,6 +87,10 @@ func (s *PositionService) OpenFromPlan(ctx context.Context, plan execution.Execu
 		zap.Float64("entry", plan.Entry),
 		zap.Float64("risk_pct", plan.RiskPct),
 	)
+	braleOtel.PositionOpenTotal.Add(ctx, 1, otelmetric.WithAttributes(
+		attribute.String("symbol", plan.Symbol),
+		attribute.String("side", plan.Direction),
+	))
 	return rec, nil
 }
 
