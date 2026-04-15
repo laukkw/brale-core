@@ -183,6 +183,10 @@ func (a *FreqtradeAdapter) CancelOrder(ctx context.Context, req CancelOrderReq) 
 		if isCancelOrderNotFound(err) {
 			return CancelOrderResp{Status: "not_found"}, nil
 		}
+		logging.FromContext(ctx).Named("execution").Error("freqtrade cancel order failed",
+			zap.Int("trade_id", tradeID),
+			zap.Error(err),
+		)
 		return CancelOrderResp{}, execExternalError(err, "freqtrade_cancel_order_failed")
 	}
 	return CancelOrderResp{Status: "submitted"}, nil
@@ -224,6 +228,12 @@ func (a *FreqtradeAdapter) placeOpen(ctx context.Context, req PlaceOrderReq) (Pl
 	}
 	resp, err := a.Client.ForceEnter(ctx, payload)
 	if err != nil {
+		logging.FromContext(ctx).Named("execution").Error("freqtrade force enter failed",
+			zap.String("symbol", req.Symbol),
+			zap.String("side", side),
+			zap.Float64("stake", stake),
+			zap.Error(err),
+		)
 		return PlaceOrderResp{}, execExternalError(err, "freqtrade_force_enter_failed")
 	}
 	return PlaceOrderResp{ExternalID: strconv.Itoa(resp.TradeID), Status: "submitted"}, nil
@@ -312,6 +322,7 @@ func externalOrderFromTradeSummary(tr Trade, fallbackID string) ExternalOrder {
 }
 
 func (a *FreqtradeAdapter) placeClose(ctx context.Context, req PlaceOrderReq) (PlaceOrderResp, error) {
+	logger := logging.FromContext(ctx).Named("execution")
 	tradeID := strings.TrimSpace(req.PositionID)
 	if tradeID == "" {
 		return PlaceOrderResp{}, execValidationErrorf("position_id is required")
@@ -321,14 +332,35 @@ func (a *FreqtradeAdapter) placeClose(ctx context.Context, req PlaceOrderReq) (P
 	if amountRequested {
 		payload.Amount = req.Quantity
 	}
+	logger.Info("freqtrade place close",
+		zap.String("symbol", req.Symbol),
+		zap.String("trade_id", tradeID),
+		zap.Float64("quantity", req.Quantity),
+		zap.String("order_type", payload.OrderType),
+		zap.String("kind", string(req.Kind)),
+	)
+	start := time.Now()
 	if err := a.Client.ForceExit(ctx, payload); err != nil {
 		if amountRequested && isFreqtradeDustRemainingError(err) {
+			logger.Info("freqtrade dust remaining, retrying full close", zap.String("trade_id", tradeID))
 			retryPayload := ForceExitPayload{TradeID: tradeID, OrderType: payload.OrderType}
 			if retryErr := a.Client.ForceExit(ctx, retryPayload); retryErr != nil {
+				logger.Error("freqtrade force exit retry failed",
+					zap.String("symbol", req.Symbol),
+					zap.String("trade_id", tradeID),
+					zap.Duration("latency", time.Since(start)),
+					zap.Error(retryErr),
+				)
 				return PlaceOrderResp{}, execExternalError(retryErr, "freqtrade_force_exit_failed")
 			}
 			return PlaceOrderResp{ExternalID: tradeID, Status: "submitted"}, nil
 		}
+		logger.Error("freqtrade force exit failed",
+			zap.String("symbol", req.Symbol),
+			zap.String("trade_id", tradeID),
+			zap.Duration("latency", time.Since(start)),
+			zap.Error(err),
+		)
 		return PlaceOrderResp{}, execExternalError(err, "freqtrade_force_exit_failed")
 	}
 	return PlaceOrderResp{ExternalID: tradeID, Status: "submitted"}, nil

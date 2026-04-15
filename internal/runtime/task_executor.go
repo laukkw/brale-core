@@ -67,7 +67,7 @@ func executeBarDecide(ctx context.Context, scheduler *RuntimeScheduler, symbol s
 	if mode == SymbolModeOff || mode == SymbolModeObserve {
 		return
 	}
-	logger := scheduler.Logger.With(zap.String("symbol", symbol), zap.String("task", string(TaskBarDecide)))
+	logger := scheduler.Logger.With(zap.String("symbol", symbol), zap.String("task", string(TaskBarDecide)), zap.Strings("intervals", rt.Intervals))
 	if rt.Pipeline == nil {
 		logger.Error("pipeline missing")
 		return

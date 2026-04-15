@@ -122,8 +122,13 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 		if retryAfter > 0 && attempt < 2 {
 			until := time.Now().Add(retryAfter)
 			defaultModelGates.SetCooldown(c.Model, until)
+			logger.Warn("llm rate limited, retrying",
+				zap.Int("attempt", attempt+1),
+				zap.Duration("retry_after", retryAfter),
+				zap.Error(err),
+			)
 			if err := sleepWithContext(ctx, retryAfter); err != nil {
-				logger.Error("llm retry wait cancelled", zap.Error(err))
+				logger.Error("llm retry wait cancelled", zap.Int("attempt", attempt+1), zap.Error(err))
 				return "", err
 			}
 			continue
