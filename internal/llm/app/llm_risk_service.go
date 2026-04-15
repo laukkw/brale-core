@@ -31,7 +31,8 @@ func (s LLMRiskService) FlatRiskInitLLM() decision.FlatRiskInitLLM {
 		if err != nil {
 			return nil, err
 		}
-		raw, err := s.Provider.Call(ctx, system, user)
+		callCtx := withPromptCallContext(ctx, input.Symbol, "risk", llm.LLMStageRiskFlatInit, s.Prompts.RiskFlatInitVersion, nil)
+		raw, err := s.Provider.Call(callCtx, system, user)
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +77,8 @@ func (s LLMRiskService) TightenRiskLLM() decision.TightenRiskUpdateLLM {
 		if err != nil {
 			return nil, err
 		}
-		raw, err := s.Provider.Call(ctx, system, user)
+		callCtx := withPromptCallContext(ctx, input.Symbol, "risk", llm.LLMStageRiskTighten, s.Prompts.RiskTightenVersion, nil)
+		raw, err := s.Provider.Call(callCtx, system, user)
 		if err != nil {
 			return nil, err
 		}

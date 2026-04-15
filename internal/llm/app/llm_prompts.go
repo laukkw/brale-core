@@ -20,16 +20,27 @@ import (
 
 type LLMPromptBuilder struct {
 	AgentIndicatorSystem      string
+	AgentIndicatorVersion     string
 	AgentStructureSystem      string
+	AgentStructureVersion     string
 	AgentMechanicsSystem      string
+	AgentMechanicsVersion     string
 	ProviderIndicatorSystem   string
+	ProviderIndicatorVersion  string
 	ProviderStructureSystem   string
+	ProviderStructureVersion  string
 	ProviderMechanicsSystem   string
+	ProviderMechanicsVersion  string
 	ProviderInPosIndicatorSys string
+	ProviderInPosIndicatorVer string
 	ProviderInPosStructureSys string
+	ProviderInPosStructureVer string
 	ProviderInPosMechanicsSys string
+	ProviderInPosMechanicsVer string
 	RiskFlatInitSystem        string
+	RiskFlatInitVersion       string
 	RiskTightenSystem         string
+	RiskTightenVersion        string
 	UserFormat                UserPromptFormat
 }
 

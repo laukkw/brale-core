@@ -191,8 +191,8 @@ func TestOpenAIClientCallOnceReturnsRetryAfterFor429WithoutHTTPRetry(t *testing.
 	if err == nil {
 		t.Fatalf("callOnce() error = nil, want rate limit error")
 	}
-	if out != "" {
-		t.Fatalf("output=%q want empty", out)
+	if out.Content != "" {
+		t.Fatalf("output=%q want empty", out.Content)
 	}
 	if retryAfter != 3*time.Second {
 		t.Fatalf("retryAfter=%v want 3s", retryAfter)
@@ -228,8 +228,8 @@ func TestOpenAIClientCallOnceRetriesTransportErrors(t *testing.T) {
 	if retryAfter != 0 {
 		t.Fatalf("retryAfter=%v want 0", retryAfter)
 	}
-	if out != `{"ok":true}` {
-		t.Fatalf("output=%q want %q", out, `{"ok":true}`)
+	if out.Content != `{"ok":true}` {
+		t.Fatalf("output=%q want %q", out.Content, `{"ok":true}`)
 	}
 	if got := attempts.Load(); got != 2 {
 		t.Fatalf("attempts=%d want 2", got)

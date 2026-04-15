@@ -14,6 +14,7 @@ import (
 	"brale-core/internal/decision/fund"
 	"brale-core/internal/decision/gate"
 	"brale-core/internal/decision/provider"
+	"brale-core/internal/llm"
 	"brale-core/internal/pkg/logging"
 	"brale-core/internal/snapshot"
 	"brale-core/internal/store"
@@ -80,6 +81,15 @@ func (h StoreHooks) saveAgentStage(ctx context.Context, snapID uint, sym, stage 
 		SystemConfigHash:   h.SystemHash,
 		StrategyConfigHash: h.StrategyHash,
 		SourceVersion:      h.SourceVersion,
+		Model:              prompt.Model,
+		PromptVersion:      prompt.PromptVersion,
+		LatencyMS:          prompt.LatencyMS,
+		TokenIn:            prompt.TokenIn,
+		TokenOut:           prompt.TokenOut,
+		Error:              prompt.Error,
+	}
+	if roundID, ok := llm.SessionRoundIDFromContext(ctx); ok {
+		rec.RoundID = roundID.String()
 	}
 	return h.Store.SaveAgentEvent(ctx, rec)
 }
@@ -153,6 +163,15 @@ func (h StoreHooks) saveProviderStage(ctx context.Context, snapID uint, sym, rol
 		SystemConfigHash:   h.SystemHash,
 		StrategyConfigHash: h.StrategyHash,
 		SourceVersion:      h.SourceVersion,
+		Model:              prompt.Model,
+		PromptVersion:      prompt.PromptVersion,
+		LatencyMS:          prompt.LatencyMS,
+		TokenIn:            prompt.TokenIn,
+		TokenOut:           prompt.TokenOut,
+		Error:              prompt.Error,
+	}
+	if roundID, ok := llm.SessionRoundIDFromContext(ctx); ok {
+		rec.RoundID = roundID.String()
 	}
 	return h.Store.SaveProviderEvent(ctx, rec)
 }
@@ -224,6 +243,9 @@ func (h StoreHooks) SaveGate(ctx context.Context, snap snapshot.MarketSnapshot, 
 		StrategyConfigHash: h.StrategyHash,
 		SourceVersion:      h.SourceVersion,
 	}
+	if roundID, ok := llm.SessionRoundIDFromContext(ctx); ok {
+		rec.RoundID = roundID.String()
+	}
 
 	if err := h.Store.SaveGateEvent(ctx, rec); err != nil {
 		logger.Error("save gate event failed", zap.Error(err))
@@ -249,12 +271,12 @@ func (h StoreHooks) SaveGate(ctx context.Context, snap snapshot.MarketSnapshot, 
 				logger.Error("notify error failed", zap.Error(notifyErr))
 			}
 		}
-	} else {
-		logger.Info("gate notify sent",
-			zap.String("gate_reason", gate.GateReason),
-			zap.String("direction", gate.Direction),
-		)
+		return err
 	}
+	logger.Info("gate notify sent",
+		zap.String("gate_reason", gate.GateReason),
+		zap.String("direction", gate.Direction),
+	)
 	return nil
 }
 

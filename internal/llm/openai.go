@@ -12,10 +12,13 @@ import (
 	"strings"
 	"time"
 
+	braleOtel "brale-core/internal/otel"
 	"brale-core/internal/pkg/httpclient"
 	"brale-core/internal/pkg/logging"
 
 	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -51,6 +54,18 @@ type chatResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Model string `json:"model"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
+}
+
+type callResult struct {
+	Content  string
+	Model    string
+	TokenIn  int
+	TokenOut int
 }
 
 func (c *OpenAIClient) Call(ctx context.Context, system, user string) (string, error) {
@@ -83,10 +98,22 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 	if endpoint == "" {
 		endpoint = "https://api.openai.com/v1"
 	}
+	meta, _ := CallMetadataFromContext(ctx)
 	logger = logger.With(zap.String("endpoint", endpoint))
+	ctx, span := braleOtel.Tracer("brale-core/llm").Start(ctx, "llm.call")
+	span.SetAttributes(
+		attribute.String("llm.model", c.Model),
+		attribute.String("llm.endpoint", endpoint),
+		attribute.String("llm.role", meta.Role),
+		attribute.String("llm.stage", meta.Stage),
+		attribute.String("llm.symbol", meta.Symbol),
+		attribute.String("llm.prompt_version", meta.PromptVersion),
+	)
+	defer span.End()
 
 	release, err := defaultModelGates.Acquire(ctx, c.Model)
 	if err != nil {
+		emitCallStats(ctx, endpoint, meta, CallStats{Model: c.Model, Endpoint: endpoint, Role: meta.Role, Stage: meta.Stage, Symbol: meta.Symbol, PromptVersion: meta.PromptVersion, Err: err})
 		logger.Error("llm acquire gate failed", zap.Error(err))
 		return "", err
 	}
@@ -112,11 +139,25 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 	}
 
 	var lastErr error
+	var result callResult
 	for attempt := 0; attempt < 3; attempt++ {
 		output, retryAfter, err := c.callOnce(ctx, url, raw, timeout)
 		if err == nil {
-			logger.Debug("llm response", zap.String("output", output), zap.Duration("latency", time.Since(start)))
-			return output, nil
+			result = output
+			latencyMs := time.Since(start).Milliseconds()
+			emitCallStats(ctx, endpoint, meta, CallStats{
+				Model:         chooseModel(result.Model, c.Model),
+				Endpoint:      endpoint,
+				Role:          meta.Role,
+				Stage:         meta.Stage,
+				Symbol:        meta.Symbol,
+				PromptVersion: meta.PromptVersion,
+				LatencyMs:     latencyMs,
+				TokenIn:       result.TokenIn,
+				TokenOut:      result.TokenOut,
+			})
+			logger.Debug("llm response", zap.String("output", result.Content), zap.Duration("latency", time.Since(start)))
+			return result.Content, nil
 		}
 		lastErr = err
 		if retryAfter > 0 && attempt < 2 {
@@ -136,6 +177,16 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 		break
 	}
 
+	emitCallStats(ctx, endpoint, meta, CallStats{
+		Model:         c.Model,
+		Endpoint:      endpoint,
+		Role:          meta.Role,
+		Stage:         meta.Stage,
+		Symbol:        meta.Symbol,
+		PromptVersion: meta.PromptVersion,
+		LatencyMs:     time.Since(start).Milliseconds(),
+		Err:           lastErr,
+	})
 	logger.Error("llm request failed", zap.Error(lastErr), zap.Duration("latency", time.Since(start)))
 	return "", lastErr
 }
@@ -158,10 +209,10 @@ func jsonSchemaFormat(schema *JSONSchema) any {
 	}
 }
 
-func (c *OpenAIClient) callOnce(ctx context.Context, url string, raw []byte, timeout time.Duration) (string, time.Duration, error) {
+func (c *OpenAIClient) callOnce(ctx context.Context, url string, raw []byte, timeout time.Duration) (callResult, time.Duration, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
-		return "", 0, err
+		return callResult{}, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if strings.TrimSpace(c.APIKey) != "" {
@@ -178,11 +229,11 @@ func (c *OpenAIClient) callOnce(ctx context.Context, url string, raw []byte, tim
 	retryClient := newLLMRetryClient(client)
 	retryReq, err := retryablehttp.FromRequest(req)
 	if err != nil {
-		return "", 0, err
+		return callResult{}, 0, err
 	}
 	resp, err := retryClient.Do(retryReq)
 	if err != nil {
-		return "", 0, err
+		return callResult{}, 0, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -190,27 +241,62 @@ func (c *OpenAIClient) callOnce(ctx context.Context, url string, raw []byte, tim
 
 	bodyBytes, err := httpclient.ReadLimitedBody(resp.Body, 4*1024*1024)
 	if err != nil {
-		return "", 0, fmt.Errorf("read response body: %w", err)
+		return callResult{}, 0, fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyText := strings.TrimSpace(string(bodyBytes))
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return "", parseRetryWait(resp.Header), fmt.Errorf("status %s: %s", resp.Status, bodyText)
+			return callResult{}, parseRetryWait(resp.Header), fmt.Errorf("status %s: %s", resp.Status, bodyText)
 		}
 		if bodyText == "" {
-			return "", 0, fmt.Errorf("status %s", resp.Status)
+			return callResult{}, 0, fmt.Errorf("status %s", resp.Status)
 		}
-		return "", 0, fmt.Errorf("status %s: %s", resp.Status, bodyText)
+		return callResult{}, 0, fmt.Errorf("status %s: %s", resp.Status, bodyText)
 	}
 
 	var parsed chatResponse
 	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
-		return "", 0, err
+		return callResult{}, 0, err
 	}
 	if len(parsed.Choices) == 0 {
-		return "", 0, fmt.Errorf("empty choices")
+		return callResult{}, 0, fmt.Errorf("empty choices")
 	}
-	return parsed.Choices[0].Message.Content, 0, nil
+	return callResult{
+		Content:  parsed.Choices[0].Message.Content,
+		Model:    parsed.Model,
+		TokenIn:  parsed.Usage.PromptTokens,
+		TokenOut: parsed.Usage.CompletionTokens,
+	}, 0, nil
+}
+
+func chooseModel(primary, fallback string) string {
+	if strings.TrimSpace(primary) != "" {
+		return primary
+	}
+	return fallback
+}
+
+func emitCallStats(ctx context.Context, endpoint string, meta CallMetadata, stats CallStats) {
+	stats.Endpoint = endpoint
+	ObserveCall(ctx, stats)
+	attrs := []attribute.KeyValue{
+		attribute.String("model", chooseModel(stats.Model, "")),
+		attribute.String("role", meta.Role),
+		attribute.String("stage", meta.Stage),
+		attribute.String("symbol", meta.Symbol),
+		attribute.String("prompt_version", meta.PromptVersion),
+	}
+	options := []otelmetric.RecordOption{otelmetric.WithAttributes(attrs...)}
+	braleOtel.LLMCallLatencyMs.Record(ctx, stats.LatencyMs, options...)
+	if stats.TokenIn > 0 {
+		braleOtel.LLMCallTokenIn.Add(ctx, int64(stats.TokenIn), otelmetric.WithAttributes(attrs...))
+	}
+	if stats.TokenOut > 0 {
+		braleOtel.LLMCallTokenOut.Add(ctx, int64(stats.TokenOut), otelmetric.WithAttributes(attrs...))
+	}
+	if stats.Err != nil {
+		braleOtel.LLMCallErrors.Add(ctx, 1, otelmetric.WithAttributes(attrs...))
+	}
 }
 
 func newLLMRetryClient(base *http.Client) *retryablehttp.Client {

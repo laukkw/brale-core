@@ -25,9 +25,14 @@ type Compressor interface {
 }
 
 type LLMStagePrompt struct {
-	System string
-	User   string
-	Error  string
+	System        string
+	User          string
+	Model         string
+	PromptVersion string
+	LatencyMS     int
+	TokenIn       int
+	TokenOut      int
+	Error         string
 }
 
 type AgentPromptSet struct {

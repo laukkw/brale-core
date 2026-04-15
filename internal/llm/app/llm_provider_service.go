@@ -54,15 +54,18 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			indicatorSys, indicatorUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.IndicatorSys, indicatorInput)
 			cacheInput := promptCacheInput(indicatorSys, indicatorUser)
 			indicatorUser = s.providerUserPrompt(runCtx, indicatorUser, symbol, "provider_indicator", llm.LLMStageIndicator)
-			indPrompt = decision.LLMStagePrompt{System: indicatorSys, User: indicatorUser}
+			indPrompt = decision.LLMStagePrompt{System: indicatorSys, User: indicatorUser, PromptVersion: s.Prompts.ProviderIndicatorVersion}
 			if out, ok := loadProviderIndicatorCache(s.Cache, symbol, "provider_indicator", cacheInput); ok {
 				indOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorUser, func(callCtx context.Context, _ string, user string) (provider.IndicatorProviderOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider", llm.LLMStageIndicator, s.Prompts.ProviderIndicatorVersion, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageIndicator, indicatorUser, func(callCtx context.Context, _ string, user string) (provider.IndicatorProviderOut, error) {
 				return s.Runner.JudgeIndicator(callCtx, indicatorSys, user)
 			})
 			indPrompt.User = finalUser
+			applyStageCallStats(&indPrompt, collector)
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "indicator"), zap.Error(stageErr))
 				indPrompt.Error = stageErr.Error()
@@ -83,15 +86,18 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			structureSys, structureUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.StructureSys, structureInput)
 			cacheInput := promptCacheInput(structureSys, structureUser)
 			structureUser = s.providerUserPrompt(runCtx, structureUser, symbol, "provider_structure", llm.LLMStageStructure)
-			stPrompt = decision.LLMStagePrompt{System: structureSys, User: structureUser}
+			stPrompt = decision.LLMStagePrompt{System: structureSys, User: structureUser, PromptVersion: s.Prompts.ProviderStructureVersion}
 			if out, ok := loadProviderStructureCache(s.Cache, symbol, "provider_structure", cacheInput); ok {
 				stOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureUser, func(callCtx context.Context, _ string, user string) (provider.StructureProviderOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider", llm.LLMStageStructure, s.Prompts.ProviderStructureVersion, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageStructure, structureUser, func(callCtx context.Context, _ string, user string) (provider.StructureProviderOut, error) {
 				return s.Runner.JudgeStructure(callCtx, structureSys, user)
 			})
 			stPrompt.User = finalUser
+			applyStageCallStats(&stPrompt, collector)
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "structure"), zap.Error(stageErr))
 				stPrompt.Error = stageErr.Error()
@@ -112,15 +118,18 @@ func (s LLMProviderService) Judge(ctx context.Context, symbol string, ind agent.
 			mechanicsSys, mechanicsUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.MechanicsSys, mechanicsInput)
 			cacheInput := promptCacheInput(mechanicsSys, mechanicsUser)
 			mechanicsUser = s.providerUserPrompt(runCtx, mechanicsUser, symbol, "provider_mechanics", llm.LLMStageMechanics)
-			mechPrompt = decision.LLMStagePrompt{System: mechanicsSys, User: mechanicsUser}
+			mechPrompt = decision.LLMStagePrompt{System: mechanicsSys, User: mechanicsUser, PromptVersion: s.Prompts.ProviderMechanicsVersion}
 			if out, ok := loadProviderMechanicsCache(s.Cache, symbol, "provider_mechanics", cacheInput); ok {
 				mechOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsUser, func(callCtx context.Context, _ string, user string) (provider.MechanicsProviderOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider", llm.LLMStageMechanics, s.Prompts.ProviderMechanicsVersion, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageMechanics, mechanicsUser, func(callCtx context.Context, _ string, user string) (provider.MechanicsProviderOut, error) {
 				return s.Runner.JudgeMechanics(callCtx, mechanicsSys, user)
 			})
 			mechPrompt.User = finalUser
+			applyStageCallStats(&mechPrompt, collector)
 			if stageErr != nil {
 				logging.FromContext(runCtx).Named("decision").Error("provider judge failed", zap.String("stage", "mechanics"), zap.Error(stageErr))
 				mechPrompt.Error = stageErr.Error()
@@ -182,15 +191,18 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			indicatorSys, indicatorUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.IndicatorSys, indicatorInput)
 			cacheInput := promptCacheInput(indicatorSys, indicatorUser)
 			indicatorUser = s.providerUserPrompt(runCtx, indicatorUser, symbol, "provider_indicator_in_position", llm.LLMStageIndicator)
-			indPrompt = decision.LLMStagePrompt{System: indicatorSys, User: indicatorUser}
+			indPrompt = decision.LLMStagePrompt{System: indicatorSys, User: indicatorUser, PromptVersion: s.Prompts.ProviderInPosIndicatorVer}
 			if out, ok := loadProviderIndicatorInPositionCache(s.Cache, symbol, "provider_indicator_in_position", cacheInput); ok {
 				indOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageIndicator, indicatorUser, func(callCtx context.Context, _ string, user string) (provider.InPositionIndicatorOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider_in_position", llm.LLMStageIndicator, s.Prompts.ProviderInPosIndicatorVer, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageIndicator, indicatorUser, func(callCtx context.Context, _ string, user string) (provider.InPositionIndicatorOut, error) {
 				return s.Runner.JudgeIndicatorInPosition(callCtx, indicatorSys, user)
 			})
 			indPrompt.User = finalUser
+			applyStageCallStats(&indPrompt, collector)
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "indicator_in_position"), zap.Error(stageErr))
 				indPrompt.Error = stageErr.Error()
@@ -211,15 +223,18 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			structureSys, structureUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.StructureSys, structureInput)
 			cacheInput := promptCacheInput(structureSys, structureUser)
 			structureUser = s.providerUserPrompt(runCtx, structureUser, symbol, "provider_structure_in_position", llm.LLMStageStructure)
-			stPrompt = decision.LLMStagePrompt{System: structureSys, User: structureUser}
+			stPrompt = decision.LLMStagePrompt{System: structureSys, User: structureUser, PromptVersion: s.Prompts.ProviderInPosStructureVer}
 			if out, ok := loadProviderStructureInPositionCache(s.Cache, symbol, "provider_structure_in_position", cacheInput); ok {
 				stOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageStructure, structureUser, func(callCtx context.Context, _ string, user string) (provider.InPositionStructureOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider_in_position", llm.LLMStageStructure, s.Prompts.ProviderInPosStructureVer, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageStructure, structureUser, func(callCtx context.Context, _ string, user string) (provider.InPositionStructureOut, error) {
 				return s.Runner.JudgeStructureInPosition(callCtx, structureSys, user)
 			})
 			stPrompt.User = finalUser
+			applyStageCallStats(&stPrompt, collector)
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "structure_in_position"), zap.Error(stageErr))
 				stPrompt.Error = stageErr.Error()
@@ -240,15 +255,18 @@ func (s LLMProviderService) JudgeInPosition(ctx context.Context, symbol string, 
 			mechanicsSys, mechanicsUser := applyMemoryPromptContext(runCtx, s.Prompts.UserFormat, prompts.MechanicsSys, mechanicsInput)
 			cacheInput := promptCacheInput(mechanicsSys, mechanicsUser)
 			mechanicsUser = s.providerUserPrompt(runCtx, mechanicsUser, symbol, "provider_mechanics_in_position", llm.LLMStageMechanics)
-			mechPrompt = decision.LLMStagePrompt{System: mechanicsSys, User: mechanicsUser}
+			mechPrompt = decision.LLMStagePrompt{System: mechanicsSys, User: mechanicsUser, PromptVersion: s.Prompts.ProviderInPosMechanicsVer}
 			if out, ok := loadProviderMechanicsInPositionCache(s.Cache, symbol, "provider_mechanics_in_position", cacheInput); ok {
 				mechOut = out
 				return nil
 			}
-			stageOut, finalUser, stageErr := runProviderWithLaneSession(runCtx, s, symbol, llm.LLMStageMechanics, mechanicsUser, func(callCtx context.Context, _ string, user string) (provider.InPositionMechanicsOut, error) {
+			var collector stageCallCollector
+			callCtx := withPromptCallContext(runCtx, symbol, "provider_in_position", llm.LLMStageMechanics, s.Prompts.ProviderInPosMechanicsVer, &collector)
+			stageOut, finalUser, stageErr := runProviderWithLaneSession(callCtx, s, symbol, llm.LLMStageMechanics, mechanicsUser, func(callCtx context.Context, _ string, user string) (provider.InPositionMechanicsOut, error) {
 				return s.Runner.JudgeMechanicsInPosition(callCtx, mechanicsSys, user)
 			})
 			mechPrompt.User = finalUser
+			applyStageCallStats(&mechPrompt, collector)
 			if stageErr != nil {
 				logger.Error("provider judge failed", zap.String("stage", "mechanics_in_position"), zap.Error(stageErr))
 				mechPrompt.Error = stageErr.Error()
