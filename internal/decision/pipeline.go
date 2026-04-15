@@ -81,6 +81,7 @@ func (p *Pipeline) notifyError(ctx context.Context, err error) {
 		return
 	}
 	notice := ErrorNotice{
+		Severity:  "error",
 		Component: "decision",
 		Message:   formatErrorNotification(ctx, err),
 	}

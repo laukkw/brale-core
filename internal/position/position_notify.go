@@ -100,7 +100,7 @@ func (s *PositionService) logCloseSubmitError(ctx context.Context, pos store.Pos
 		zap.Error(err),
 	)
 	if s.Notifier != nil {
-		if notifyErr := s.Notifier.SendError(ctx, ErrorNotice{Component: "execution", Symbol: pos.Symbol, Message: err.Error()}); notifyErr != nil {
+		if notifyErr := s.Notifier.SendError(ctx, ErrorNotice{Severity: "error", Component: "execution", Symbol: pos.Symbol, Message: err.Error()}); notifyErr != nil {
 			logger.Error("notify error failed", zap.Error(notifyErr))
 		}
 	}

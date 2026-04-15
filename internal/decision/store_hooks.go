@@ -267,7 +267,7 @@ func (h StoreHooks) SaveGate(ctx context.Context, snap snapshot.MarketSnapshot, 
 	if err := h.notifyGate(ctx, rec); err != nil {
 		logger.Error("gate notify failed", zap.Error(err))
 		if h.Notifier != nil {
-			if notifyErr := h.Notifier.SendError(ctx, ErrorNotice{Component: "decision", Message: err.Error()}); notifyErr != nil {
+			if notifyErr := h.Notifier.SendError(ctx, ErrorNotice{Severity: "error", Component: "decision", Message: err.Error()}); notifyErr != nil {
 				logger.Error("notify error failed", zap.Error(notifyErr))
 			}
 		}
