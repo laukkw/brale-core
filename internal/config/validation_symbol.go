@@ -43,6 +43,9 @@ func ValidateSymbolConfig(cfg SymbolConfig) error {
 	if err := validateIndicatorConfig(cfg.Indicators); err != nil {
 		return err
 	}
+	if err := validateMemoryConfig(cfg.Memory); err != nil {
+		return err
+	}
 	if err := validateConsensusConfig(cfg.Consensus); err != nil {
 		return err
 	}
@@ -60,8 +63,22 @@ func ValidateSymbolConfig(cfg SymbolConfig) error {
 }
 
 func validateIndicatorConfig(cfg IndicatorConfig) error {
+	if err := ValidateIndicatorEngine(cfg.Engine); err != nil {
+		return validationErrorf("indicators.engine %s", err.Error())
+	}
+	if shadow := NormalizeOptionalIndicatorEngine(cfg.ShadowEngine); shadow != "" {
+		if err := ValidateIndicatorEngine(shadow); err != nil {
+			return validationErrorf("indicators.shadow_engine %s", err.Error())
+		}
+		if shadow == NormalizeIndicatorEngine(cfg.Engine) {
+			return validationErrorf("indicators.shadow_engine must differ from indicators.engine")
+		}
+	}
 	if cfg.EMAFast <= 0 || cfg.EMAMid <= 0 || cfg.EMASlow <= 0 {
 		return validationErrorf("indicators.ema_fast/ema_mid/ema_slow must be > 0")
+	}
+	if !(cfg.EMAFast < cfg.EMAMid && cfg.EMAMid < cfg.EMASlow) {
+		return validationErrorf("indicators must satisfy ema_fast < ema_mid < ema_slow")
 	}
 	if cfg.RSIPeriod <= 0 {
 		return validationErrorf("indicators.rsi_period must be > 0")
@@ -72,8 +89,11 @@ func validateIndicatorConfig(cfg IndicatorConfig) error {
 	if !cfg.SkipSTC && (cfg.STCFast <= 0 || cfg.STCSlow <= 0) {
 		return validationErrorf("indicators.stc_fast/stc_slow must be > 0 when STC is enabled")
 	}
-	if cfg.BBPeriod <= 0 {
-		return validationErrorf("indicators.bb_period must be > 0")
+	if !cfg.SkipSTC && cfg.STCFast >= cfg.STCSlow {
+		return validationErrorf("indicators.stc_fast must be < stc_slow")
+	}
+	if cfg.BBPeriod <= 1 {
+		return validationErrorf("indicators.bb_period must be > 1")
 	}
 	if cfg.BBMultiplier <= 0 {
 		return validationErrorf("indicators.bb_multiplier must be > 0")
@@ -99,6 +119,13 @@ func validateCooldownConfig(cfg CooldownConfig) error {
 	}
 	if cfg.EntryCooldownSec <= 0 {
 		return validationErrorf("cooldown.entry_cooldown_sec must be > 0")
+	}
+	return nil
+}
+
+func validateMemoryConfig(cfg MemoryConfig) error {
+	if cfg.WorkingMemorySize < 0 || cfg.WorkingMemorySize > MaxWorkingMemorySize {
+		return validationErrorf("memory.working_memory_size must be in [1,5]")
 	}
 	return nil
 }

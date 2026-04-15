@@ -28,6 +28,8 @@ func NormalizeSymbolConfig(cfg *SymbolConfig) {
 		return
 	}
 	cfg.Symbol = NormalizeSymbol(cfg.Symbol)
+	cfg.Indicators.Engine = NormalizeIndicatorEngine(cfg.Indicators.Engine)
+	cfg.Indicators.ShadowEngine = NormalizeOptionalIndicatorEngine(cfg.Indicators.ShadowEngine)
 }
 
 func NormalizeStrategyConfig(cfg *StrategyConfig) {

@@ -349,6 +349,82 @@ func TestValidateSymbolConfigRejectsNonCanonicalSymbol(t *testing.T) {
 	}
 }
 
+func TestValidateSymbolConfigRejectsUnorderedEMAPeriods(t *testing.T) {
+	temp := 0.1
+	cfg := SymbolConfig{
+		Symbol:     "BTCUSDT",
+		Intervals:  []string{"1h"},
+		KlineLimit: 300,
+		Agent:      AgentConfig{Indicator: boolPtr(true), Structure: boolPtr(true), Mechanics: boolPtr(true)},
+		Indicators: IndicatorConfig{
+			EMAFast:        21,
+			EMAMid:         21,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        23,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
+		},
+		Consensus: ConsensusConfig{ScoreThreshold: 0.3, ConfidenceThreshold: 0.6},
+		LLM: SymbolLLMConfig{
+			Agent:    LLMRoleSet{Indicator: LLMRoleConfig{Model: "a", Temperature: &temp}, Structure: LLMRoleConfig{Model: "b", Temperature: &temp}, Mechanics: LLMRoleConfig{Model: "c", Temperature: &temp}},
+			Provider: LLMRoleSet{Indicator: LLMRoleConfig{Model: "a", Temperature: &temp}, Structure: LLMRoleConfig{Model: "b", Temperature: &temp}, Mechanics: LLMRoleConfig{Model: "c", Temperature: &temp}},
+		},
+	}
+
+	err := ValidateSymbolConfig(cfg)
+	if err == nil {
+		t.Fatal("ValidateSymbolConfig() error = nil, want EMA ordering error")
+	}
+	if !strings.Contains(err.Error(), "ema_fast < ema_mid < ema_slow") {
+		t.Fatalf("error=%q should mention EMA ordering", err.Error())
+	}
+}
+
+func TestValidateSymbolConfigRejectsUnorderedSTCPeriods(t *testing.T) {
+	temp := 0.1
+	cfg := SymbolConfig{
+		Symbol:     "BTCUSDT",
+		Intervals:  []string{"1h"},
+		KlineLimit: 300,
+		Agent:      AgentConfig{Indicator: boolPtr(true), Structure: boolPtr(true), Mechanics: boolPtr(true)},
+		Indicators: IndicatorConfig{
+			EMAFast:        21,
+			EMAMid:         50,
+			EMASlow:        200,
+			RSIPeriod:      14,
+			ATRPeriod:      14,
+			STCFast:        50,
+			STCSlow:        50,
+			BBPeriod:       20,
+			BBMultiplier:   2.0,
+			CHOPPeriod:     14,
+			StochRSIPeriod: 14,
+			AroonPeriod:    25,
+			LastN:          5,
+		},
+		Consensus: ConsensusConfig{ScoreThreshold: 0.3, ConfidenceThreshold: 0.6},
+		LLM: SymbolLLMConfig{
+			Agent:    LLMRoleSet{Indicator: LLMRoleConfig{Model: "a", Temperature: &temp}, Structure: LLMRoleConfig{Model: "b", Temperature: &temp}, Mechanics: LLMRoleConfig{Model: "c", Temperature: &temp}},
+			Provider: LLMRoleSet{Indicator: LLMRoleConfig{Model: "a", Temperature: &temp}, Structure: LLMRoleConfig{Model: "b", Temperature: &temp}, Mechanics: LLMRoleConfig{Model: "c", Temperature: &temp}},
+		},
+	}
+
+	err := ValidateSymbolConfig(cfg)
+	if err == nil {
+		t.Fatal("ValidateSymbolConfig() error = nil, want STC ordering error")
+	}
+	if !strings.Contains(err.Error(), "stc_fast must be < stc_slow") {
+		t.Fatalf("error=%q should mention STC ordering", err.Error())
+	}
+}
+
 func TestValidateSymbolLLMModelsMatchesCaseInsensitiveSystemKeys(t *testing.T) {
 	temp := 0.1
 	sys := SystemConfig{

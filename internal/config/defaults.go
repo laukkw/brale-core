@@ -24,6 +24,7 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 			Liquidations: false,
 		},
 		Indicators: IndicatorConfig{
+			Engine:         IndicatorEngineTalib,
 			EMAFast:        21,
 			EMAMid:         50,
 			EMASlow:        200,
@@ -37,6 +38,10 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 			StochRSIPeriod: 14,
 			AroonPeriod:    25,
 			LastN:          5,
+		},
+		Memory: MemoryConfig{
+			Enabled:           false,
+			WorkingMemorySize: DefaultWorkingMemorySize,
 		},
 		Consensus: ConsensusConfig{
 			ScoreThreshold:      0.35,
@@ -81,10 +86,14 @@ func ApplyDecisionDefaults(cfg *SymbolConfig, defaults SymbolConfig) {
 		cfg.Consensus.ConfidenceThreshold = defaults.Consensus.ConfidenceThreshold
 	}
 	applyIndicatorDefaults(&cfg.Indicators, defaults.Indicators)
+	applyMemoryDefaults(&cfg.Memory, defaults.Memory)
 	applyCooldownDefaults(&cfg.Cooldown, defaults.Cooldown)
 }
 
 func applyIndicatorDefaults(cfg *IndicatorConfig, defaults IndicatorConfig) {
+	if strings.TrimSpace(cfg.Engine) == "" {
+		cfg.Engine = defaults.Engine
+	}
 	if cfg.EMAFast == 0 {
 		cfg.EMAFast = defaults.EMAFast
 	}
@@ -129,6 +138,12 @@ func applyIndicatorDefaults(cfg *IndicatorConfig, defaults IndicatorConfig) {
 func applySystemDefaults(cfg *SystemConfig) {
 	if cfg == nil {
 		return
+	}
+}
+
+func applyMemoryDefaults(cfg *MemoryConfig, defaults MemoryConfig) {
+	if cfg.WorkingMemorySize == 0 {
+		cfg.WorkingMemorySize = defaults.WorkingMemorySize
 	}
 }
 
