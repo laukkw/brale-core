@@ -1,34 +1,61 @@
+# 日志格式：text / json
 log_format = "text"
+# 日志级别：debug / info / warn / error
 log_level = "info"
+# 日志输出路径（容器内路径）
 log_path = "./data/brale-core.log"
+# 执行系统类型（当前仅支持 freqtrade）
 execution_system = "freqtrade"
+# Freqtrade API 地址（Docker 容器间通信使用服务名）
 exec_endpoint = "http://freqtrade:8080/api/v1"
+# Freqtrade API 认证用户名（从 .env 注入）
 exec_api_key = "${EXEC_USERNAME}"
+# Freqtrade API 认证密码（从 .env 注入）
 exec_api_secret = "${EXEC_SECRET}"
+# 认证方式：basic / bearer
 exec_auth = "basic"
+# 定时决策总开关
 enable_scheduled_decision = true
 
-llm_min_interval = "20s"
+# LLM 调用最小间隔（防止高频调用超限）
+llm_min_interval = "5s"
 
+# 数据库配置 — PostgreSQL / TimescaleDB
 [database]
+# 连接字符串（Docker 环境由 DATABASE_DSN 环境变量覆盖）
 dsn = "${DATABASE_DSN}"
+# 最大打开连接数
 max_open_conns = 20
+# 最大空闲连接数
 max_idle_conns = 5
 
+# 可观测性配置 — OpenTelemetry
 [telemetry]
+# 总开关（false 时所有 trace/metric 为 no-op）
 enabled = false
+# 导出协议：otlp
 exporter = "otlp"
+# OTLP Collector 地址
 endpoint = "localhost:4317"
+# 服务名称标识
 service_name = "brale-core"
 
+# 调度后端配置
 [scheduler]
+# 调度引擎：builtin（进程内 Ticker）/ river（PostgreSQL 异步作业）
 backend = "river"
 
+# LLM 模型配置 — 每个 Agent 车道独立配置端点、密钥和并发
 [llm_models.'${LLM_MODEL_INDICATOR}']
+# OpenAI 兼容 API 端点
 endpoint = "${LLM_INDICATOR_ENDPOINT}"
+# API 密钥（从 .env 注入）
 api_key = "${LLM_INDICATOR_API_KEY}"
+# 是否启用结构化输出（JSON Schema 约束）
 structured_output = true
+# 单次请求超时（秒）
 timeout_sec = 300
+# 该模型的最大并发请求数
 concurrency = 1
 
 [llm_models.'${LLM_MODEL_STRUCTURE}']
@@ -45,23 +72,35 @@ structured_output = true
 timeout_sec = 300
 concurrency = 1
 
+# Webhook 与运行时 API 配置
 [webhook]
+# 总开关
 enabled = true
+# 监听地址（:9991 = 0.0.0.0:9991）
 addr = ":9991"
+# 事件队列大小
 queue_size = 1024
+# 消费 worker 数量
 worker_count = 4
+# 兜底订单轮询间隔（秒）— 当 webhook 回调缺失时触发
 fallback_order_poll_sec = 120
+# 兜底对账间隔（秒）
 fallback_reconcile_sec = 300
 
+# 通知配置
 [notification]
+# 通知总开关
 enabled = ${NOTIFICATION_ENABLED}
+# 启动通知开关
 startup_notify_enabled = ${NOTIFICATION_STARTUP_NOTIFY_ENABLED}
 
+# Telegram 通知渠道
 [notification.telegram]
 enabled = ${NOTIFICATION_TELEGRAM_ENABLED}
 token = "${NOTIFICATION_TELEGRAM_TOKEN}"
 chat_id = ${NOTIFICATION_TELEGRAM_CHAT_ID}
 
+# 飞书通知渠道
 [notification.feishu]
 enabled = ${NOTIFICATION_FEISHU_ENABLED}
 app_id = "${NOTIFICATION_FEISHU_APP_ID}"

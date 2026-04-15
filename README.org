@@ -39,7 +39,7 @@ Brale 是一个量化交易引擎，通过多个大语言模型智能体（LLM A
 - *经验驱动的记忆系统* — 三层记忆系统（工作记忆 Working、情景记忆 Episodic、语义记忆 Semantic）将近期上下文、历史交易复盘和长期规则注入 LLM 提示词。
 - *影子指标引擎（Shadow Indicator Engine）* — 内置参考计算引擎与 go-talib 交叉校验，确保指标数据可信。差异检测通过 ~bralectl indicator diff~ 执行。
 - *Gate Replay 回测* — 将历史决策通过当前规则集重放，零 LLM 调用开销，用于快速验证规则调优效果。
-- *全自动调度* — 决策周期、监控和对账均由内置定时器驱动，无需外部 cron。
+- *全自动调度* — 决策周期、监控和对账由内置调度层统一驱动；默认后端为 River，无需外部 cron。
 - *可插拔执行层* — 当前对接 Freqtrade；接口已解耦，可替换其他执行后端。
 
 ** 快速开始
@@ -74,6 +74,7 @@ make start ENABLE_MCP=1 ENABLE_ONBOARDING=0
 | =make setup= | 运行本地 setup 向导（=.env= + 可选 MCP 安装） |
 | =make status= | 容器健康检查 |
 | =make logs= | 跟踪服务日志 |
+| =make migrate-up= / =make migrate-down= | 执行 / 回滚数据库 migration；无本地 Go 时自动回退到 Docker |
 | =make mcp-start= | 单独启动 MCP SSE 服务 |
 | =make stop= / =make down= | 停止 / 移除容器 |
 | =make rebuild= | 重新构建 Brale；若 =ENABLE_MCP=1= 同时重建 =mcp-sse= |
@@ -224,8 +225,8 @@ six stages:
   ensuring indicator data integrity. Run ~bralectl indicator diff~ for diff checks.
 - *Gate Replay backtesting* — replay historical decisions through the current rule set with zero
   LLM calls, enabling rapid rule-tuning validation.
-- *Fully automated scheduling* — decision cycles, monitoring, and reconciliation run on built-in
-  timers. No external cron required.
+- *Fully automated scheduling* — decision cycles, monitoring, and reconciliation run through the
+  built-in scheduler layer (River by default). No external cron required.
 - *Swappable execution* — currently wired to Freqtrade; the interface is decoupled.
 
 ** Quick Start
@@ -258,6 +259,7 @@ make start ENABLE_MCP=1 ENABLE_ONBOARDING=0
 | =make setup= | Run the local setup wizard (=.env= + optional MCP install) |
 | =make status= | Container health check |
 | =make logs= | Tail service logs |
+| =make migrate-up= / =make migrate-down= | Run / roll back DB migrations; falls back to Docker when local Go is unavailable |
 | =make mcp-start= | Start only the MCP SSE service |
 | =make stop= / =make down= | Stop / remove containers |
 | =make rebuild= | Rebuild Brale; also rebuild =mcp-sse= when =ENABLE_MCP=1= |

@@ -52,7 +52,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - type: bind
-        source: ${BRALE_DATA_ROOT:-./data/brale}/pgdata
+        source: ${PGDATA_ROOT:-./data/pgdata}
         target: /var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brale}"]
@@ -105,8 +105,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: brale-runtime
-      extra_hosts:
-        - "host.docker.internal:host-gateway"
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}

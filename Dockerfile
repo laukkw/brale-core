@@ -18,7 +18,7 @@ COPY --from=node-runtime /usr/local/ /usr/local/
 RUN npm ci --prefix /src/webui/og-card-demo
 RUN CGO_ENABLED=0 go build -o /out/bralectl ./cmd/bralectl
 RUN CGO_ENABLED=0 go build -o /out/onboarding ./cmd/onboarding
-RUN go build -o /out/brale-core ./cmd/brale-core
+RUN CGO_ENABLED=0 go build -o /out/brale-core ./cmd/brale-core
 
 FROM debian:bookworm-slim AS brale-runtime
 

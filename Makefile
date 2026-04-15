@@ -9,6 +9,7 @@ SETUP_ARGS ?=
 
 BRALE_CONFIG_ROOT ?= $(CURDIR)/configs
 BRALE_DATA_ROOT ?= $(CURDIR)/data/brale
+PGDATA_ROOT ?= $(CURDIR)/data/pgdata
 FREQTRADE_CONFIG_ROOT ?= $(CURDIR)/configs/freqtrade
 FREQTRADE_RUNTIME_ROOT ?= $(CURDIR)/data/freqtrade/user_data
 FREQTRADE_CONFIG_FILE ?= $(FREQTRADE_RUNTIME_ROOT)/config.json
@@ -28,7 +29,7 @@ OPTIONAL_STACK_SERVICES := $(if $(filter 1,$(ENABLE_MCP_NORM)),mcp-sse,) $(if $(
 REBUILD_SERVICES := brale $(if $(filter 1,$(ENABLE_MCP_NORM)),mcp-sse,)
 
 COMPOSE = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" docker compose -f "$(COMPOSE_FILE)"
-STACK_ENV = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" HOST_REPO_ROOT="$(HOST_REPO_ROOT)" BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
+STACK_ENV = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" HOST_REPO_ROOT="$(HOST_REPO_ROOT)" BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" PGDATA_ROOT="$(PGDATA_ROOT)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
 ONBOARDING_PREPARE = $(STACK_ENV) $(COMPOSE) run --rm --no-deps onboarding prepare-stack
 
 .PHONY: help env-init setup init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs bralectl-build bralectl-builder-image add-symbol llm-probe migrate-up migrate-down
@@ -158,6 +159,7 @@ check:
 
 prepare:
 	@mkdir -p "$(BRALE_DATA_ROOT)" \
+		"$(PGDATA_ROOT)" \
 		"$(FREQTRADE_RUNTIME_ROOT)" \
 		"$(FREQTRADE_RUNTIME_ROOT)/backtest_results" \
 		"$(FREQTRADE_RUNTIME_ROOT)/data" \
@@ -172,6 +174,11 @@ prepare:
 		"$(dir $(STACK_PROXY_ENV_FILE))"
 	@$(ONBOARDING_PREPARE) --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml"
 	@cp -f "$(FREQTRADE_CONFIG_ROOT)/brale_shared_strategy.py" "$(FREQTRADE_RUNTIME_ROOT)/strategies/BraleSharedStrategy.py"
+	@if [ -d "$(BRALE_DATA_ROOT)/pgdata" ] && [ -z "$$(find "$(PGDATA_ROOT)" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then \
+		echo "[WARN] detected legacy PostgreSQL data at $(BRALE_DATA_ROOT)/pgdata"; \
+		echo "[WARN] new database data root is $(PGDATA_ROOT)"; \
+		echo "[WARN] copy or migrate existing DB files before restarting if you need current database contents"; \
+	fi
 	@if [ "$$(id -u)" = "0" ] && [ -n "$(HOST_UID)" ] && [ -n "$(HOST_GID)" ]; then \
 		chown -R "$(HOST_UID):$(HOST_GID)" "$(BRALE_DATA_ROOT)" "$(FREQTRADE_RUNTIME_ROOT)" "$(dir $(STACK_PROXY_ENV_FILE))"; \
 	fi
@@ -310,7 +317,19 @@ llm-probe:
 	fi
 
 migrate-up: ## Run database migrations
-	@go run ./cmd/brale-core -migrate-up
+	@if command -v go >/dev/null 2>&1; then \
+		go run ./cmd/brale-core -migrate-up; \
+	else \
+		echo "[INFO] go not found, running migrations in Docker"; \
+		$(STACK_ENV) $(COMPOSE) up -d timescaledb >/dev/null; \
+		$(STACK_ENV) $(COMPOSE) run --rm --no-deps brale -migrate-up; \
+	fi
 
 migrate-down: ## Roll back the last database migration
-	@go run ./cmd/brale-core -migrate-down
+	@if command -v go >/dev/null 2>&1; then \
+		go run ./cmd/brale-core -migrate-down; \
+	else \
+		echo "[INFO] go not found, rolling back migrations in Docker"; \
+		$(STACK_ENV) $(COMPOSE) up -d timescaledb >/dev/null; \
+		$(STACK_ENV) $(COMPOSE) run --rm --no-deps brale -migrate-down; \
+	fi
