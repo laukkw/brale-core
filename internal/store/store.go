@@ -1,10 +1,11 @@
+// Package store defines persistence interfaces and model types for brale-core.
+// The concrete PostgreSQL implementation lives in internal/pgstore.
+
 package store
 
 import (
 	"context"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type EventCommandStore interface {
@@ -63,6 +64,18 @@ type SemanticMemoryStore interface {
 	FindSemanticMemory(ctx context.Context, id uint) (SemanticMemoryRecord, bool, error)
 }
 
+type LLMRoundStore interface {
+	SaveLLMRound(ctx context.Context, rec *LLMRoundRecord) error
+	FindLLMRound(ctx context.Context, id string) (LLMRoundRecord, bool, error)
+	ListLLMRounds(ctx context.Context, symbol string, limit int) ([]LLMRoundRecord, error)
+}
+
+type PromptRegistryStore interface {
+	SavePromptEntry(ctx context.Context, rec *PromptRegistryEntry) error
+	FindActivePrompt(ctx context.Context, role, stage string) (PromptRegistryEntry, bool, error)
+	ListPromptEntries(ctx context.Context, role string, activeOnly bool) ([]PromptRegistryEntry, error)
+}
+
 type Store interface {
 	EventCommandStore
 	PositionCommandStore
@@ -72,22 +85,6 @@ type Store interface {
 	SymbolCatalogQueryStore
 	EpisodicMemoryStore
 	SemanticMemoryStore
-}
-
-type GormStore struct {
-	db *gorm.DB
-}
-
-var _ EventCommandStore = (*GormStore)(nil)
-var _ PositionCommandStore = (*GormStore)(nil)
-var _ PositionQueryStore = (*GormStore)(nil)
-var _ RiskPlanQueryStore = (*GormStore)(nil)
-var _ TimelineQueryStore = (*GormStore)(nil)
-var _ SymbolCatalogQueryStore = (*GormStore)(nil)
-var _ EpisodicMemoryStore = (*GormStore)(nil)
-var _ SemanticMemoryStore = (*GormStore)(nil)
-var _ Store = (*GormStore)(nil)
-
-func NewStore(db *gorm.DB) *GormStore {
-	return &GormStore{db: db}
+	LLMRoundStore
+	PromptRegistryStore
 }

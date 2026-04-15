@@ -332,4 +332,5 @@ func setPreviewEnv(t *testing.T, req Request) {
 	t.Setenv("NOTIFICATION_FEISHU_ENCRYPT_KEY", "")
 	t.Setenv("NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE", "chat_id")
 	t.Setenv("NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID", "")
+	t.Setenv("DATABASE_DSN", "postgres://brale:brale@localhost:5432/brale?sslmode=disable")
 }

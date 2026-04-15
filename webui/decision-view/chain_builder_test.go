@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"brale-core/internal/store"
-
-	"gorm.io/datatypes"
 )
 
 func TestBuildChainAddsLLMRiskNodeForEntryLLMPlan(t *testing.T) {
@@ -25,7 +23,7 @@ func TestBuildChainAddsLLMRiskNodeForEntryLLMPlan(t *testing.T) {
 				GlobalTradeable:  true,
 				DecisionAction:   "ALLOW",
 				GateReason:       "ALLOW",
-				ProviderRefsJSON: datatypes.JSON([]byte("{}")),
+				ProviderRefsJSON: json.RawMessage([]byte("{}")),
 				DerivedJSON: mustJSON(t, map[string]any{"plan": map[string]any{
 					"plan_source": "llm",
 					"llm_trace": map[string]any{
@@ -74,7 +72,7 @@ func TestBuildChainSkipsLLMRiskNodeWithoutActualLLMTrace(t *testing.T) {
 				Timestamp:        int64(snapshotID),
 				DecisionAction:   "TIGHTEN",
 				GateReason:       "CRITICAL_TIGHTEN_ATTEMPT",
-				ProviderRefsJSON: datatypes.JSON([]byte("{}")),
+				ProviderRefsJSON: json.RawMessage([]byte("{}")),
 				DerivedJSON: mustJSON(t, map[string]any{
 					"execution": map[string]any{
 						"action":      "tighten",
@@ -106,7 +104,7 @@ func TestBuildChainSkipsLLMRiskNodeWhenGateBlocked(t *testing.T) {
 				GlobalTradeable:  false,
 				DecisionAction:   "BLOCK",
 				GateReason:       "MECHANICS_BLOCKED",
-				ProviderRefsJSON: datatypes.JSON([]byte("{}")),
+				ProviderRefsJSON: json.RawMessage([]byte("{}")),
 				DerivedJSON: mustJSON(t, map[string]any{"plan": map[string]any{
 					"plan_source": "llm",
 					"llm_trace": map[string]any{
@@ -140,11 +138,11 @@ func findRoundNode(chain SymbolChain, snapshotID uint, stage string) (Node, bool
 	return Node{}, false
 }
 
-func mustJSON(t *testing.T, value any) datatypes.JSON {
+func mustJSON(t *testing.T, value any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatalf("marshal json: %v", err)
 	}
-	return datatypes.JSON(raw)
+	return json.RawMessage(raw)
 }

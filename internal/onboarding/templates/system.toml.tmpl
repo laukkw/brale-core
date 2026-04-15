@@ -1,14 +1,18 @@
 log_format = "text"
 log_level = "info"
 log_path = "./data/brale-core.log"
-db_path = "./data/brale-core.db"
-persist_mode = "minimal"
 execution_system = "freqtrade"
 exec_endpoint = "{{ .ExecEndpoint }}"
 exec_api_key = "${EXEC_USERNAME}"
 exec_api_secret = "${EXEC_SECRET}"
 exec_auth = "basic"
 enable_scheduled_decision = true
+
+[database]
+dsn = "${DATABASE_DSN}"
+
+[telemetry]
+enabled = false
 
 llm_min_interval = "20s"
 

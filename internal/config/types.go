@@ -6,8 +6,7 @@ type SystemConfig struct {
 	LogFormat               string                    `mapstructure:"log_format"`
 	LogLevel                string                    `mapstructure:"log_level"`
 	LogPath                 string                    `mapstructure:"log_path"`
-	DBPath                  string                    `mapstructure:"db_path"`
-	PersistMode             string                    `mapstructure:"persist_mode"`
+	Database                DatabaseConfig            `mapstructure:"database"`
 	ExecutionSystem         string                    `mapstructure:"execution_system"`
 	ExecEndpoint            string                    `mapstructure:"exec_endpoint"`
 	ExecAPIKey              string                    `mapstructure:"exec_api_key"`
@@ -18,7 +17,21 @@ type SystemConfig struct {
 	LLMModels               map[string]LLMModelConfig `mapstructure:"llm_models"`
 	Webhook                 WebhookConfig             `mapstructure:"webhook"`
 	Notification            NotificationConfig        `mapstructure:"notification"`
+	Telemetry               TelemetryConfig           `mapstructure:"telemetry"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
+}
+
+type DatabaseConfig struct {
+	DSN          string `mapstructure:"dsn"`
+	MaxOpenConns int    `mapstructure:"max_open_conns"`
+	MaxIdleConns int    `mapstructure:"max_idle_conns"`
+}
+
+type TelemetryConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	ExporterType string `mapstructure:"exporter"`
+	Endpoint     string `mapstructure:"endpoint"`
+	ServiceName  string `mapstructure:"service_name"`
 }
 
 type SystemLLMConfig struct {

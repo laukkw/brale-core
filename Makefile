@@ -31,7 +31,7 @@ COMPOSE = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" COMPOSE_PROJECT_NAME="$(
 STACK_ENV = HOST_UID="$(HOST_UID)" HOST_GID="$(HOST_GID)" HOST_REPO_ROOT="$(HOST_REPO_ROOT)" BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)" BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)" FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)" FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)" FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)" STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)"
 ONBOARDING_PREPARE = $(STACK_ENV) $(COMPOSE) run --rm --no-deps onboarding prepare-stack
 
-.PHONY: help env-init setup init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs bralectl-build bralectl-builder-image add-symbol llm-probe
+.PHONY: help env-init setup init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs bralectl-build bralectl-builder-image add-symbol llm-probe migrate-up migrate-down
 
 help: ## Show the main make targets and optional component switches
 	@printf '%-22s %s\n' "env-init" "Create .env from .env.example if missing"; \
@@ -308,3 +308,9 @@ llm-probe:
 		echo "[ERR] go command not found"; \
 		exit 1; \
 	fi
+
+migrate-up: ## Run database migrations
+	@go run ./cmd/brale-core -migrate-up
+
+migrate-down: ## Roll back the last database migration
+	@go run ./cmd/brale-core -migrate-down

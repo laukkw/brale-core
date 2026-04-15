@@ -1,7 +1,6 @@
 package config
 
 import (
-	"path/filepath"
 	"strings"
 )
 
@@ -10,11 +9,7 @@ func ResolveLogPath(sys SystemConfig) string {
 	if logPath != "" {
 		return logPath
 	}
-	dir := filepath.Dir(sys.DBPath)
-	if dir == "." || dir == "" {
-		return "brale-core.log"
-	}
-	return filepath.Join(dir, "brale-core.log")
+	return "brale-core.log"
 }
 
 func SymbolsFromIndex(index SymbolIndexConfig) []string {

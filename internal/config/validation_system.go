@@ -6,11 +6,8 @@ import (
 )
 
 func ValidateSystemConfig(cfg SystemConfig) error {
-	if err := validatePersistMode(cfg.PersistMode); err != nil {
-		return err
-	}
-	if strings.TrimSpace(cfg.DBPath) == "" {
-		return validationErrorf("db_path is required")
+	if strings.TrimSpace(cfg.Database.DSN) == "" {
+		return validationErrorf("database.dsn is required")
 	}
 	if strings.TrimSpace(cfg.ExecutionSystem) == "" {
 		return validationErrorf("execution_system is required")
@@ -53,15 +50,6 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 		return err
 	}
 	return nil
-}
-
-func validatePersistMode(mode string) error {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "", "minimal", "full", "live", "backtest":
-		return nil
-	default:
-		return validationErrorf("persist_mode must be one of minimal/full/live/backtest")
-	}
 }
 
 func validateNotificationConfig(cfg NotificationConfig) error {

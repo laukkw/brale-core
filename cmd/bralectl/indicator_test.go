@@ -10,7 +10,7 @@ import (
 )
 
 func TestIndicatorDiffCommandWritesJSON(t *testing.T) {
-	_, indexPath, _ := writeBacktestConfigTree(t)
+	_, indexPath := writeBacktestConfigTree(t)
 	prev := newIndicatorDiffFetcher
 	newIndicatorDiffFetcher = func() *snapshot.Fetcher {
 		return &snapshot.Fetcher{
@@ -50,7 +50,7 @@ func TestIndicatorDiffCommandWritesJSON(t *testing.T) {
 }
 
 func TestIndicatorDiffCommandRejectsUnknownEngine(t *testing.T) {
-	_, indexPath, _ := writeBacktestConfigTree(t)
+	_, indexPath := writeBacktestConfigTree(t)
 	_, errOut, err := executeRootCommand(
 		t,
 		"indicator", "diff",

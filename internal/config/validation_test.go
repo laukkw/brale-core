@@ -204,10 +204,11 @@ func TestRequiredKlineLimitIncludesNewIndicatorWarmups(t *testing.T) {
 
 func TestValidateWebhookFallbackDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "system.toml")
-	data := []byte(`db_path = ":memory:"
-persist_mode = "minimal"
-execution_system = "freqtrade"
+	data := []byte(`execution_system = "freqtrade"
 exec_endpoint = "http://127.0.0.1:8080/api/v1"
+
+[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"
 
 [webhook]
 enabled = true
@@ -232,40 +233,6 @@ addr = ":9991"
 	}
 	if cfg.Webhook.FallbackReconcileSec != 300 {
 		t.Fatalf("fallback_reconcile_sec=%d, want 300", cfg.Webhook.FallbackReconcileSec)
-	}
-}
-
-func TestLoadSystemConfigNormalizesPersistModeAliases(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "live alias maps to minimal", input: "live", want: "minimal"},
-		{name: "backtest alias maps to full", input: "backtest", want: "full"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "system.toml")
-			data := []byte(strings.Join([]string{
-				`db_path = ":memory:"`,
-				`persist_mode = "` + tt.input + `"`,
-				`execution_system = "freqtrade"`,
-				`exec_endpoint = "http://127.0.0.1:8080/api/v1"`,
-			}, "\n"))
-			if err := os.WriteFile(path, data, 0o600); err != nil {
-				t.Fatalf("write system.toml: %v", err)
-			}
-
-			cfg, err := LoadSystemConfig(path)
-			if err != nil {
-				t.Fatalf("load config: %v", err)
-			}
-			if cfg.PersistMode != tt.want {
-				t.Fatalf("persist_mode=%q want %q", cfg.PersistMode, tt.want)
-			}
-		})
 	}
 }
 
@@ -452,10 +419,12 @@ func TestValidateSymbolLLMModelsMatchesCaseInsensitiveSystemKeys(t *testing.T) {
 func TestLoadSystemConfigParsesStructuredOutputFlag(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "system.toml")
 	data := []byte(strings.Join([]string{
-		`db_path = ":memory:"`,
-		`persist_mode = "minimal"`,
 		`execution_system = "freqtrade"`,
 		`exec_endpoint = "http://127.0.0.1:8080/api/v1"`,
+		``,
+		`[database]`,
+		`dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"`,
+		``,
 		`[llm_models."gpt-4o"]`,
 		`endpoint = "https://api.openai.com/v1"`,
 		`api_key = "secret"`,

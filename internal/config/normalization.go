@@ -10,7 +10,6 @@ func NormalizeSystemConfig(cfg *SystemConfig) {
 	if cfg == nil {
 		return
 	}
-	cfg.PersistMode = normalizePersistMode(cfg.PersistMode)
 	cfg.Notification.Feishu.BotMode = NormalizeFeishuBotMode(cfg.Notification.Feishu.BotMode)
 }
 
@@ -41,18 +40,6 @@ func NormalizeStrategyConfig(cfg *StrategyConfig) {
 
 func NormalizeSymbol(raw string) string {
 	return symbol.Normalize(raw)
-}
-
-func normalizePersistMode(raw string) string {
-	mode := strings.ToLower(strings.TrimSpace(raw))
-	switch mode {
-	case "", "minimal", "live":
-		return "minimal"
-	case "full", "backtest":
-		return "full"
-	default:
-		return mode
-	}
 }
 
 func NormalizeFeishuBotMode(value string) string {

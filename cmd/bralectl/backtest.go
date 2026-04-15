@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,8 +14,8 @@ import (
 	"brale-core/internal/config"
 	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/decision/direction"
+	"brale-core/internal/pgstore"
 	runtimecfg "brale-core/internal/runtime"
-	"brale-core/internal/store"
 
 	"github.com/spf13/cobra"
 )
@@ -33,7 +34,7 @@ func backtestRulesCmd() *cobra.Command {
 		symbol     string
 		fromRaw    string
 		toRaw      string
-		dbPath     string
+		dsn        string
 		systemPath string
 		indexPath  string
 		format     string
@@ -43,7 +44,7 @@ func backtestRulesCmd() *cobra.Command {
 		Use:   "rules",
 		Short: "重放历史 Gate 决策并输出回测报告",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			runner, timeRange, err := buildRuleReplay(systemPath, indexPath, dbPath, symbol, fromRaw, toRaw)
+			runner, timeRange, err := buildRuleReplay(cmd.Context(), systemPath, indexPath, dsn, symbol, fromRaw, toRaw)
 			if err != nil {
 				return err
 			}
@@ -57,7 +58,7 @@ func backtestRulesCmd() *cobra.Command {
 	cmd.Flags().StringVar(&symbol, "symbol", "", "交易对，例如 BTCUSDT")
 	cmd.Flags().StringVar(&fromRaw, "from", "", "开始日期，支持 YYYY-MM-DD 或 RFC3339")
 	cmd.Flags().StringVar(&toRaw, "to", "", "结束日期，支持 YYYY-MM-DD 或 RFC3339")
-	cmd.Flags().StringVar(&dbPath, "db", "", "SQLite 数据库路径（留空时从 system.toml 读取）")
+	cmd.Flags().StringVar(&dsn, "db", "", "数据库 DSN（留空时从 system.toml 读取）")
 	cmd.Flags().StringVar(&systemPath, "system", "configs/system.toml", "system.toml 路径")
 	cmd.Flags().StringVar(&indexPath, "index", "configs/symbols-index.toml", "symbols-index.toml 路径")
 	cmd.Flags().StringVar(&format, "format", "text", "输出格式：text|html|json")
@@ -68,7 +69,7 @@ func backtestRulesCmd() *cobra.Command {
 	return cmd
 }
 
-func buildRuleReplay(systemPath, indexPath, dbPath, symbol, fromRaw, toRaw string) (backtest.RuleReplay, backtest.TimeRange, error) {
+func buildRuleReplay(ctx context.Context, systemPath, indexPath, dsn, symbol, fromRaw, toRaw string) (backtest.RuleReplay, backtest.TimeRange, error) {
 	systemPath = filepath.Clean(systemPath)
 	indexPath = filepath.Clean(indexPath)
 	symbol = decisionutil.NormalizeSymbol(symbol)
@@ -127,15 +128,18 @@ func buildRuleReplay(systemPath, indexPath, dbPath, symbol, fromRaw, toRaw strin
 	if !found {
 		return backtest.RuleReplay{}, backtest.TimeRange{}, fmt.Errorf("symbol %s not found in %s", symbol, indexPath)
 	}
-	resolvedDBPath, err := resolveReplayDBPath(systemPath, dbPath, sys.DBPath)
-	if err != nil {
-		return backtest.RuleReplay{}, backtest.TimeRange{}, err
+	resolvedDSN := strings.TrimSpace(dsn)
+	if resolvedDSN == "" {
+		resolvedDSN = strings.TrimSpace(sys.Database.DSN)
 	}
-	db, err := store.OpenSQLite(resolvedDBPath)
-	if err != nil {
-		return backtest.RuleReplay{}, backtest.TimeRange{}, fmt.Errorf("open sqlite: %w", err)
+	if resolvedDSN == "" {
+		return backtest.RuleReplay{}, backtest.TimeRange{}, fmt.Errorf("database DSN is empty")
 	}
-	runner.Store = store.NewStore(db)
+	pool, err := pgstore.OpenPool(ctx, resolvedDSN)
+	if err != nil {
+		return backtest.RuleReplay{}, backtest.TimeRange{}, fmt.Errorf("open database: %w", err)
+	}
+	runner.Store = pgstore.New(pool, nil)
 	return runner, backtest.TimeRange{
 		StartUnix: fromTime.UTC().Unix(),
 		EndUnix:   toTime.UTC().Unix(),
@@ -159,29 +163,6 @@ func parseReplayTime(raw string, endOfDay bool) (time.Time, error) {
 		return parsed.UTC(), nil
 	}
 	return time.Time{}, fmt.Errorf("unsupported time format %q", raw)
-}
-
-func resolveReplayDBPath(systemPath, override, configured string) (string, error) {
-	if trimmed := strings.TrimSpace(override); trimmed != "" {
-		return filepath.Clean(trimmed), nil
-	}
-	configured = strings.TrimSpace(configured)
-	if configured == "" {
-		return "", fmt.Errorf("db path is empty")
-	}
-	if filepath.IsAbs(configured) {
-		return filepath.Clean(configured), nil
-	}
-	candidates := []string{
-		filepath.Clean(configured),
-		filepath.Join(filepath.Dir(systemPath), configured),
-	}
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		}
-	}
-	return filepath.Clean(configured), nil
 }
 
 func writeReplayOutput(stdout io.Writer, result *backtest.ReplayResult, format, outputPath string) error {

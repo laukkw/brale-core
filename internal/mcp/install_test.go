@@ -19,7 +19,7 @@ func TestInstallMergesMCPConfig(t *testing.T) {
 	indexPath := filepath.Join(dir, "symbols-index.toml")
 	auditPath := filepath.Join(dir, "audit.jsonl")
 	commandPath := filepath.Join(dir, "bralectl")
-	if err := os.WriteFile(systemPath, []byte("db_path = \"db.sqlite\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
 		t.Fatalf("write system: %v", err)
 	}
 	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {
@@ -101,7 +101,7 @@ func TestInstallWritesClaudeCodeConfigToClaudeJSONAndRemovesLegacyFile(t *testin
 	indexPath := filepath.Join(home, "symbols-index.toml")
 	auditPath := filepath.Join(home, "audit.jsonl")
 	commandPath := filepath.Join(home, "bralectl")
-	if err := os.WriteFile(systemPath, []byte("db_path = \"db.sqlite\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
 		t.Fatalf("write system: %v", err)
 	}
 	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {
@@ -175,7 +175,7 @@ func TestInstallRejectsMissingCommand(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.toml")
 	indexPath := filepath.Join(dir, "symbols-index.toml")
-	if err := os.WriteFile(systemPath, []byte("db_path = \"db.sqlite\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
 		t.Fatalf("write system: %v", err)
 	}
 	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {
@@ -257,7 +257,7 @@ func TestInstallWritesCodexConfigTOML(t *testing.T) {
 	indexPath := filepath.Join(dir, "symbols-index.toml")
 	auditPath := filepath.Join(dir, "audit.jsonl")
 	commandPath := filepath.Join(dir, "bralectl")
-	if err := os.WriteFile(systemPath, []byte("db_path = \"db.sqlite\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
 		t.Fatalf("write system: %v", err)
 	}
 	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {
@@ -343,7 +343,7 @@ func TestInstallRejectsUnsupportedTargetEvenWithExplicitConfigPath(t *testing.T)
 	indexPath := filepath.Join(dir, "symbols-index.toml")
 	commandPath := filepath.Join(dir, "bralectl")
 	configPath := filepath.Join(dir, "mcp.json")
-	if err := os.WriteFile(systemPath, []byte("db_path = \"db.sqlite\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
 		t.Fatalf("write system: %v", err)
 	}
 	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {

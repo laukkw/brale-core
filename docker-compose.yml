@@ -40,6 +40,27 @@ services:
       retries: 12
       start_period: 10s
 
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-brale}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brale}
+      POSTGRES_DB: ${POSTGRES_DB:-brale}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - type: bind
+        source: ${BRALE_DATA_ROOT:-./data/brale}/pgdata
+        target: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brale}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   freqtrade:
     build:
       context: .
@@ -98,6 +119,7 @@ services:
         required: false
     environment:
       TZ: Asia/Shanghai
+      DATABASE_DSN: "postgres://${POSTGRES_USER:-brale}:${POSTGRES_PASSWORD:-brale}@timescaledb:5432/${POSTGRES_DB:-brale}?sslmode=disable"
     command:
       - "-system"
       - "/app/configs/system.toml"
@@ -105,6 +127,8 @@ services:
       - "/app/configs/symbols-index.toml"
     depends_on:
       freqtrade:
+        condition: service_healthy
+      timescaledb:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"

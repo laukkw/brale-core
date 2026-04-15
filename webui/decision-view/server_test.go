@@ -9,8 +9,6 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/store"
-
-	"gorm.io/datatypes"
 )
 
 type fakeStore struct {
@@ -121,7 +119,7 @@ func TestServerHandlerDecisionViewAPIs(t *testing.T) {
 				PositionID: "pos-btc-1",
 				Symbol:     "BTCUSDT",
 				Status:     "open",
-				RiskJSON:   datatypes.JSON([]byte(`{"tp":[1,2],"sl":0.5}`)),
+				RiskJSON:   json.RawMessage([]byte(`{"tp":[1,2],"sl":0.5}`)),
 			},
 		},
 		providers: map[string][]store.ProviderEventRecord{
@@ -134,7 +132,7 @@ func TestServerHandlerDecisionViewAPIs(t *testing.T) {
 					Role:          "indicator",
 					SystemPrompt:  "sys",
 					UserPrompt:    "user",
-					OutputJSON:    datatypes.JSON([]byte(`{"ok":true}`)),
+					OutputJSON:    json.RawMessage([]byte(`{"ok":true}`)),
 					Fingerprint:   "fp-prov",
 					SourceVersion: "v1",
 				},
@@ -146,7 +144,7 @@ func TestServerHandlerDecisionViewAPIs(t *testing.T) {
 					Role:          "mechanics_in_position",
 					SystemPrompt:  "risk-sys",
 					UserPrompt:    "risk-user",
-					OutputJSON:    datatypes.JSON([]byte(`{"tp":1.8,"sl":0.6}`)),
+					OutputJSON:    json.RawMessage([]byte(`{"tp":1.8,"sl":0.6}`)),
 					Fingerprint:   "fp-risk",
 					SourceVersion: "v1",
 				},
@@ -162,7 +160,7 @@ func TestServerHandlerDecisionViewAPIs(t *testing.T) {
 					Stage:         "indicator",
 					SystemPrompt:  "sys-a",
 					UserPrompt:    "user-a",
-					OutputJSON:    datatypes.JSON([]byte(`{"score":0.8}`)),
+					OutputJSON:    json.RawMessage([]byte(`{"score":0.8}`)),
 					Fingerprint:   "fp-agent",
 					SourceVersion: "v1",
 				},
@@ -180,8 +178,8 @@ func TestServerHandlerDecisionViewAPIs(t *testing.T) {
 					Grade:            2,
 					GateReason:       "ok",
 					Direction:        "long",
-					ProviderRefsJSON: datatypes.JSON([]byte(`{}`)),
-					DerivedJSON:      datatypes.JSON([]byte(`{"plan":{"plan_source":"llm","llm_trace":{"stage":"risk_flat_init","system_prompt":"risk-system","user_prompt":"risk-user","raw_output":"{\"stop_loss\":0.6}","parsed_output":{"stop_loss":0.6}}}}`)),
+					ProviderRefsJSON: json.RawMessage([]byte(`{}`)),
+					DerivedJSON:      json.RawMessage([]byte(`{"plan":{"plan_source":"llm","llm_trace":{"stage":"risk_flat_init","system_prompt":"risk-system","user_prompt":"risk-user","raw_output":"{\"stop_loss\":0.6}","parsed_output":{"stop_loss":0.6}}}}`)),
 					Fingerprint:      "fp-gate",
 					SourceVersion:    "v1",
 				},

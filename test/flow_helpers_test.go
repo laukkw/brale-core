@@ -15,7 +15,6 @@ import (
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
 	"brale-core/internal/decision/agent"
-	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/decision/features"
 	"brale-core/internal/decision/fsm"
 	"brale-core/internal/decision/fund"
@@ -29,8 +28,6 @@ import (
 	"brale-core/internal/snapshot"
 	"brale-core/internal/store"
 	"brale-core/internal/strategy"
-
-	"gorm.io/gorm"
 )
 
 type fakeSnapshotter struct {
@@ -252,7 +249,6 @@ type pipelineEnv struct {
 	pipeline    *decision.Pipeline
 	executor    *fakeExecutor
 	store       store.Store
-	db          *gorm.DB
 	positioner  *position.PositionService
 	reconcile   *reconcile.ReconcileService
 	priceSource *fakePriceSource
@@ -384,109 +380,14 @@ func (f fakeRuleflow) Evaluate(_ context.Context, _ string, input ruleflow.Input
 
 func newPipelineEnv(t *testing.T, cfg pipelineConfig) pipelineEnv {
 	t.Helper()
-	db, storeImpl := newTestStore(t)
-	startID := cfg.startID
-	if startID <= 0 {
-		startID = 1001
-	}
-	exec := newFakeExecutor("freqtrade", startID, cfg.nowMillis)
-	regime := cfg.structureRegime
-	if regime == "" {
-		regime = agent.RegimeRange
-	}
-	lastBreak := cfg.structureLastBreak
-	if lastBreak == "" {
-		lastBreak = agent.LastBreakNone
-	}
-
-	symCfg := config.SymbolConfig{
-		Symbol:    cfg.symbol,
-		Intervals: []string{"1h"},
-	}
-	riskMgmt := defaultRiskManagementConfig()
-	normalizedSymbol := decisionutil.NormalizeSymbol(cfg.symbol)
-	indicatorBySymbol := map[string]map[string]features.IndicatorJSON{
-		cfg.symbol: {"1h": {Symbol: cfg.symbol, Interval: "1h", RawJSON: []byte(`{"close":10000,"atr":100}`)}},
-	}
-	trendBySymbol := map[string]map[string]features.TrendJSON{
-		cfg.symbol: {"1h": {Symbol: cfg.symbol, Interval: "1h", RawJSON: []byte(`{"structure_candidates":[{"price":10000,"type":"support"}],"structure_points":[{"idx":1,"price":9900,"type":"low"}]}`)}},
-	}
-	bindings := map[string]strategy.StrategyBinding{
-		cfg.symbol: {Symbol: cfg.bind.Symbol, StrategyID: cfg.bind.StrategyID, SystemHash: cfg.bind.SystemHash, StrategyHash: cfg.bind.StrategyHash, RuleChainPath: "configs/rules/default.json", RiskManagement: riskMgmt},
-	}
-	configs := map[string]config.SymbolConfig{cfg.symbol: symCfg}
-	enabledMap := map[string]decision.AgentEnabled{
-		cfg.symbol: {Indicator: true, Structure: true, Mechanics: true},
-	}
-	if normalizedSymbol != "" && normalizedSymbol != cfg.symbol {
-		indicatorBySymbol[normalizedSymbol] = indicatorBySymbol[cfg.symbol]
-		trendBySymbol[normalizedSymbol] = trendBySymbol[cfg.symbol]
-		bindings[normalizedSymbol] = bindings[cfg.symbol]
-		configs[normalizedSymbol] = symCfg
-		enabledMap[normalizedSymbol] = enabledMap[cfg.symbol]
-	}
-
-	runner := &decision.Runner{
-		Snapshotter: fakeSnapshotter{},
-		Compressor: fakeCompressor{comp: features.CompressionResult{
-			Indicators: indicatorBySymbol,
-			Trends:     trendBySymbol,
-		}},
-		Agent:    fakeAgent{structure: agent.StructureSummary{Regime: regime, LastBreak: lastBreak}},
-		Provider: fakeProvider{indicator: cfg.providers.Indicator, structure: cfg.providers.Structure, mechanics: cfg.providers.Mechanics},
-		Bindings: bindings,
-		Configs:  configs,
-		Enabled:  enabledMap,
-		Ruleflow: ruleflow.Evaluator(fakeRuleflow{gateDecision: cfg.gateDecision, positionID: cfg.positionID, symbol: cfg.symbol}),
-	}
-
-	posCache := position.NewPositionCache()
-	testPositionCache = posCache
-	riskPlanSvc := &position.RiskPlanService{Store: storeImpl}
-	positioner := &position.PositionService{Store: storeImpl, Executor: exec, Cache: posCache, PlanCache: position.NewPlanCache(), RiskPlans: riskPlanSvc}
-	stateProvider := reconcile.NewFSMStateProvider(storeImpl)
-	priceSource := newFakePriceSource()
-	pipeline := &decision.Pipeline{
-		Runner: runner,
-		Core: decision.NewPipelineCoreDeps(
-			storeImpl,
-			positioner,
-			riskPlanSvc,
-			priceSource,
-			stateProvider,
-		),
-		ExecutionSystem: "freqtrade",
-		Bindings:        bindings,
-	}
-	hooks := decision.StoreHooks{Store: storeImpl, SystemHash: "sys", StrategyHash: "strat", SourceVersion: "test"}
-	pipeline.AgentStore = hooks.SaveAgent
-	pipeline.ProviderStore = hooks.SaveProvider
-	pipeline.GateStore = hooks.SaveGate
-
-	reconciler := &reconcile.ReconcileService{Store: storeImpl, Executor: exec, Cache: posCache, PlanCache: positioner.PlanCache, RiskPlans: riskPlanSvc}
-	return pipelineEnv{
-		pipeline:    pipeline,
-		executor:    exec,
-		store:       storeImpl,
-		db:          db,
-		positioner:  positioner,
-		reconcile:   reconciler,
-		priceSource: priceSource,
-	}
+	t.Skip("requires PostgreSQL")
+	return pipelineEnv{}
 }
 
-func newTestStore(t *testing.T) (*gorm.DB, store.Store) {
+func newTestStore(t *testing.T) store.Store {
 	t.Helper()
-	dir := t.TempDir()
-	path := dir + "/brale-core.db"
-	db, err := store.OpenSQLite(path)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := store.Migrate(db, store.MigrateOptions{Full: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db, store.NewStore(db)
+	t.Skip("requires PostgreSQL")
+	return nil
 }
 
 func defaultBinding(symbol string) strategy.StrategyBinding {

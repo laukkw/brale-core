@@ -139,6 +139,18 @@ func applySystemDefaults(cfg *SystemConfig) {
 	if cfg == nil {
 		return
 	}
+	if cfg.Database.MaxOpenConns == 0 {
+		cfg.Database.MaxOpenConns = 20
+	}
+	if cfg.Database.MaxIdleConns == 0 {
+		cfg.Database.MaxIdleConns = 5
+	}
+	if cfg.Telemetry.ServiceName == "" {
+		cfg.Telemetry.ServiceName = "brale-core"
+	}
+	if cfg.Telemetry.ExporterType == "" {
+		cfg.Telemetry.ExporterType = "otlp"
+	}
 }
 
 func applyMemoryDefaults(cfg *MemoryConfig, defaults MemoryConfig) {

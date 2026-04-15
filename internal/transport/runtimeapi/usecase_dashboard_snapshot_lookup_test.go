@@ -2,11 +2,10 @@ package runtimeapi
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"brale-core/internal/store"
-
-	"gorm.io/datatypes"
 )
 
 type stubDashboardSnapshotStore struct {
@@ -107,7 +106,7 @@ func TestBuildDecisionDetailUsesDirectGateLookup(t *testing.T) {
 			Symbol:          "BTCUSDT",
 			DecisionAction:  "ALLOW",
 			GlobalTradeable: true,
-			DerivedJSON:     datatypes.JSON([]byte(`{"direction_consensus":{"score":1}}`)),
+			DerivedJSON:     json.RawMessage([]byte(`{"direction_consensus":{"score":1}}`)),
 		},
 	}
 	detail, useErr := buildDecisionDetail(context.Background(), st, nil, "BTCUSDT", 9001)

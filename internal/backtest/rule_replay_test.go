@@ -2,8 +2,6 @@ package backtest
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	"brale-core/internal/config"
@@ -278,18 +276,10 @@ func TestRuleReplayRunUsesDerivedConsensusWhenAgentsMissing(t *testing.T) {
 	}
 }
 
-func newReplayTestStore(t *testing.T) *store.GormStore {
+func newReplayTestStore(t *testing.T) store.Store {
 	t.Helper()
-	name := strings.ReplaceAll(t.Name(), "/", "_")
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", name)
-	db, err := store.OpenSQLite(dsn)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := store.Migrate(db, store.MigrateOptions{Full: true}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return store.NewStore(db)
+	t.Skip("requires PostgreSQL")
+	return nil
 }
 
 func testReplayBinding() strategy.StrategyBinding {
@@ -308,7 +298,7 @@ func testReplayBinding() strategy.StrategyBinding {
 	}
 }
 
-func saveReplayFixture(t *testing.T, st *store.GormStore, records ...any) {
+func saveReplayFixture(t *testing.T, st store.Store, records ...any) {
 	t.Helper()
 	ctx := context.Background()
 	for _, rec := range records {

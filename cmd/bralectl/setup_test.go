@@ -18,7 +18,8 @@ func TestSetupCommandInitializesEnvAndInstallsMCP(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(commandPath), 0o755); err != nil {
 		t.Fatalf("mkdir command dir: %v", err)
 	}
-	writeSetupFile(t, systemPath, `db_path = "data/brale.db"`)
+	writeSetupFile(t, systemPath, `[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"`)
 	writeSetupFile(t, indexPath, `
 [[symbols]]
 symbol = "BTCUSDT"
@@ -77,7 +78,8 @@ func TestSetupCommandRejectsCustomTargetWithoutConfigPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(commandPath), 0o755); err != nil {
 		t.Fatalf("mkdir command dir: %v", err)
 	}
-	writeSetupFile(t, systemPath, `db_path = "data/brale.db"`)
+	writeSetupFile(t, systemPath, `[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"`)
 	writeSetupFile(t, indexPath, `
 [[symbols]]
 symbol = "BTCUSDT"

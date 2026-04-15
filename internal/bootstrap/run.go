@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"brale-core/internal/config"
+	"brale-core/internal/jobs"
+	braleOtel "brale-core/internal/otel"
 	"brale-core/internal/runtime"
 	"brale-core/internal/transport"
 	"brale-core/internal/transport/notify"
@@ -42,11 +44,53 @@ func Run(baseCtx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	deps, err := buildCoreDeps(env)
+	deps, err := buildCoreDeps(env.ctx, env.logger, env)
 	if err != nil {
 		return err
 	}
+	if deps.closeDB != nil {
+		defer deps.closeDB()
+	}
+
+	otelShutdown, otelErr := braleOtel.Init(env.ctx, env.sys.Telemetry, env.logger)
+	if otelErr != nil {
+		env.logger.Error("otel init failed, continuing without telemetry", zap.Error(otelErr))
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelShutdown(shutdownCtx); err != nil {
+				env.logger.Error("otel shutdown error", zap.Error(err))
+			}
+		}()
+	}
+
 	runScheduledWarmup(env.ctx, env.logger, deps)
+
+	// Initialize River job client for async job processing.
+	if migrateErr := jobs.RunMigrations(env.ctx, deps.persistence.pool); migrateErr != nil {
+		env.logger.Error("river migration failed", zap.Error(migrateErr))
+	}
+	// Register workers with no-op executors for now; pipeline tasks still
+	// run via the existing RuntimeScheduler.  River will process
+	// notify render/deliver jobs once the notification pipeline is wired.
+	noopExec := func(_ context.Context, _ string) error { return nil }
+	riverWorkers := jobs.RegisterWorkers(noopExec, noopExec, noopExec, nil, nil)
+	periodicJobs := jobs.BuildPeriodicJobs(nil, 0, 0, 0)
+	riverClient, err := jobs.NewClient(env.ctx, deps.persistence.pool, riverWorkers, periodicJobs, env.logger)
+	if err != nil {
+		env.logger.Error("river client init failed", zap.Error(err))
+	} else {
+		if startErr := riverClient.Start(env.ctx); startErr != nil {
+			env.logger.Error("river client start failed", zap.Error(startErr))
+		} else {
+			defer func() {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_ = riverClient.Stop(stopCtx)
+			}()
+		}
+	}
 
 	viewerHandler := decisionview.StartDecisionViewer(env.logger, env.sys, symbolIndexPath, env.index, deps.persistence.store)
 	dashboardHandler := dashboard.Start()

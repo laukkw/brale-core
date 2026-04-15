@@ -8,16 +8,19 @@ import (
 	"brale-core/internal/config"
 	"brale-core/internal/execution"
 	"brale-core/internal/market/binance"
+	"brale-core/internal/pgstore"
 	"brale-core/internal/position"
 	"brale-core/internal/reconcile"
 	"brale-core/internal/store"
 	"brale-core/internal/transport/notify"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
 type persistenceDeps struct {
 	store         store.Store
+	pool          *pgxpool.Pool
 	stateProvider *reconcile.FSMStateProvider
 }
 
@@ -74,10 +77,11 @@ type coreDeps struct {
 	execution   executionDeps
 	position    positionDeps
 	reconcile   reconcileDeps
+	closeDB     func()
 }
 
-func buildCoreDeps(env appEnv) (coreDeps, error) {
-	st, err := buildPersistence(env.sys)
+func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDeps, error) {
+	st, pool, closeDB, err := buildPersistence(ctx, env.sys, logger)
 	if err != nil {
 		return coreDeps{}, err
 	}
@@ -110,7 +114,7 @@ func buildCoreDeps(env appEnv) (coreDeps, error) {
 	riskMonitor := buildRiskMonitor(riskMonitorBuildDeps{store: st, priceSource: priceSource, positioner: positioner, accountFetcher: freqtradeAccount})
 
 	return coreDeps{
-		persistence: persistenceDeps{store: st, stateProvider: stateProvider},
+		persistence: persistenceDeps{store: st, pool: pool, stateProvider: stateProvider},
 		execution: executionDeps{
 			executor:      executor,
 			notifier:      env.notifier,
@@ -126,18 +130,25 @@ func buildCoreDeps(env appEnv) (coreDeps, error) {
 			riskMonitor:   riskMonitor,
 		},
 		reconcile: reconcileDeps{recovery: recovery, reconciler: reconciler},
+		closeDB:   closeDB,
 	}, nil
 }
 
-func buildPersistence(sys config.SystemConfig) (store.Store, error) {
-	db, err := store.OpenSQLite(sys.DBPath)
+func buildPersistence(ctx context.Context, sys config.SystemConfig, logger *zap.Logger) (store.Store, *pgxpool.Pool, func(), error) {
+	dsn := sys.Database.DSN
+	if dsn == "" {
+		return nil, nil, nil, fmt.Errorf("database.dsn is required in system config")
+	}
+	if err := pgstore.RunMigrations(dsn, logger); err != nil {
+		return nil, nil, nil, fmt.Errorf("run migrations: %w", err)
+	}
+	pool, err := pgstore.OpenPool(ctx, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open db %s: %w", sys.DBPath, err)
+		return nil, nil, nil, fmt.Errorf("open pg pool: %w", err)
 	}
-	if err := store.Migrate(db, store.MigrateOptions{Full: sys.PersistMode == "full"}); err != nil {
-		return nil, fmt.Errorf("migrate db: %w", err)
-	}
-	return store.NewStore(db), nil
+	st := pgstore.New(pool, logger)
+	closeFn := func() { st.Close() }
+	return st, pool, closeFn, nil
 }
 
 func buildExecutionAdapter(sys config.SystemConfig) *execution.FreqtradeAdapter {

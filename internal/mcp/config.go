@@ -35,8 +35,7 @@ type sanitizedSystemConfig struct {
 	LogFormat               string                       `json:"log_format,omitempty"`
 	LogLevel                string                       `json:"log_level,omitempty"`
 	LogPath                 string                       `json:"log_path,omitempty"`
-	DBPath                  string                       `json:"db_path,omitempty"`
-	PersistMode             string                       `json:"persist_mode,omitempty"`
+	Database                config.DatabaseConfig        `json:"database"`
 	ExecutionSystem         string                       `json:"execution_system,omitempty"`
 	ExecEndpoint            string                       `json:"exec_endpoint,omitempty"`
 	ExecAuth                string                       `json:"exec_auth,omitempty"`
@@ -193,8 +192,7 @@ func sanitizeSystemConfig(cfg config.SystemConfig) sanitizedSystemConfig {
 		LogFormat:               cfg.LogFormat,
 		LogLevel:                cfg.LogLevel,
 		LogPath:                 cfg.LogPath,
-		DBPath:                  cfg.DBPath,
-		PersistMode:             cfg.PersistMode,
+		Database:                cfg.Database,
 		ExecutionSystem:         cfg.ExecutionSystem,
 		ExecEndpoint:            cfg.ExecEndpoint,
 		ExecAuth:                cfg.ExecAuth,

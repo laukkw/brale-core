@@ -7,7 +7,6 @@ import (
 	"brale-core/internal/decision/agent"
 	"brale-core/internal/decision/provider"
 	"brale-core/internal/store"
-	"gorm.io/datatypes"
 )
 
 func TestBuildRoundsGroupsEventsAndInfersState(t *testing.T) {
@@ -161,11 +160,11 @@ func TestBuildRoundsGroupsEventsAndInfersState(t *testing.T) {
 	}
 }
 
-func mustJSON(t *testing.T, value any) datatypes.JSON {
+func mustJSON(t *testing.T, value any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatalf("marshal json: %v", err)
 	}
-	return datatypes.JSON(raw)
+	return json.RawMessage(raw)
 }

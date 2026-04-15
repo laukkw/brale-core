@@ -14,7 +14,8 @@ func TestMCPInstallCommandWritesConfig(t *testing.T) {
 	configPath := filepath.Join(dir, "mcp.json")
 	auditPath := filepath.Join(dir, "audit.jsonl")
 	commandPath := filepath.Join(dir, "bralectl")
-	writeTestFile(t, systemPath, `db_path = "data/brale.db"`)
+	writeTestFile(t, systemPath, `[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"`)
 	writeTestFile(t, indexPath, `
 [[symbols]]
 symbol = "BTCUSDT"

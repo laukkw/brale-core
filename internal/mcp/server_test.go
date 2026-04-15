@@ -748,13 +748,15 @@ func writeMCPConfigTree(t *testing.T) (string, string) {
 		t.Fatalf("mkdir strategies: %v", err)
 	}
 	writeTestFile(t, systemPath, `
-db_path = "`+filepath.Join(dir, "brale.db")+`"
 execution_system = "freqtrade"
 exec_endpoint = "http://localhost:8080"
 exec_api_key = "top-secret-key"
 exec_api_secret = "top-secret-secret"
 exec_auth = "token"
 log_level = "info"
+
+[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"
 
 [llm_models.mock]
 endpoint = "http://localhost:11434/v1"

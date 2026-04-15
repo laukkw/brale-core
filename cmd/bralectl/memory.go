@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
 	"brale-core/internal/memory"
-	"brale-core/internal/store"
+	"brale-core/internal/pgstore"
 
 	"github.com/spf13/cobra"
 )
@@ -25,21 +26,18 @@ func memoryCmd() *cobra.Command {
 	return cmd
 }
 
-var memoryDBPath string
+var memoryDBDSN string
 
-func memoryStoreFromFlags() (*store.GormStore, error) {
-	dbPath := memoryDBPath
-	if dbPath == "" {
-		dbPath = "data/brale/brale.db"
+func memoryStoreFromFlags() (*pgstore.PGStore, error) {
+	dsn := memoryDBDSN
+	if dsn == "" {
+		dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"
 	}
-	db, err := store.OpenSQLite(dbPath)
+	pool, err := pgstore.OpenPool(context.Background(), dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	if err := store.Migrate(db, store.MigrateOptions{Full: true}); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	return store.NewStore(db), nil
+	return pgstore.New(pool, nil), nil
 }
 
 func memoryListCmd() *cobra.Command {
@@ -78,7 +76,7 @@ func memoryListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&symbol, "symbol", "", "按交易对筛选")
 	cmd.Flags().StringVar(&source, "source", "", "按来源筛选 (user/reflector)")
 	cmd.Flags().BoolVar(&all, "all", false, "包含已禁用的规则")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 
@@ -110,7 +108,7 @@ func memoryAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&symbol, "symbol", "", "交易对（空=全局）")
 	cmd.Flags().StringVar(&rule, "rule", "", "规则文本")
 	cmd.Flags().Float64Var(&confidence, "confidence", 0.8, "置信度 0-1")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 
@@ -146,7 +144,7 @@ func memoryEditCmd() *cobra.Command {
 	cmd.Flags().UintVar(&id, "id", 0, "规则 ID")
 	cmd.Flags().StringVar(&rule, "rule", "", "新的规则文本")
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "新的置信度")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 
@@ -168,7 +166,7 @@ func memoryDeleteCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().UintVar(&id, "id", 0, "规则 ID")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 
@@ -190,7 +188,7 @@ func memoryToggleCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().UintVar(&id, "id", 0, "规则 ID")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 
@@ -232,7 +230,7 @@ func memoryEpisodicCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&symbol, "symbol", "", "交易对")
 	cmd.Flags().IntVar(&limit, "limit", 10, "返回条数")
-	cmd.Flags().StringVar(&memoryDBPath, "db", "", "数据库路径")
+	cmd.Flags().StringVar(&memoryDBDSN, "db", "", "数据库 DSN")
 	return cmd
 }
 

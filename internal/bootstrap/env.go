@@ -40,7 +40,7 @@ func bootstrapAppEnv(baseCtx context.Context, systemPath, symbolIndexPath string
 		zap.String("symbols_path", symbolIndexPath),
 	)
 	ctx := logging.WithLogger(baseCtx, logger)
-	logger.Info("config loaded", zap.String("log_path", logPath), zap.String("persist_mode", sys.PersistMode))
+	logger.Info("config loaded", zap.String("log_path", logPath), zap.Bool("database_configured", sys.Database.DSN != ""))
 	if err := configureLLMConcurrency(sys, logger); err != nil {
 		return appEnv{}, err
 	}

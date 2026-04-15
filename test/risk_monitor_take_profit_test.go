@@ -16,7 +16,7 @@ import (
 )
 
 func TestRiskMonitor_TakeProfitHit_VersionSync(t *testing.T) {
-	_, storeImpl := newTestStore(t)
+	storeImpl := newTestStore(t)
 	exec := newFakeExecutor("freqtrade", 1001, time.Now().UnixMilli())
 	priceSource := newFakePriceSource()
 	riskPlanSvc := &position.RiskPlanService{Store: storeImpl}

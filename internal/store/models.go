@@ -1,101 +1,118 @@
-// 本文件主要内容：定义 brale-core 持久化模型结构体。
+// Package store defines brale-core persistence model types and store interfaces.
+// Models are backend-agnostic; the concrete implementation lives in internal/pgstore.
 
 package store
 
 import (
+	"encoding/json"
 	"time"
-
-	"gorm.io/datatypes"
 )
 
 type AgentEventRecord struct {
-	ID                 uint           `gorm:"primaryKey"`
-	SnapshotID         uint           `gorm:"index:idx_agent_symbol_stage_time,priority:3"`
-	Symbol             string         `gorm:"index:idx_agent_symbol_stage_time,priority:1"`
-	Timestamp          int64          `gorm:"index:idx_agent_symbol_stage_time,priority:2,sort:desc"`
-	Stage              string         `gorm:"index:idx_agent_symbol_stage_time,priority:4"`
-	InputJSON          datatypes.JSON `gorm:"type:json"`
-	SystemPrompt       string         `gorm:"type:text"`
-	UserPrompt         string         `gorm:"type:text"`
-	OutputJSON         datatypes.JSON `gorm:"type:json"`
-	Fingerprint        string         `gorm:"index:idx_agent_fingerprint"`
-	SystemConfigHash   string         `gorm:"index:idx_agent_sys_strat,priority:1"`
-	StrategyConfigHash string         `gorm:"index:idx_agent_sys_strat,priority:2"`
-	SourceVersion      string         `gorm:"index:idx_agent_source_ver"`
+	ID                 uint
+	SnapshotID         uint
+	RoundID            string
+	Symbol             string
+	Timestamp          int64
+	Stage              string
+	InputJSON          json.RawMessage
+	SystemPrompt       string
+	UserPrompt         string
+	OutputJSON         json.RawMessage
+	RawOutput          string
+	Fingerprint        string
+	SystemConfigHash   string
+	StrategyConfigHash string
+	SourceVersion      string
+	Model              string
+	PromptVersion      string
+	LatencyMS          int
+	TokenIn            int
+	TokenOut           int
+	Error              string
 	CreatedAt          time.Time
 }
 
 type ProviderEventRecord struct {
-	ID                 uint `gorm:"primaryKey"`
+	ID                 uint
 	SnapshotID         uint
-	Symbol             string `gorm:"index:idx_prov_symbol_role_time,priority:1"`
-	Timestamp          int64  `gorm:"index:idx_prov_symbol_role_time,priority:2,sort:desc"`
+	RoundID            string
+	Symbol             string
+	Timestamp          int64
 	ProviderID         string
-	Role               string         `gorm:"index:idx_prov_symbol_role_time,priority:3"`
-	DataContextJSON    datatypes.JSON `gorm:"type:json"`
-	SystemPrompt       string         `gorm:"type:text"`
-	UserPrompt         string         `gorm:"type:text"`
-	OutputJSON         datatypes.JSON `gorm:"type:json"`
+	Role               string
+	DataContextJSON    json.RawMessage
+	SystemPrompt       string
+	UserPrompt         string
+	OutputJSON         json.RawMessage
+	RawOutput          string
 	Tradeable          bool
-	Fingerprint        string `gorm:"index:idx_prov_fingerprint"`
-	SystemConfigHash   string `gorm:"index:idx_prov_sys_strat,priority:1"`
-	StrategyConfigHash string `gorm:"index:idx_prov_sys_strat,priority:2"`
-	SourceVersion      string `gorm:"index:idx_prov_source_ver"`
+	Fingerprint        string
+	SystemConfigHash   string
+	StrategyConfigHash string
+	SourceVersion      string
+	Model              string
+	PromptVersion      string
+	LatencyMS          int
+	TokenIn            int
+	TokenOut           int
+	Error              string
 	CreatedAt          time.Time
 }
 
 type GateEventRecord struct {
-	ID                 uint `gorm:"primaryKey"`
+	ID                 uint
 	SnapshotID         uint
-	Symbol             string `gorm:"index:idx_gate_symbol_time,priority:1"`
-	Timestamp          int64  `gorm:"index:idx_gate_symbol_time,priority:2,sort:desc"`
+	RoundID            string
+	Symbol             string
+	Timestamp          int64
 	GlobalTradeable    bool
 	DecisionAction     string
 	Grade              int
 	GateReason         string
 	Direction          string
-	ProviderRefsJSON   datatypes.JSON `gorm:"type:json"`
-	RuleHitJSON        datatypes.JSON `gorm:"type:json"`
-	DerivedJSON        datatypes.JSON `gorm:"type:json"`
-	Fingerprint        string         `gorm:"index:idx_gate_fingerprint"`
-	SystemConfigHash   string         `gorm:"index:idx_gate_sys_strat,priority:1"`
-	StrategyConfigHash string         `gorm:"index:idx_gate_sys_strat,priority:2"`
-	SourceVersion      string         `gorm:"index:idx_gate_source_ver"`
+	ProviderRefsJSON   json.RawMessage
+	RuleHitJSON        json.RawMessage
+	DerivedJSON        json.RawMessage
+	Fingerprint        string
+	SystemConfigHash   string
+	StrategyConfigHash string
+	SourceVersion      string
 	CreatedAt          time.Time
 }
 
 type RiskPlanHistoryRecord struct {
-	ID          uint   `gorm:"primaryKey"`
-	PositionID  string `gorm:"index:idx_risk_plan_position,priority:1"`
-	Version     int    `gorm:"index:idx_risk_plan_position,priority:2"`
+	ID          uint
+	PositionID  string
+	Version     int
 	Source      string
-	PayloadJSON datatypes.JSON `gorm:"type:json"`
+	PayloadJSON json.RawMessage
 	CreatedAt   time.Time
 }
 
 type PositionRecord struct {
-	ID                 uint   `gorm:"primaryKey"`
-	PositionID         string `gorm:"uniqueIndex:idx_position_id"`
-	Symbol             string `gorm:"index:idx_position_symbol_status,priority:1"`
+	ID                 uint
+	PositionID         string
+	Symbol             string
 	Side               string
 	InitialStake       float64
 	Qty                float64
 	AvgEntry           float64
 	RiskPct            float64
 	Leverage           float64
-	Status             string `gorm:"index:idx_position_symbol_status,priority:2"`
-	OpenIntentID       string `gorm:"index:idx_position_open_intent"`
-	CloseIntentID      string `gorm:"index:idx_position_close_intent"`
+	Status             string
+	OpenIntentID       string
+	CloseIntentID      string
 	AbortReason        string
 	Source             string
 	StopReason         string
 	AbortStartedAt     int64
 	AbortFinalizedAt   int64
 	CloseSubmittedAt   int64
-	PeakUnrealizedR    float64        `gorm:"-"`
-	RiskJSON           datatypes.JSON `gorm:"type:json"`
-	LastPrice          float64        `gorm:"-"`
-	LastPriceTimestamp int64          `gorm:"-"`
+	PeakUnrealizedR    float64 // runtime-only, not persisted
+	RiskJSON           json.RawMessage
+	LastPrice          float64 // runtime-only, not persisted
+	LastPriceTimestamp int64   // runtime-only, not persisted
 	ExecutorName       string
 	ExecutorPositionID string
 	Version            int
@@ -104,27 +121,61 @@ type PositionRecord struct {
 }
 
 type EpisodicMemoryRecord struct {
-	ID            uint      `gorm:"primaryKey"`
-	Symbol        string    `gorm:"index:idx_episodic_symbol_time,priority:1"`
-	PositionID    string    `gorm:"uniqueIndex:idx_episodic_position"`
+	ID            uint
+	Symbol        string
+	PositionID    string
 	Direction     string
 	EntryPrice    string
 	ExitPrice     string
 	PnLPercent    string
 	Duration      string
-	Reflection    string    `gorm:"type:text"`
-	KeyLessons    string    `gorm:"type:text"`
-	MarketContext string    `gorm:"type:text"`
-	CreatedAt     time.Time `gorm:"index:idx_episodic_symbol_time,priority:2,sort:desc"`
+	Reflection    string
+	KeyLessons    string
+	MarketContext string
+	CreatedAt     time.Time
 }
 
 type SemanticMemoryRecord struct {
-	ID         uint      `gorm:"primaryKey"`
-	Symbol     string    `gorm:"index:idx_semantic_symbol"`
-	RuleText   string    `gorm:"type:text"`
+	ID         uint
+	Symbol     string
+	RuleText   string
 	Source     string
 	Confidence float64
-	Active     bool      `gorm:"default:true"`
+	Active     bool
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// LLMRoundRecord tracks one complete decision round (all agent + provider + gate calls).
+type LLMRoundRecord struct {
+	ID             string
+	SnapshotID     uint
+	Symbol         string
+	RoundType      string // "observe" | "decide" | "risk"
+	StartedAt      time.Time
+	FinishedAt     time.Time
+	TotalLatencyMS int
+	TotalTokenIn   int
+	TotalTokenOut  int
+	CallCount      int
+	Outcome        string
+	PromptVersion  string
+	Error          string
+	AgentCount     int
+	ProviderCount  int
+	GateAction     string
+	CreatedAt      time.Time
+}
+
+// PromptRegistryEntry stores a versioned system prompt for a specific role+stage.
+type PromptRegistryEntry struct {
+	ID           uint
+	Role         string
+	Stage        string
+	Version      string
+	SystemPrompt string
+	Description  string
+	Active       bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

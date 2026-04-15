@@ -19,7 +19,6 @@ import (
 	"brale-core/internal/store"
 
 	"go.uber.org/zap"
-	"gorm.io/datatypes"
 )
 
 type StoreHooks struct {
@@ -73,10 +72,10 @@ func (h StoreHooks) saveAgentStage(ctx context.Context, snapID uint, sym, stage 
 		Symbol:             sym,
 		Timestamp:          ts,
 		Stage:              stage,
-		InputJSON:          datatypes.JSON(cloneJSONBytes(inputRaw)),
+		InputJSON:          json.RawMessage(cloneJSONBytes(inputRaw)),
 		SystemPrompt:       prompt.System,
 		UserPrompt:         prompt.User,
-		OutputJSON:         datatypes.JSON(raw),
+		OutputJSON:         json.RawMessage(raw),
 		Fingerprint:        fmt.Sprintf("%x", sum[:]),
 		SystemConfigHash:   h.SystemHash,
 		StrategyConfigHash: h.StrategyHash,
@@ -145,10 +144,10 @@ func (h StoreHooks) saveProviderStage(ctx context.Context, snapID uint, sym, rol
 		Symbol:             sym,
 		Timestamp:          ts,
 		Role:               role,
-		DataContextJSON:    datatypes.JSON(dataCtxRaw),
+		DataContextJSON:    json.RawMessage(dataCtxRaw),
 		SystemPrompt:       prompt.System,
 		UserPrompt:         prompt.User,
-		OutputJSON:         datatypes.JSON(raw),
+		OutputJSON:         json.RawMessage(raw),
 		Tradeable:          tradeable,
 		Fingerprint:        fmt.Sprintf("%x", sum[:]),
 		SystemConfigHash:   h.SystemHash,
@@ -217,9 +216,9 @@ func (h StoreHooks) SaveGate(ctx context.Context, snap snapshot.MarketSnapshot, 
 		Grade:              gate.Grade,
 		GateReason:         gate.GateReason,
 		Direction:          gate.Direction,
-		ProviderRefsJSON:   datatypes.JSON(refJSON),
-		RuleHitJSON:        datatypes.JSON(ruleJSON),
-		DerivedJSON:        datatypes.JSON(derivedJSON),
+		ProviderRefsJSON:   json.RawMessage(refJSON),
+		RuleHitJSON:        json.RawMessage(ruleJSON),
+		DerivedJSON:        json.RawMessage(derivedJSON),
 		Fingerprint:        fmt.Sprintf("%x", sha256.Sum256(refJSON)),
 		SystemConfigHash:   h.SystemHash,
 		StrategyConfigHash: h.StrategyHash,

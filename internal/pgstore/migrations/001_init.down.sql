@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS prompt_registry;
+DROP TABLE IF EXISTS llm_rounds;
+DROP TABLE IF EXISTS semantic_memories;
+DROP TABLE IF EXISTS episodic_memories;
+DROP TABLE IF EXISTS positions;
+DROP TABLE IF EXISTS risk_plan_history;
+DROP TABLE IF EXISTS gate_events;
+DROP TABLE IF EXISTS provider_events;
+DROP TABLE IF EXISTS agent_events;

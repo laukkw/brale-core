@@ -236,5 +236,25 @@ func (s *stubStore) FindSemanticMemory(ctx context.Context, id uint) (store.Sema
 	return store.SemanticMemoryRecord{}, false, nil
 }
 
+// LLMRoundStore
+func (s *stubStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) error { return nil }
+func (s *stubStore) FindLLMRound(ctx context.Context, id string) (store.LLMRoundRecord, bool, error) {
+	return store.LLMRoundRecord{}, false, nil
+}
+func (s *stubStore) ListLLMRounds(ctx context.Context, symbol string, limit int) ([]store.LLMRoundRecord, error) {
+	return nil, nil
+}
+
+// PromptRegistryStore
+func (s *stubStore) SavePromptEntry(ctx context.Context, rec *store.PromptRegistryEntry) error {
+	return nil
+}
+func (s *stubStore) FindActivePrompt(ctx context.Context, role, stage string) (store.PromptRegistryEntry, bool, error) {
+	return store.PromptRegistryEntry{}, false, nil
+}
+func (s *stubStore) ListPromptEntries(ctx context.Context, role string, activeOnly bool) ([]store.PromptRegistryEntry, error) {
+	return nil, nil
+}
+
 var _ store.Store = (*stubStore)(nil)
 var _ execution.Executor = (*stubExecutor)(nil)

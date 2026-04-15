@@ -1,8 +1,6 @@
 log_format = "text"
 log_level = "info"
 log_path = "./data/brale-core.log"
-db_path = "./data/brale-core.db"
-persist_mode = "minimal"
 execution_system = "freqtrade"
 exec_endpoint = "http://freqtrade:8080/api/v1"
 exec_api_key = "${EXEC_USERNAME}"
@@ -11,6 +9,17 @@ exec_auth = "basic"
 enable_scheduled_decision = true
 
 llm_min_interval = "20s"
+
+[database]
+dsn = "${DATABASE_DSN}"
+max_open_conns = 20
+max_idle_conns = 5
+
+[telemetry]
+enabled = false
+exporter = "otlp"
+endpoint = "localhost:4317"
+service_name = "brale-core"
 
 [llm_models.'${LLM_MODEL_INDICATOR}']
 endpoint = "${LLM_INDICATOR_ENDPOINT}"

@@ -252,9 +252,11 @@ func TestConfigValidateCommand(t *testing.T) {
 	}
 
 	writeTestFile(t, systemPath, `
-db_path = ":memory:"
 execution_system = "freqtrade"
 exec_endpoint = "http://localhost:8080"
+
+[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"
 
 [llm_models.mock]
 endpoint = "http://localhost:11434/v1"
@@ -543,9 +545,11 @@ func TestValidateConfigTreeMissingModelConfig(t *testing.T) {
 		t.Fatalf("mkdir strategies: %v", err)
 	}
 	writeTestFile(t, systemPath, `
-db_path = ":memory:"
 execution_system = "freqtrade"
 exec_endpoint = "http://localhost:8080"
+
+[database]
+dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"
 
 [llm_models.mock]
 endpoint = "http://localhost:11434/v1"
