@@ -63,11 +63,11 @@ func TestNewManager_FeishuBotOnly(t *testing.T) {
 			BotMode:    "long_connection",
 		},
 	}, decisionfmt.New())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error")
 	}
-	if notifier == nil {
-		t.Fatal("notifier should not be nil")
+	if notifier != nil {
+		t.Fatal("notifier should be nil on invalid config")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestNewManager_NoChannelConfigured(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if err.Error() != "notification enabled but no channel configured" {
+	if err.Error() != "notification enabled but no outbound sender configured" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

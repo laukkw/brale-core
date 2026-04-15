@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,7 +57,7 @@ func Run(baseCtx context.Context, opts Options) error {
 		return err
 	}
 
-	sendStartupNotify(env.ctx, env.logger, env.sys, env.index, runtimes, env.notifier)
+	sendStartupNotify(env.ctx, env.logger, env.sys, env.index, runtimes, scheduler, deps, env.notifier)
 
 	resolver := buildRuntimeResolver(env.ctx, env.logger, env.sys, symbolIndexPath, env.index, deps, runtimes)
 	symbolConfigs := loadSymbolConfigs(env.logger, env.sys, symbolIndexPath, env.index)
@@ -80,28 +81,87 @@ func Run(baseCtx context.Context, opts Options) error {
 	return nil
 }
 
-func sendStartupNotify(ctx context.Context, logger *zap.Logger, sys config.SystemConfig, index config.SymbolIndexConfig, runtimes map[string]runtime.SymbolRuntime, notifier startupNotifier) {
+func sendStartupNotify(ctx context.Context, logger *zap.Logger, sys config.SystemConfig, index config.SymbolIndexConfig, runtimes map[string]runtime.SymbolRuntime, scheduler *runtime.RuntimeScheduler, deps coreDeps, notifier startupNotifier) {
 	if !sys.Notification.StartupNotifyEnabled {
 		return
 	}
+	info := buildStartupInfo(ctx, logger, index, runtimes, scheduler, deps)
+	if err := notifier.SendStartup(ctx, info); err != nil {
+		logger.Error("startup notify failed", zap.Error(err))
+		return
+	}
+	logger.Info("startup notify sent")
+}
+
+func buildStartupInfo(ctx context.Context, logger *zap.Logger, index config.SymbolIndexConfig, runtimes map[string]runtime.SymbolRuntime, scheduler *runtime.RuntimeScheduler, deps coreDeps) notify.StartupInfo {
 	symbols := make([]string, 0, len(index.Symbols))
 	for _, entry := range index.Symbols {
 		symbols = append(symbols, strings.TrimSpace(entry.Symbol))
 	}
 	intervals := collectIntervals(runtimes)
 	barInterval := collectBarInterval(runtimes)
-
 	info := notify.StartupInfo{
-		Symbols:      symbols,
-		Intervals:    intervals,
-		BarInterval:  barInterval,
-		ScheduleMode: "自动调度",
+		Symbols:        symbols,
+		Intervals:      intervals,
+		BarInterval:    barInterval,
+		ScheduleMode:   resolveStartupScheduleMode(deps.execution.scheduled),
+		SymbolStatuses: collectStartupSymbolStatuses(index, runtimes, scheduler),
 	}
-	if err := notifier.SendStartup(ctx, info); err != nil {
-		logger.Error("startup notify failed", zap.Error(err))
-		return
+	if deps.execution.freqtradeAcct != nil {
+		balanceCtx := ctx
+		if balanceCtx == nil {
+			balanceCtx = context.Background()
+		}
+		accountCtx, cancel := context.WithTimeout(balanceCtx, 5*time.Second)
+		defer cancel()
+		symbolForAccount := ""
+		if len(symbols) > 0 {
+			symbolForAccount = symbols[0]
+		}
+		acct, err := deps.execution.freqtradeAcct(accountCtx, symbolForAccount)
+		if err != nil {
+			logger.Warn("startup balance fetch failed", zap.Error(err))
+		} else {
+			info.Balance = acct.Equity
+			info.Currency = strings.TrimSpace(acct.Currency)
+		}
 	}
-	logger.Info("startup notify sent")
+	return info
+}
+
+func resolveStartupScheduleMode(scheduled bool) string {
+	if scheduled {
+		return "定时调度"
+	}
+	return "手动/观察模式"
+}
+
+func collectStartupSymbolStatuses(index config.SymbolIndexConfig, runtimes map[string]runtime.SymbolRuntime, scheduler *runtime.RuntimeScheduler) []notify.StartupSymbolStatus {
+	nextRunBySymbol := make(map[string]runtime.SymbolNextRun)
+	if scheduler != nil {
+		for _, item := range scheduler.GetScheduleStatus().NextRuns {
+			nextRunBySymbol[strings.TrimSpace(item.Symbol)] = item
+		}
+	}
+	statuses := make([]notify.StartupSymbolStatus, 0, len(index.Symbols))
+	for _, entry := range index.Symbols {
+		symbol := strings.TrimSpace(entry.Symbol)
+		if symbol == "" {
+			continue
+		}
+		rt, ok := runtimes[symbol]
+		if !ok {
+			continue
+		}
+		nextRun := nextRunBySymbol[symbol]
+		statuses = append(statuses, notify.StartupSymbolStatus{
+			Symbol:       symbol,
+			Intervals:    slices.Clone(rt.Intervals),
+			NextDecision: strings.TrimSpace(nextRun.NextExecution),
+			Mode:         strings.TrimSpace(nextRun.Mode),
+		})
+	}
+	return statuses
 }
 
 func sendShutdownNotify(logger *zap.Logger, notifier startupNotifier, startedAt time.Time) {

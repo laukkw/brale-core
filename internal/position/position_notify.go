@@ -71,18 +71,19 @@ func (s *PositionService) logAndNotifyClose(ctx context.Context, pos store.Posit
 		return
 	}
 	err := s.Notifier.SendPositionClose(ctx, PositionCloseNotice{
-		Symbol:       pos.Symbol,
-		Direction:    strings.TrimSpace(pos.Side),
-		Qty:          summary.qty,
-		CloseQty:     closeQty,
-		EntryPrice:   summary.entryPrice,
-		TriggerPrice: triggerPrice,
-		StopPrice:    summary.stopPrice,
-		TakeProfits:  summary.tpPrices,
-		Reason:       strings.TrimSpace(reason),
-		RiskPct:      pos.RiskPct,
-		Leverage:     pos.Leverage,
-		PositionID:   pos.PositionID,
+		Symbol:             pos.Symbol,
+		Direction:          strings.TrimSpace(pos.Side),
+		Qty:                summary.qty,
+		CloseQty:           closeQty,
+		EntryPrice:         summary.entryPrice,
+		TriggerPrice:       triggerPrice,
+		StopPrice:          summary.stopPrice,
+		TakeProfits:        summary.tpPrices,
+		Reason:             strings.TrimSpace(reason),
+		RiskPct:            pos.RiskPct,
+		Leverage:           pos.Leverage,
+		PositionID:         pos.PositionID,
+		ExecutorPositionID: strings.TrimSpace(pos.ExecutorPositionID),
 	})
 	if err != nil {
 		logging.FromContext(ctx).Named("execution").Error("position close notify failed", zap.Error(err))

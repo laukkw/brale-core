@@ -819,6 +819,9 @@ function buildPositionCloseModel(raw) {
   const qty = parseNumber(d.qty, 0);
   const leverage = parseNumber(d.leverage, 0);
   const tradeDuration = parseNumber(d.trade_duration_s, 0);
+  const stopPrice = parseNumber(d.stop_price, 0);
+  const tpList = Array.isArray(d.take_profits) ? d.take_profits.filter((v) => v > 0) : [];
+  const exitType = String(d.exit_type || '-').trim();
 
   const isProfit = pnlAmount > 0;
   const headerEmoji = isProfit ? '📈' : '📉';
@@ -832,6 +835,8 @@ function buildPositionCloseModel(raw) {
   if (exitPrice > 0) sourceLines.push({ text: `出场价：${trimFloat(exitPrice)}`, note: false, kind: 'default' });
   if (pnlAmount !== 0) sourceLines.push({ text: `${headerEmoji} 盈亏：${pnlDisplay}`, note: false, kind: isProfit ? 'success' : 'danger' });
   sourceLines.push({ text: `原因：${mapValue(reason)}`, note: false, kind: 'default' });
+  if (exitType !== '-') sourceLines.push({ text: `退出类型：${mapValue(exitType)}`, note: false, kind: 'default' });
+  if (stopPrice > 0 || tpList.length > 0) sourceLines.push({ text: `止损：${stopPrice > 0 ? trimFloat(stopPrice) : '—'} · 止盈：${formatTakeProfitList(tpList)}`, note: false, kind: 'default' });
   if (tradeDuration > 0) sourceLines.push({ text: `持仓时长：${formatDuration(tradeDuration)}`, note: false, kind: 'default' });
 
   const sourceCard = {
@@ -924,6 +929,7 @@ function buildStartupModel(raw) {
   const d = raw?.data ?? {};
   const symbols = Array.isArray(d.symbols) ? d.symbols : [];
   const intervals = Array.isArray(d.intervals) ? d.intervals : [];
+  const symbolStatuses = Array.isArray(d.symbol_statuses) ? d.symbol_statuses : [];
   const barInterval = String(d.bar_interval || '-').trim();
   const balance = parseNumber(d.balance, 0);
   const currency = String(d.currency || 'USDT').trim();
@@ -956,12 +962,20 @@ function buildStartupModel(raw) {
     reportTimeCN: formatReportTime(),
     sourceCard,
     progressCards,
-    analysisItems: symbols.map((s, i) => ({
-      tag: `币种 ${i + 1}`,
-      text: s,
-      variant: 'indicator',
-      isCategory: i === 0,
-    })),
+    analysisItems: (symbolStatuses.length > 0 ? symbolStatuses : symbols.map((symbol) => ({ symbol }))).map((item, i) => {
+      const symbol = String(item.symbol || '').trim() || '—';
+      const itemIntervals = Array.isArray(item.intervals) && item.intervals.length > 0
+        ? item.intervals.join(', ')
+        : '—';
+      const nextDecision = String(item.next_decision || '').trim() || '—';
+      const mode = String(item.mode || '').trim() || '—';
+      return {
+        tag: `币种 ${i + 1}`,
+        text: `${symbol} · 周期 ${itemIntervals} · 下次决策 ${nextDecision} · 模式 ${mode}`,
+        variant: 'indicator',
+        isCategory: i === 0,
+      };
+    }),
   };
 }
 

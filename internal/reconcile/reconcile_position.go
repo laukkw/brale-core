@@ -52,19 +52,20 @@ func (s *ReconcileService) handleExternalMissing(ctx context.Context, pos store.
 	logExternalMissingSummary(ctx, closedPos, summary)
 	if s.Notifier != nil {
 		notice := PositionCloseSummaryNotice{
-			Symbol:      closedPos.Symbol,
-			Direction:   strings.TrimSpace(closedPos.Side),
-			Qty:         summary.Qty,
-			EntryPrice:  summary.EntryPrice,
-			ExitPrice:   summary.ExitPrice,
-			StopPrice:   summary.StopPrice,
-			TakeProfits: summary.TakeProfits,
-			Reason:      "external_missing",
-			RiskPct:     closedPos.RiskPct,
-			Leverage:    closedPos.Leverage,
-			PnLAmount:   summary.PnL,
-			PnLPct:      summary.PnLPct,
-			PositionID:  closedPos.PositionID,
+			Symbol:             closedPos.Symbol,
+			Direction:          strings.TrimSpace(closedPos.Side),
+			Qty:                summary.Qty,
+			EntryPrice:         summary.EntryPrice,
+			ExitPrice:          summary.ExitPrice,
+			StopPrice:          summary.StopPrice,
+			TakeProfits:        summary.TakeProfits,
+			Reason:             "external_missing",
+			RiskPct:            closedPos.RiskPct,
+			Leverage:           closedPos.Leverage,
+			PnLAmount:          summary.PnL,
+			PnLPct:             summary.PnLPct,
+			PositionID:         closedPos.PositionID,
+			ExecutorPositionID: strings.TrimSpace(closedPos.ExecutorPositionID),
 		}
 		if err := s.Notifier.SendPositionCloseSummary(ctx, notice); err != nil {
 			logging.FromContext(ctx).Named("reconcile").Error("position close summary notify failed", zap.Error(err))

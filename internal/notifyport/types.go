@@ -14,34 +14,36 @@ type PositionOpenNotice struct {
 }
 
 type PositionCloseNotice struct {
-	Symbol       string
-	Direction    string
-	Qty          float64
-	CloseQty     float64
-	EntryPrice   float64
-	TriggerPrice float64
-	StopPrice    float64
-	TakeProfits  []float64
-	Reason       string
-	RiskPct      float64
-	Leverage     float64
-	PositionID   string
+	Symbol             string
+	Direction          string
+	Qty                float64
+	CloseQty           float64
+	EntryPrice         float64
+	TriggerPrice       float64
+	StopPrice          float64
+	TakeProfits        []float64
+	Reason             string
+	RiskPct            float64
+	Leverage           float64
+	PositionID         string
+	ExecutorPositionID string
 }
 
 type PositionCloseSummaryNotice struct {
-	Symbol      string
-	Direction   string
-	Qty         float64
-	EntryPrice  float64
-	ExitPrice   float64
-	StopPrice   float64
-	TakeProfits []float64
-	Reason      string
-	RiskPct     float64
-	Leverage    float64
-	PnLAmount   float64
-	PnLPct      float64
-	PositionID  string
+	Symbol             string
+	Direction          string
+	Qty                float64
+	EntryPrice         float64
+	ExitPrice          float64
+	StopPrice          float64
+	TakeProfits        []float64
+	Reason             string
+	RiskPct            float64
+	Leverage           float64
+	PnLAmount          float64
+	PnLPct             float64
+	PositionID         string
+	ExecutorPositionID string
 }
 
 type RiskPlanUpdateScoreItem struct {

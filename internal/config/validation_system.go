@@ -65,17 +65,17 @@ func validatePersistMode(mode string) error {
 }
 
 func validateNotificationConfig(cfg NotificationConfig) error {
-	if !cfg.Enabled {
-		return nil
-	}
 	feishuBotMode := NormalizeFeishuBotMode(cfg.Feishu.BotMode)
 	if cfg.Feishu.BotEnabled {
 		if feishuBotMode != "long_connection" && feishuBotMode != "callback" {
 			return validationErrorf("notification.feishu.bot_mode must be one of long_connection/callback")
 		}
 	}
-	if !cfg.Telegram.Enabled && !cfg.Feishu.Enabled && !cfg.Email.Enabled && !cfg.Feishu.BotEnabled {
-		return validationErrorf("notification enabled but no channel enabled")
+	if !cfg.Enabled {
+		return nil
+	}
+	if !cfg.Telegram.Enabled && !cfg.Feishu.Enabled && !cfg.Email.Enabled {
+		return validationErrorf("notification.enabled requires at least one outbound channel")
 	}
 	if cfg.Telegram.Enabled {
 		if strings.TrimSpace(cfg.Telegram.Token) == "" {

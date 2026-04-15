@@ -37,17 +37,25 @@ type TradeNotifier interface {
 }
 
 type StartupInfo struct {
-	Symbols       []string
-	Intervals     []string
-	BarInterval   string
-	Balance       float64
-	Currency      string
-	ScheduleMode  string
+	Symbols        []string
+	Intervals      []string
+	BarInterval    string
+	Balance        float64
+	Currency       string
+	ScheduleMode   string
+	SymbolStatuses []StartupSymbolStatus
 }
 
 type ShutdownInfo struct {
 	Reason string
 	Uptime time.Duration
+}
+
+type StartupSymbolStatus struct {
+	Symbol       string   `json:"symbol"`
+	Intervals    []string `json:"intervals"`
+	NextDecision string   `json:"next_decision"`
+	Mode         string   `json:"mode"`
 }
 
 type ErrorNotice = notifyport.ErrorNotice

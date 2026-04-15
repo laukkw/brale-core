@@ -20,6 +20,7 @@ type Manager struct {
 	renderer  DecisionImageRenderer
 	senders   []Sender
 	dedupe    *dedupeGuard
+	closeAgg  *closeNoticeAggregator
 }
 
 type DecisionImageRenderer interface {
@@ -31,7 +32,12 @@ type dedupeGuard struct {
 	mu          sync.Mutex
 	ttl         time.Duration
 	lastCleanup time.Time
-	items       map[string]time.Time
+	items       map[string]dedupeEntry
+}
+
+type dedupeEntry struct {
+	at       time.Time
+	inFlight bool
 }
 
 const defaultNotifyDedupeTTL = 90 * time.Second
@@ -40,29 +46,30 @@ func newDedupeGuard(ttl time.Duration) *dedupeGuard {
 	if ttl <= 0 {
 		ttl = defaultNotifyDedupeTTL
 	}
-	return &dedupeGuard{ttl: ttl, items: make(map[string]time.Time)}
+	return &dedupeGuard{ttl: ttl, items: make(map[string]dedupeEntry)}
 }
 
-func (d *dedupeGuard) shouldSkip(key string, now time.Time) bool {
+func (d *dedupeGuard) tryAcquire(key string, now time.Time) bool {
 	if d == nil {
-		return false
+		return true
 	}
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return false
+		return true
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.cleanupLocked(now)
-	if ts, ok := d.items[key]; ok {
-		if now.Sub(ts) <= d.ttl {
-			return true
+	if entry, ok := d.items[key]; ok {
+		if entry.inFlight || now.Sub(entry.at) <= d.ttl {
+			return false
 		}
 	}
-	return false
+	d.items[key] = dedupeEntry{at: now, inFlight: true}
+	return true
 }
 
-func (d *dedupeGuard) remember(key string, now time.Time) {
+func (d *dedupeGuard) commit(key string, now time.Time) {
 	if d == nil {
 		return
 	}
@@ -72,15 +79,28 @@ func (d *dedupeGuard) remember(key string, now time.Time) {
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.items[key] = now
+	d.items[key] = dedupeEntry{at: now}
 	d.cleanupLocked(now)
+}
+
+func (d *dedupeGuard) release(key string) {
+	if d == nil {
+		return
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.items, key)
 }
 
 func (d *dedupeGuard) cleanupLocked(now time.Time) {
 	if d.lastCleanup.IsZero() || now.Sub(d.lastCleanup) >= d.ttl {
 		expireBefore := now.Add(-d.ttl)
-		for k, ts := range d.items {
-			if ts.Before(expireBefore) {
+		for k, entry := range d.items {
+			if entry.at.Before(expireBefore) {
 				delete(d.items, k)
 			}
 		}
@@ -165,17 +185,26 @@ func NewManager(cfg NotificationConfig, formatter decisionfmt.Formatter) (Notifi
 		}
 		senders = append(senders, sender)
 	}
-	if len(senders) == 0 && !cfg.Feishu.BotEnabled {
-		return nil, fmt.Errorf("notification enabled but no channel configured")
+	if len(senders) == 0 {
+		return nil, fmt.Errorf("notification enabled but no outbound sender configured")
 	}
-	return Manager{formatter: formatter, renderer: cardimage.NewOGRenderer(), senders: senders, dedupe: newDedupeGuard(defaultNotifyDedupeTTL)}, nil
+	mgr := Manager{
+		formatter: formatter,
+		renderer:  cardimage.NewOGRenderer(),
+		senders:   senders,
+		dedupe:    newDedupeGuard(defaultNotifyDedupeTTL),
+	}
+	mgr.closeAgg = newCloseNoticeAggregator(defaultCloseAggregationWindow, mgr.sendAggregatedClose)
+	return mgr, nil
 }
 
 func NewTestManager(senders ...Sender) Manager {
-	return Manager{
+	mgr := Manager{
 		senders: append([]Sender(nil), senders...),
 		dedupe:  newDedupeGuard(defaultNotifyDedupeTTL),
 	}
+	mgr.closeAgg = newCloseNoticeAggregator(25*time.Millisecond, mgr.sendAggregatedClose)
+	return mgr
 }
 
 func (m Manager) SendGate(ctx context.Context, input decisionfmt.DecisionInput, report decisionfmt.DecisionReport) error {
@@ -246,15 +275,31 @@ func (m Manager) SendStartup(ctx context.Context, info StartupInfo) error {
 		fmt.Sprintf("- %s: %s", Label("balance"), balanceText),
 		fmt.Sprintf("- %s: %s", Label("schedule_mode"), scheduleText),
 	}
+	for _, item := range info.SymbolStatuses {
+		symbol := strings.TrimSpace(item.Symbol)
+		if symbol == "" {
+			continue
+		}
+		intervalText := strings.Join(item.Intervals, ", ")
+		if intervalText == "" {
+			intervalText = "-"
+		}
+		nextText := strings.TrimSpace(item.NextDecision)
+		if nextText == "" {
+			nextText = "—"
+		}
+		lines = append(lines, fmt.Sprintf("- %s: 周期 %s · 下次决策 %s", symbol, intervalText, nextText))
+	}
 	fallback := prependNoticeHeader("🚀 Brale 已启动", strings.Join(lines, "\n"))
 
 	data := map[string]any{
-		"symbols":       info.Symbols,
-		"intervals":     info.Intervals,
-		"bar_interval":  barIntervalText,
-		"balance":       info.Balance,
-		"currency":      strings.TrimSpace(info.Currency),
-		"schedule_mode": scheduleText,
+		"symbols":         info.Symbols,
+		"intervals":       info.Intervals,
+		"bar_interval":    barIntervalText,
+		"balance":         info.Balance,
+		"currency":        strings.TrimSpace(info.Currency),
+		"schedule_mode":   scheduleText,
+		"symbol_statuses": info.SymbolStatuses,
 	}
 	msg := m.renderCardMessage(ctx, "startup", "", data, "Brale 已启动", fallback)
 	return m.sendWithKey(ctx, msg, "startup")
@@ -332,15 +377,15 @@ func (m Manager) SendPositionOpen(ctx context.Context, notice PositionOpenNotice
 	fallback := prependNoticeHeader("📈 仓位开启", strings.Join(lines, "\n"))
 
 	data := map[string]any{
-		"direction":   direction,
-		"entry_price": notice.EntryPrice,
-		"qty":         notice.Qty,
-		"stop_price":  notice.StopPrice,
-		"stop_reason": stopReasonText,
+		"direction":    direction,
+		"entry_price":  notice.EntryPrice,
+		"qty":          notice.Qty,
+		"stop_price":   notice.StopPrice,
+		"stop_reason":  stopReasonText,
 		"take_profits": notice.TakeProfits,
-		"risk_pct":    notice.RiskPct,
-		"leverage":    notice.Leverage,
-		"position_id": strings.TrimSpace(notice.PositionID),
+		"risk_pct":     notice.RiskPct,
+		"leverage":     notice.Leverage,
+		"position_id":  strings.TrimSpace(notice.PositionID),
 	}
 	msg := m.renderCardMessage(ctx, "position_open", symbol, data, title, fallback)
 	key := strings.TrimSpace(notice.PositionID)
@@ -361,12 +406,12 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 	if direction == "" {
 		direction = "-"
 	}
-	// Use shared dedup key to avoid duplicate close notifications
-	posID := strings.TrimSpace(notice.PositionID)
-	key := fmt.Sprintf("close_final:%s:%s:%s", symbol, strings.ToUpper(direction), posID)
-	if m.dedupe != nil && m.dedupe.shouldSkip(key, time.Now()) {
+	key := closeAggregateKeyForPositionClose(notice)
+	if m.closeAgg != nil {
+		m.closeAgg.AddPositionClose(key, notice)
 		return nil
 	}
+	posID := strings.TrimSpace(notice.PositionID)
 
 	qtyText := formatFloat(notice.Qty)
 	closeQtyText := "-"
@@ -421,18 +466,19 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 	fallback := prependNoticeHeader("📉 仓位关闭", strings.Join(lines, "\n"))
 
 	data := map[string]any{
-		"direction":     direction,
-		"entry_price":   notice.EntryPrice,
-		"qty":           notice.Qty,
-		"close_qty":     notice.CloseQty,
-		"trigger_price": notice.TriggerPrice,
-		"stop_price":    notice.StopPrice,
-		"take_profits":  notice.TakeProfits,
-		"reason":        reasonText,
-		"risk_pct":      notice.RiskPct,
-		"leverage":      notice.Leverage,
-		"position_id":   posID,
-		"close_type":    "partial",
+		"direction":            direction,
+		"entry_price":          notice.EntryPrice,
+		"qty":                  notice.Qty,
+		"close_qty":            notice.CloseQty,
+		"trigger_price":        notice.TriggerPrice,
+		"stop_price":           notice.StopPrice,
+		"take_profits":         notice.TakeProfits,
+		"reason":               reasonText,
+		"risk_pct":             notice.RiskPct,
+		"leverage":             notice.Leverage,
+		"position_id":          posID,
+		"executor_position_id": strings.TrimSpace(notice.ExecutorPositionID),
+		"close_type":           "partial",
 	}
 	msg := m.renderCardMessage(ctx, "position_close", symbol, data, title, fallback)
 	return m.sendWithKey(ctx, msg, key)
@@ -447,12 +493,12 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 	if direction == "" {
 		direction = "-"
 	}
-	// Use shared dedup key for close event merging
-	posID := strings.TrimSpace(notice.PositionID)
-	key := fmt.Sprintf("close_final:%s:%s:%s", symbol, strings.ToUpper(direction), posID)
-	if m.dedupe != nil && m.dedupe.shouldSkip(key, time.Now()) {
+	key := closeAggregateKeyForPositionCloseSummary(notice)
+	if m.closeAgg != nil {
+		m.closeAgg.AddPositionCloseSummary(key, notice)
 		return nil
 	}
+	posID := strings.TrimSpace(notice.PositionID)
 
 	qtyText := formatFloat(notice.Qty)
 	entryText := "-"
@@ -506,19 +552,20 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 	fallback := prependNoticeHeader("📉 仓位全部平仓", strings.Join(lines, "\n"))
 
 	data := map[string]any{
-		"direction":    direction,
-		"entry_price":  notice.EntryPrice,
-		"exit_price":   notice.ExitPrice,
-		"qty":          notice.Qty,
-		"pnl_amount":   notice.PnLAmount,
-		"pnl_pct":      notice.PnLPct,
-		"stop_price":   notice.StopPrice,
-		"take_profits": notice.TakeProfits,
-		"reason":       reasonText,
-		"risk_pct":     notice.RiskPct,
-		"leverage":     notice.Leverage,
-		"position_id":  posID,
-		"close_type":   "full",
+		"direction":            direction,
+		"entry_price":          notice.EntryPrice,
+		"exit_price":           notice.ExitPrice,
+		"qty":                  notice.Qty,
+		"pnl_amount":           notice.PnLAmount,
+		"pnl_pct":              notice.PnLPct,
+		"stop_price":           notice.StopPrice,
+		"take_profits":         notice.TakeProfits,
+		"reason":               reasonText,
+		"risk_pct":             notice.RiskPct,
+		"leverage":             notice.Leverage,
+		"position_id":          posID,
+		"executor_position_id": strings.TrimSpace(notice.ExecutorPositionID),
+		"close_type":           "full",
 	}
 	msg := m.renderCardMessage(ctx, "position_close", symbol, data, title, fallback)
 	return m.sendWithKey(ctx, msg, key)
@@ -645,25 +692,25 @@ func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNo
 	fallback := prependNoticeHeader("📋 风控计划更新", strings.Join(lines, "\n"))
 
 	data := map[string]any{
-		"direction":        direction,
-		"entry_price":      notice.EntryPrice,
-		"old_stop":         notice.OldStop,
-		"new_stop":         notice.NewStop,
-		"take_profits":     notice.TakeProfits,
-		"source":           sourceText,
-		"stop_reason":      stopReasonText,
-		"reason":           reasonText,
-		"mark_price":       notice.MarkPrice,
-		"atr":              notice.ATR,
-		"volatility":       notice.Volatility,
-		"gate_satisfied":   notice.GateSatisfied,
-		"score_total":      notice.ScoreTotal,
-		"score_threshold":  notice.ScoreThreshold,
-		"tighten_reason":   tightenReasonText,
-		"tp_tightened":     notice.TPTightened,
-		"risk_pct":         notice.RiskPct,
-		"leverage":         notice.Leverage,
-		"position_id":      posID,
+		"direction":       direction,
+		"entry_price":     notice.EntryPrice,
+		"old_stop":        notice.OldStop,
+		"new_stop":        notice.NewStop,
+		"take_profits":    notice.TakeProfits,
+		"source":          sourceText,
+		"stop_reason":     stopReasonText,
+		"reason":          reasonText,
+		"mark_price":      notice.MarkPrice,
+		"atr":             notice.ATR,
+		"volatility":      notice.Volatility,
+		"gate_satisfied":  notice.GateSatisfied,
+		"score_total":     notice.ScoreTotal,
+		"score_threshold": notice.ScoreThreshold,
+		"tighten_reason":  tightenReasonText,
+		"tp_tightened":    notice.TPTightened,
+		"risk_pct":        notice.RiskPct,
+		"leverage":        notice.Leverage,
+		"position_id":     posID,
 	}
 	msg := m.renderCardMessage(ctx, "risk_update", symbol, data, title, fallback)
 	key := posID
@@ -702,7 +749,7 @@ func (m Manager) SendTradeOpen(ctx context.Context, notice TradeOpenNotice) erro
 	title := fmt.Sprintf("[OPEN][%s] %s", pair, strings.ToUpper(direction))
 	fallback := prependNoticeHeader("📈 开仓通知", strings.Join(lines, "\n"))
 
-	symbol := strings.TrimSuffix(strings.TrimSuffix(pair, "/USDT:USDT"), "/USDT")
+	symbol := normalizeCloseSymbol(pair)
 	data := map[string]any{
 		"direction":      direction,
 		"entry_price":    notice.OpenRate,
@@ -751,18 +798,18 @@ func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialC
 	title := fmt.Sprintf("[PARTIAL][%s] %s", pair, strings.ToUpper(direction))
 	fallback := prependNoticeHeader("🔄 部分平仓", strings.Join(lines, "\n"))
 
-	symbol := strings.TrimSuffix(strings.TrimSuffix(pair, "/USDT:USDT"), "/USDT")
+	symbol := normalizeCloseSymbol(pair)
 	data := map[string]any{
-		"direction":              direction,
-		"open_rate":              notice.OpenRate,
-		"close_rate":             notice.CloseRate,
-		"amount":                 notice.Amount,
-		"stake_amount":           notice.StakeAmount,
-		"realized_profit":        notice.RealizedProfit,
-		"realized_profit_ratio":  notice.RealizedProfitRatio,
-		"exit_reason":            exitReason,
-		"exit_type":              exitType,
-		"trade_id":               notice.TradeID,
+		"direction":             direction,
+		"open_rate":             notice.OpenRate,
+		"close_rate":            notice.CloseRate,
+		"amount":                notice.Amount,
+		"stake_amount":          notice.StakeAmount,
+		"realized_profit":       notice.RealizedProfit,
+		"realized_profit_ratio": notice.RealizedProfitRatio,
+		"exit_reason":           exitReason,
+		"exit_type":             exitType,
+		"trade_id":              notice.TradeID,
 	}
 	msg := m.renderCardMessage(ctx, "partial_close", symbol, data, title, fallback)
 	key := fmt.Sprintf("trade_partial_close:%s:%d:%s:%s:%s:%s", pair, notice.TradeID, exitReason, exitType, formatFloat(notice.CloseRate), formatFloat(notice.Amount))
@@ -778,10 +825,10 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 	if notice.IsShort {
 		direction = "short"
 	}
-	symbol := strings.TrimSuffix(strings.TrimSuffix(pair, "/USDT:USDT"), "/USDT")
-	// Use shared close dedup key to merge with position close notifications
-	key := fmt.Sprintf("close_final:%s:%s:%d", symbol, strings.ToUpper(direction), notice.TradeID)
-	if m.dedupe != nil && m.dedupe.shouldSkip(key, time.Now()) {
+	symbol := normalizeCloseSymbol(pair)
+	key := closeAggregateKeyForTradeCloseSummary(notice)
+	if m.closeAgg != nil {
+		m.closeAgg.AddTradeCloseSummary(key, notice)
 		return nil
 	}
 
@@ -832,6 +879,186 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 	}
 	msg := m.renderCardMessage(ctx, "position_close", symbol, data, title, fallback)
 	return m.sendWithKey(ctx, msg, key)
+}
+
+func (m Manager) sendAggregatedClose(ctx context.Context, aggregated aggregatedCloseNotice) error {
+	symbol := strings.TrimSpace(aggregated.Symbol)
+	if symbol == "" {
+		if aggregated.PositionClose != nil {
+			symbol = strings.TrimSpace(aggregated.PositionClose.Symbol)
+		} else if aggregated.CloseSummary != nil {
+			symbol = strings.TrimSpace(aggregated.CloseSummary.Symbol)
+		} else if aggregated.TradeClose != nil {
+			symbol = normalizeCloseSymbol(aggregated.TradeClose.Pair)
+		}
+	}
+	if symbol == "" {
+		return fmt.Errorf("aggregated close symbol is required")
+	}
+
+	direction := strings.TrimSpace(aggregated.Direction)
+	if direction == "" {
+		switch {
+		case aggregated.PositionClose != nil:
+			direction = strings.TrimSpace(aggregated.PositionClose.Direction)
+		case aggregated.CloseSummary != nil:
+			direction = strings.TrimSpace(aggregated.CloseSummary.Direction)
+		case aggregated.TradeClose != nil:
+			direction = tradeDirection(aggregated.TradeClose.IsShort)
+		}
+	}
+	if direction == "" {
+		direction = "-"
+	}
+
+	entryPrice := 0.0
+	if aggregated.CloseSummary != nil && aggregated.CloseSummary.EntryPrice > 0 {
+		entryPrice = aggregated.CloseSummary.EntryPrice
+	} else if aggregated.TradeClose != nil && aggregated.TradeClose.OpenRate > 0 {
+		entryPrice = aggregated.TradeClose.OpenRate
+	} else if aggregated.PositionClose != nil && aggregated.PositionClose.EntryPrice > 0 {
+		entryPrice = aggregated.PositionClose.EntryPrice
+	}
+
+	exitPrice := 0.0
+	if aggregated.CloseSummary != nil && aggregated.CloseSummary.ExitPrice > 0 {
+		exitPrice = aggregated.CloseSummary.ExitPrice
+	} else if aggregated.TradeClose != nil && aggregated.TradeClose.CloseRate > 0 {
+		exitPrice = aggregated.TradeClose.CloseRate
+	} else if aggregated.PositionClose != nil && aggregated.PositionClose.TriggerPrice > 0 {
+		exitPrice = aggregated.PositionClose.TriggerPrice
+	}
+
+	qty := 0.0
+	if aggregated.CloseSummary != nil && aggregated.CloseSummary.Qty > 0 {
+		qty = aggregated.CloseSummary.Qty
+	} else if aggregated.TradeClose != nil && aggregated.TradeClose.Amount > 0 {
+		qty = aggregated.TradeClose.Amount
+	} else if aggregated.PositionClose != nil && aggregated.PositionClose.Qty > 0 {
+		qty = aggregated.PositionClose.Qty
+	}
+
+	pnlAmount := 0.0
+	pnlPct := 0.0
+	if aggregated.CloseSummary != nil && (aggregated.CloseSummary.PnLAmount != 0 || aggregated.CloseSummary.PnLPct != 0) {
+		pnlAmount = aggregated.CloseSummary.PnLAmount
+		pnlPct = aggregated.CloseSummary.PnLPct
+	} else if aggregated.TradeClose != nil {
+		pnlAmount = aggregated.TradeClose.ProfitAbs
+		pnlPct = aggregated.TradeClose.ProfitPct
+	}
+
+	stopPrice := 0.0
+	takeProfits := []float64(nil)
+	if aggregated.CloseSummary != nil {
+		stopPrice = aggregated.CloseSummary.StopPrice
+		takeProfits = append(takeProfits, aggregated.CloseSummary.TakeProfits...)
+	} else if aggregated.PositionClose != nil {
+		stopPrice = aggregated.PositionClose.StopPrice
+		takeProfits = append(takeProfits, aggregated.PositionClose.TakeProfits...)
+	}
+
+	reason := "-"
+	if aggregated.PositionClose != nil && strings.TrimSpace(aggregated.PositionClose.Reason) != "" {
+		reason = strings.TrimSpace(aggregated.PositionClose.Reason)
+	} else if aggregated.CloseSummary != nil && strings.TrimSpace(aggregated.CloseSummary.Reason) != "" {
+		reason = strings.TrimSpace(aggregated.CloseSummary.Reason)
+	} else if aggregated.TradeClose != nil && strings.TrimSpace(aggregated.TradeClose.ExitReason) != "" {
+		reason = strings.TrimSpace(aggregated.TradeClose.ExitReason)
+	}
+
+	exitType := "-"
+	if aggregated.TradeClose != nil && strings.TrimSpace(aggregated.TradeClose.ExitType) != "" {
+		exitType = strings.TrimSpace(aggregated.TradeClose.ExitType)
+	}
+
+	leverage := 0.0
+	if aggregated.CloseSummary != nil && aggregated.CloseSummary.Leverage > 0 {
+		leverage = aggregated.CloseSummary.Leverage
+	} else if aggregated.TradeClose != nil && aggregated.TradeClose.Leverage > 0 {
+		leverage = aggregated.TradeClose.Leverage
+	} else if aggregated.PositionClose != nil && aggregated.PositionClose.Leverage > 0 {
+		leverage = aggregated.PositionClose.Leverage
+	}
+
+	positionID := ""
+	executorPositionID := ""
+	if aggregated.CloseSummary != nil {
+		positionID = strings.TrimSpace(aggregated.CloseSummary.PositionID)
+		executorPositionID = strings.TrimSpace(aggregated.CloseSummary.ExecutorPositionID)
+	}
+	if positionID == "" && aggregated.PositionClose != nil {
+		positionID = strings.TrimSpace(aggregated.PositionClose.PositionID)
+	}
+	if executorPositionID == "" && aggregated.PositionClose != nil {
+		executorPositionID = strings.TrimSpace(aggregated.PositionClose.ExecutorPositionID)
+	}
+
+	tradeID := 0
+	tradeDurationS := int64(0)
+	if aggregated.TradeClose != nil {
+		tradeID = aggregated.TradeClose.TradeID
+		tradeDurationS = aggregated.TradeClose.TradeDurationS
+	}
+	closeType := "partial"
+	if aggregated.CloseSummary != nil || aggregated.TradeClose != nil {
+		closeType = "full"
+	}
+
+	lines := []string{
+		fmt.Sprintf("- %s: %s", Label("symbol"), symbol),
+		fmt.Sprintf("- %s: %s", Label("direction"), direction),
+		fmt.Sprintf("- %s: %s", Label("qty"), formatFloat(qty)),
+		fmt.Sprintf("- %s: %s", Label("entry"), formatFloat(entryPrice)),
+		fmt.Sprintf("- %s: %s", Label("exit"), formatFloat(exitPrice)),
+		fmt.Sprintf("- %s: %s", Label("pnl"), formatFloat(pnlAmount)),
+		fmt.Sprintf("- %s: %s", Label("pnl_pct"), formatPercent(pnlPct)),
+		fmt.Sprintf("- %s: %s", Label("reason"), reason),
+	}
+	if stopPrice > 0 {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("stop"), formatFloat(stopPrice)))
+	}
+	if len(takeProfits) > 0 {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("take_profits"), formatFloatSlice(takeProfits)))
+	}
+	if exitType != "-" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("exit_type"), exitType))
+	}
+	if tradeDurationS > 0 {
+		lines = append(lines, fmt.Sprintf("- %s: %d", Label("trade_duration_s"), tradeDurationS))
+	}
+	if leverage > 0 {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("leverage"), formatFloat(leverage)))
+	}
+	if tradeID > 0 {
+		lines = append(lines, fmt.Sprintf("- %s: %d", Label("trade_id"), tradeID))
+	}
+	if positionID != "" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("position_id"), positionID))
+	}
+
+	title := fmt.Sprintf("[CLOSED][%s] %s", symbol, strings.ToUpper(direction))
+	fallback := prependNoticeHeader("📉 仓位已关闭", strings.Join(lines, "\n"))
+	data := map[string]any{
+		"direction":            direction,
+		"entry_price":          entryPrice,
+		"exit_price":           exitPrice,
+		"qty":                  qty,
+		"pnl_amount":           pnlAmount,
+		"pnl_pct":              pnlPct,
+		"stop_price":           stopPrice,
+		"take_profits":         takeProfits,
+		"reason":               reason,
+		"exit_type":            exitType,
+		"trade_duration_s":     tradeDurationS,
+		"leverage":             leverage,
+		"position_id":          positionID,
+		"executor_position_id": executorPositionID,
+		"trade_id":             tradeID,
+		"close_type":           closeType,
+	}
+	msg := m.renderCardMessage(ctx, "position_close", symbol, data, title, fallback)
+	return m.sendWithKey(ctx, msg, aggregated.Key)
 }
 
 func (m Manager) SendError(ctx context.Context, notice ErrorNotice) error {
@@ -950,11 +1177,13 @@ func (m Manager) send(ctx context.Context, msg Message) error {
 func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string) error {
 	now := time.Now()
 	logger := logging.FromContext(ctx).Named("notify")
+	acquired := false
 	if m.dedupe != nil {
-		if m.dedupe.shouldSkip(dedupeKey, now) {
+		if !m.dedupe.tryAcquire(dedupeKey, now) {
 			logger.Debug("notify skipped (dedupe)", zap.String("key", strings.TrimSpace(dedupeKey)), zap.String("title", strings.TrimSpace(msg.Title)))
 			return nil
 		}
+		acquired = true
 	}
 	errDetails := make([]string, 0)
 	successCount := 0
@@ -965,9 +1194,6 @@ func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string)
 		}
 		successCount++
 	}
-	if m.dedupe != nil && successCount > 0 {
-		m.dedupe.remember(dedupeKey, now)
-	}
 	if len(errDetails) > 0 {
 		logger.Warn("notify send partially failed",
 			zap.Int("success_count", successCount),
@@ -976,7 +1202,15 @@ func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string)
 			zap.String("dedupe_key", strings.TrimSpace(dedupeKey)),
 			zap.Strings("error_details", errDetails),
 		)
+		if acquired {
+			m.dedupe.release(dedupeKey)
+		}
 		return fmt.Errorf("notify send failed: %d (%s)", len(errDetails), strings.Join(errDetails, "; "))
+	}
+	if acquired && successCount > 0 {
+		m.dedupe.commit(dedupeKey, time.Now())
+	} else if acquired {
+		m.dedupe.release(dedupeKey)
 	}
 	logger.Info("notify sent",
 		zap.Int("channels", len(m.senders)),
