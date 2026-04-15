@@ -54,8 +54,8 @@ func indicatorDiffCmd() *cobra.Command {
 	cmd.Flags().StringVar(&symbol, "symbol", "", "交易对，例如 BTCUSDT")
 	cmd.Flags().StringVar(&indexPath, "index", "configs/symbols-index.toml", "symbols-index.toml 路径")
 	cmd.Flags().StringVar(&format, "format", "text", "输出格式：text|json")
-	cmd.Flags().StringVar(&baselineName, "baseline", "talib", "基准引擎：talib|reference")
-	cmd.Flags().StringVar(&candidate, "candidate", "reference", "对比引擎：talib|reference")
+	cmd.Flags().StringVar(&baselineName, "baseline", "talib", "基准引擎：ta|talib|reference")
+	cmd.Flags().StringVar(&candidate, "candidate", "ta", "对比引擎：ta|talib|reference")
 	_ = cmd.MarkFlagRequired("symbol")
 	return cmd
 }
@@ -122,6 +122,8 @@ func buildIndicatorDiffReport(ctx context.Context, indexPath, symbol, baselineNa
 func resolveIndicatorDiffComputer(name string) (features.IndicatorComputer, string, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	switch name {
+	case "ta":
+		return features.TAComputer{}, "ta", nil
 	case "", "talib":
 		return features.TalibComputer{}, "talib", nil
 	case "reference":

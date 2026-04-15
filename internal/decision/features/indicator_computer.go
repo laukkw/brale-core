@@ -22,11 +22,13 @@ func defaultIndicatorComputer(computer IndicatorComputer) IndicatorComputer {
 	if computer != nil {
 		return computer
 	}
-	return TalibComputer{}
+	return TAComputer{}
 }
 
 func IndicatorComputerForEngine(engine string) (IndicatorComputer, error) {
 	switch config.NormalizeIndicatorEngine(engine) {
+	case config.IndicatorEngineTA:
+		return TAComputer{}, nil
 	case config.IndicatorEngineTalib:
 		return TalibComputer{}, nil
 	case config.IndicatorEngineReference:

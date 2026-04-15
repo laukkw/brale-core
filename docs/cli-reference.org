@@ -131,19 +131,19 @@ bralectl setup [--repo .] [--lang zh|en] [--install-mcp] [--skip-mcp] \
 
 *** indicator — 指标引擎工具
 
-对比 Talib 引擎和纯 Go 参考引擎（Reference）的指标输出差异。
+对比不同指标引擎的输出差异。可选引擎：=ta=（默认，纯 Go）、=talib=（CGO）、=reference=（参考实现）。
 
 #+begin_src bash
 bralectl indicator diff --symbol BTCUSDT \
-  [--index PATH] [--baseline talib] [--candidate reference] [--format text|json]
+  [--index PATH] [--baseline talib] [--candidate ta] [--format text|json]
 #+end_src
 
 | 参数 | 默认值 | 说明 |
 |------+---------+------|
 | =--symbol= | （必填） | 交易对 |
 | =--index= | =configs/symbols-index.toml= | symbols-index.toml 路径 |
-| =--baseline= | =talib= | 基准引擎：=talib= 或 =reference= |
-| =--candidate= | =reference= | 对比引擎：=talib= 或 =reference= |
+| =--baseline= | =talib= | 基准引擎：=ta=、=talib= 或 =reference= |
+| =--candidate= | =ta= | 对比引擎：=ta=、=talib= 或 =reference= |
 | =--format= | =text= | 输出格式：=text= 或 =json= |
 
 *** backtest — Gate 规则回放
@@ -402,19 +402,19 @@ bralectl setup [--repo .] [--lang zh|en] [--install-mcp] [--skip-mcp] \
 
 *** indicator — Indicator Engine Tools
 
-Compare indicator outputs between the Talib engine and the pure-Go reference engine.
+Compare indicator outputs between different engines. Available: =ta= (default, pure Go), =talib= (CGO), =reference= (legacy pure Go).
 
 #+begin_src bash
 bralectl indicator diff --symbol BTCUSDT \
-  [--index PATH] [--baseline talib] [--candidate reference] [--format text|json]
+  [--index PATH] [--baseline talib] [--candidate ta] [--format text|json]
 #+end_src
 
 | Flag | Default | Description |
 |------+---------+-------------|
 | =--symbol= | (required) | Trading pair |
 | =--index= | =configs/symbols-index.toml= | Symbol index path |
-| =--baseline= | =talib= | Baseline engine: =talib= or =reference= |
-| =--candidate= | =reference= | Comparison engine: =talib= or =reference= |
+| =--baseline= | =talib= | Baseline engine: =ta=, =talib= or =reference= |
+| =--candidate= | =ta= | Comparison engine: =ta=, =talib= or =reference= |
 | =--format= | =text= | Output format: =text= or =json= |
 
 *** backtest — Gate Rule Replay

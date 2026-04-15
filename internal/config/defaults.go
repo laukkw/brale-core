@@ -24,7 +24,7 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 			Liquidations: false,
 		},
 		Indicators: IndicatorConfig{
-			Engine:         IndicatorEngineTalib,
+			Engine:         IndicatorEngineTA,
 			EMAFast:        21,
 			EMAMid:         50,
 			EMASlow:        200,

@@ -249,8 +249,8 @@ func TestLoadSymbolConfigBackfillsNewIndicatorFields(t *testing.T) {
 	if cfg.Indicators.AroonPeriod != 25 {
 		t.Fatalf("AroonPeriod=%d want 25", cfg.Indicators.AroonPeriod)
 	}
-	if cfg.Indicators.Engine != IndicatorEngineTalib {
-		t.Fatalf("Engine=%q want %q", cfg.Indicators.Engine, IndicatorEngineTalib)
+	if cfg.Indicators.Engine != IndicatorEngineTA {
+		t.Fatalf("Engine=%q want %q", cfg.Indicators.Engine, IndicatorEngineTA)
 	}
 }
 

@@ -138,7 +138,7 @@ func TestValidateSymbolConfig_RejectsUnsupportedIndicatorEngine(t *testing.T) {
 	if err == nil {
 		t.Fatal("ValidateSymbolConfig() error = nil, want unsupported engine error")
 	}
-	if got := err.Error(); got != "indicators.engine must be one of [reference talib]" {
+	if got := err.Error(); got != "indicators.engine must be one of [ta reference talib]" {
 		t.Fatalf("ValidateSymbolConfig() error = %q", got)
 	}
 }

@@ -274,7 +274,7 @@ func TestGetConfigToolRedactsSecrets(t *testing.T) {
 		t.Fatalf("symbol config=%v", symbolCfg)
 	}
 	indicators := symbolCfg["indicators"].(map[string]any)
-	if indicators["engine"] != "talib" {
+	if indicators["engine"] != "ta" {
 		t.Fatalf("indicators=%v", indicators)
 	}
 	if indicators["shadow_engine"] != "reference" {
