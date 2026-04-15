@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -178,6 +179,61 @@ func TestAnalyzeMarketToolCombinesRuntimeViews(t *testing.T) {
 	}
 	if got["overview"].(map[string]any)["summary"] != "overview" {
 		t.Fatalf("overview=%v", got["overview"])
+	}
+	if got["observe_available"] != true {
+		t.Fatalf("observe_available=%v want true", got["observe_available"])
+	}
+}
+
+func TestAnalyzeMarketToolDegradesWhenObserveReportMissing(t *testing.T) {
+	systemPath, indexPath := writeMCPConfigTree(t)
+	server, err := NewServer(Options{
+		Name:    "brale-core",
+		Version: "test",
+		Runtime: stubRuntime{
+			overview: botruntime.DashboardOverviewResponse{
+				Status:    "ok",
+				Symbol:    "BTCUSDT",
+				Summary:   "overview",
+				RequestID: "req-overview",
+			},
+			latestDecision: botruntime.DecisionLatestResponse{
+				Status:    "ok",
+				Symbol:    "BTCUSDT",
+				Summary:   "latest",
+				RequestID: "req-latest",
+			},
+			observeErr: errors.New("暂无该符号观察结果"),
+		},
+		Config: NewLocalConfigSource(systemPath, indexPath),
+		Audit:  &memoryAuditSink{},
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	session := connectTestSession(t, server)
+	defer session.Close()
+
+	got := callToolMap(t, session, "analyze_market", map[string]any{"symbol": "BTCUSDT"})
+	if got["symbol"] != "BTCUSDT" {
+		t.Fatalf("symbol=%v want BTCUSDT", got["symbol"])
+	}
+	if got["latest_decision"].(map[string]any)["summary"] != "latest" {
+		t.Fatalf("latest_decision=%v", got["latest_decision"])
+	}
+	if got["overview"].(map[string]any)["summary"] != "overview" {
+		t.Fatalf("overview=%v", got["overview"])
+	}
+	if got["observe_available"] != false {
+		t.Fatalf("observe_available=%v want false", got["observe_available"])
+	}
+	errMsg, _ := got["observe_error"].(string)
+	if !strings.Contains(errMsg, "暂无该符号观察结果") {
+		t.Fatalf("observe_error=%v", got["observe_error"])
+	}
+	if _, ok := got["observe"]; ok {
+		t.Fatalf("observe should be omitted on fallback: %v", got["observe"])
 	}
 }
 
@@ -529,6 +585,7 @@ func TestFileAuditSinkWritesJSONLines(t *testing.T) {
 
 type stubRuntime struct {
 	observe         botruntime.ObserveResponse
+	observeErr      error
 	latestDecision  botruntime.DecisionLatestResponse
 	positions       botruntime.PositionStatusResponse
 	decisionHistory botruntime.DashboardDecisionHistoryResponse
@@ -538,7 +595,7 @@ type stubRuntime struct {
 }
 
 func (s stubRuntime) FetchObserveReport(context.Context, string) (botruntime.ObserveResponse, error) {
-	return s.observe, nil
+	return s.observe, s.observeErr
 }
 
 func (s stubRuntime) FetchDecisionLatest(context.Context, string) (botruntime.DecisionLatestResponse, error) {

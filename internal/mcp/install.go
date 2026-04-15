@@ -43,10 +43,12 @@ type InstallResult struct {
 }
 
 type preparedInstall struct {
-	name       string
-	command    string
-	configPath string
-	args       []string
+	target           string
+	name             string
+	command          string
+	configPath       string
+	args             []string
+	removeLegacyPath string
 }
 
 func Install(opts InstallOptions) (InstallResult, error) {
@@ -54,27 +56,27 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	doc, err := loadInstallDocument(prepared.configPath)
-	if err != nil {
-		return InstallResult{}, err
-	}
-	servers, err := ensureMap(doc, "mcpServers")
-	if err != nil {
-		return InstallResult{}, err
-	}
-	servers[prepared.name] = map[string]any{
-		"command": prepared.command,
-		"args":    prepared.args,
-	}
 	if err := os.MkdirAll(filepath.Dir(prepared.configPath), 0o755); err != nil {
 		return InstallResult{}, fmt.Errorf("create install dir: %w", err)
 	}
-	raw, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return InstallResult{}, fmt.Errorf("marshal install config: %w", err)
-	}
-	if err := writeAtomic(prepared.configPath, append(raw, '\n')); err != nil {
-		return InstallResult{}, fmt.Errorf("write install config: %w", err)
+	switch prepared.target {
+	case "codex":
+		if err := installCodexConfig(prepared); err != nil {
+			return InstallResult{}, err
+		}
+	case "claude-code":
+		if err := installClaudeCodeConfig(prepared); err != nil {
+			return InstallResult{}, err
+		}
+		if prepared.removeLegacyPath != "" {
+			if err := os.Remove(prepared.removeLegacyPath); err != nil && !os.IsNotExist(err) {
+				return InstallResult{}, fmt.Errorf("remove legacy claude-code config: %w", err)
+			}
+		}
+	default:
+		if err := installJSONConfig(prepared); err != nil {
+			return InstallResult{}, err
+		}
 	}
 	return InstallResult{
 		ConfigPath: prepared.configPath,
@@ -117,13 +119,7 @@ func defaultInstallConfigPath(target string) (string, error) {
 	}
 	switch target {
 	case "claude-code":
-		if runtime.GOOS == "windows" {
-			appData := strings.TrimSpace(os.Getenv("APPDATA"))
-			if appData != "" {
-				return filepath.Join(appData, "Claude", "mcp_settings.json"), nil
-			}
-		}
-		return filepath.Join(home, ".config", "claude", "mcp_settings.json"), nil
+		return filepath.Join(home, ".claude.json"), nil
 	case "claude-desktop":
 		switch runtime.GOOS {
 		case "darwin":
@@ -140,7 +136,7 @@ func defaultInstallConfigPath(target string) (string, error) {
 	case "opencode":
 		return filepath.Join(home, ".config", "opencode", "config.json"), nil
 	case "codex":
-		return filepath.Join(home, ".codex", "config.json"), nil
+		return filepath.Join(home, ".codex", "config.toml"), nil
 	case "custom":
 		return "", fmt.Errorf("install target %q requires --config", target)
 	default:
@@ -170,7 +166,8 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 		return preparedInstall{}, fmt.Errorf("resolve command path: %w", err)
 	}
 	configPath := strings.TrimSpace(opts.ConfigPath)
-	if configPath == "" {
+	configPathIsDefault := configPath == ""
+	if configPathIsDefault {
 		configPath, err = defaultInstallConfigPath(target)
 		if err != nil {
 			return preparedInstall{}, err
@@ -211,12 +208,70 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 		"--index", indexPath,
 		"--audit-log", auditPath,
 	}
+	removeLegacyPath := ""
+	if target == "claude-code" && configPathIsDefault {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return preparedInstall{}, fmt.Errorf("resolve user home: %w", err)
+		}
+		removeLegacyPath = filepath.Join(homeDir, ".config", "claude", "mcp_settings.json")
+	}
 	return preparedInstall{
-		name:       name,
-		command:    command,
-		configPath: configPath,
-		args:       args,
+		target:           target,
+		name:             name,
+		command:          command,
+		configPath:       configPath,
+		args:             args,
+		removeLegacyPath: removeLegacyPath,
 	}, nil
+}
+
+func installClaudeCodeConfig(prepared preparedInstall) error {
+	doc, err := loadInstallDocument(prepared.configPath)
+	if err != nil {
+		return err
+	}
+	servers, err := ensureMap(doc, "mcpServers")
+	if err != nil {
+		return err
+	}
+	servers[prepared.name] = map[string]any{
+		"type":    "stdio",
+		"command": prepared.command,
+		"args":    prepared.args,
+		"env":     map[string]any{},
+	}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal claude-code config: %w", err)
+	}
+	if err := writeAtomic(prepared.configPath, append(raw, '\n')); err != nil {
+		return fmt.Errorf("write claude-code config: %w", err)
+	}
+	return nil
+}
+
+func installJSONConfig(prepared preparedInstall) error {
+	doc, err := loadInstallDocument(prepared.configPath)
+	if err != nil {
+		return err
+	}
+	servers, err := ensureMap(doc, "mcpServers")
+	if err != nil {
+		return err
+	}
+	servers[prepared.name] = map[string]any{
+		"command": prepared.command,
+		"args":    prepared.args,
+	}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal install config: %w", err)
+	}
+	if err := writeAtomic(prepared.configPath, append(raw, '\n')); err != nil {
+		return fmt.Errorf("write install config: %w", err)
+	}
+	return nil
 }
 
 func normalizeInstallTarget(raw string) (string, error) {

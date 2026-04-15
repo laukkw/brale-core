@@ -43,26 +43,28 @@ bralectl mcp serve --mode sse --addr 0.0.0.0:8765 \
 
 #+begin_src bash
 make setup                                    # 交互式初始化 .env + 可选安装 MCP
-bralectl mcp install --target claude-code     # 写入 ~/.config/claude/mcp_settings.json
+bralectl mcp install --target claude-code     # 写入 ~/.claude.json
 bralectl mcp install --target claude-desktop  # 写入平台默认 Claude Desktop 配置
 bralectl mcp install --target opencode        # 写入 ~/.config/opencode/config.json
-bralectl mcp install --target codex           # 写入 ~/.codex/config.json
+bralectl mcp install --target codex           # 写入 ~/.codex/config.toml
 #+end_src
 
 *** 手动配置
 
-**** Claude Code (=~/.config/claude/mcp_settings.json=)
+**** Claude Code (=~/.claude.json=)
 
 #+begin_src json
 {
   "mcpServers": {
     "brale-core": {
+      "type": "stdio",
       "command": "/path/to/bralectl",
       "args": [
         "mcp", "serve", "--mode", "stdio",
         "--system", "/path/to/configs/system.toml",
         "--index", "/path/to/configs/symbols-index.toml"
-      ]
+      ],
+      "env": {}
     }
   }
 }
@@ -102,21 +104,16 @@ bralectl mcp install --target codex           # 写入 ~/.codex/config.json
 }
 #+end_src
 
-**** Codex (=~/.codex/config.json=)
+**** Codex (=~/.codex/config.toml=)
 
-#+begin_src json
-{
-  "mcpServers": {
-    "brale-core": {
-      "command": "/path/to/bralectl",
-      "args": [
-        "mcp", "serve", "--mode", "stdio",
-        "--system", "/path/to/configs/system.toml",
-        "--index", "/path/to/configs/symbols-index.toml"
-      ]
-    }
-  }
-}
+#+begin_src toml
+[mcp_servers.brale-core]
+command = "/path/to/bralectl"
+args = [
+  "mcp", "serve", "--mode", "stdio",
+  "--system", "/path/to/configs/system.toml",
+  "--index", "/path/to/configs/symbols-index.toml",
+]
 #+end_src
 
 **** SSE 远程客户端
@@ -219,26 +216,28 @@ bralectl mcp serve --mode sse --addr 0.0.0.0:8765 \
 
 #+begin_src bash
 make setup                                    # interactive .env + optional MCP bootstrap
-bralectl mcp install --target claude-code     # writes ~/.config/claude/mcp_settings.json
+bralectl mcp install --target claude-code     # writes ~/.claude.json
 bralectl mcp install --target claude-desktop  # writes the platform default Claude Desktop config
 bralectl mcp install --target opencode        # writes ~/.config/opencode/config.json
-bralectl mcp install --target codex           # writes ~/.codex/config.json
+bralectl mcp install --target codex           # writes ~/.codex/config.toml
 #+end_src
 
 *** Manual Configuration
 
-**** Claude Code (=~/.config/claude/mcp_settings.json=)
+**** Claude Code (=~/.claude.json=)
 
 #+begin_src json
 {
   "mcpServers": {
     "brale-core": {
+      "type": "stdio",
       "command": "/path/to/bralectl",
       "args": [
         "mcp", "serve", "--mode", "stdio",
         "--system", "/path/to/configs/system.toml",
         "--index", "/path/to/configs/symbols-index.toml"
-      ]
+      ],
+      "env": {}
     }
   }
 }
@@ -278,21 +277,16 @@ bralectl mcp install --target codex           # writes ~/.codex/config.json
 }
 #+end_src
 
-**** Codex (=~/.codex/config.json=)
+**** Codex (=~/.codex/config.toml=)
 
-#+begin_src json
-{
-  "mcpServers": {
-    "brale-core": {
-      "command": "/path/to/bralectl",
-      "args": [
-        "mcp", "serve", "--mode", "stdio",
-        "--system", "/path/to/configs/system.toml",
-        "--index", "/path/to/configs/symbols-index.toml"
-      ]
-    }
-  }
-}
+#+begin_src toml
+[mcp_servers.brale-core]
+command = "/path/to/bralectl"
+args = [
+  "mcp", "serve", "--mode", "stdio",
+  "--system", "/path/to/configs/system.toml",
+  "--index", "/path/to/configs/symbols-index.toml",
+]
 #+end_src
 
 **** SSE Remote Client

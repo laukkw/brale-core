@@ -150,13 +150,6 @@ func (s service) handleAnalyzeMarket(ctx context.Context, _ *sdkmcp.CallToolRequ
 	if err != nil {
 		return nil, nil, err
 	}
-	observe, err := s.runtime.FetchObserveReport(ctx, symbol)
-	if err != nil {
-		return nil, nil, err
-	}
-	if observe.Gate == nil {
-		observe.Gate = map[string]any{}
-	}
 	overviewMap, err := asObject(overview)
 	if err != nil {
 		return nil, nil, err
@@ -165,16 +158,27 @@ func (s service) handleAnalyzeMarket(ctx context.Context, _ *sdkmcp.CallToolRequ
 	if err != nil {
 		return nil, nil, err
 	}
+	out := map[string]any{
+		"symbol":            symbol,
+		"overview":          overviewMap,
+		"latest_decision":   latestMap,
+		"observe_available": false,
+	}
+	observe, observeErr := s.runtime.FetchObserveReport(ctx, symbol)
+	if observeErr != nil {
+		out["observe_error"] = fmt.Sprintf("observe report unavailable: %v", observeErr)
+		return nil, out, nil
+	}
+	if observe.Gate == nil {
+		observe.Gate = map[string]any{}
+	}
 	observeMap, err := asObject(observe)
 	if err != nil {
 		return nil, nil, err
 	}
-	return nil, map[string]any{
-		"symbol":          symbol,
-		"overview":        overviewMap,
-		"latest_decision": latestMap,
-		"observe":         observeMap,
-	}, nil
+	out["observe_available"] = true
+	out["observe"] = observeMap
+	return nil, out, nil
 }
 
 func (s service) handleGetLatestDecision(ctx context.Context, _ *sdkmcp.CallToolRequest, input symbolInput) (*sdkmcp.CallToolResult, map[string]any, error) {
