@@ -180,3 +180,194 @@ func TestComputeSTCSeriesGoldenTail(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildIndicatorCompressedInputRejectsPartiallyInvalidOptions(t *testing.T) {
+	opts := DefaultIndicatorCompressOptions()
+	opts.EMAMid = 0
+
+	_, err := BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(config.EMARequiredBars(opts.EMASlow)+10), opts)
+	if err == nil {
+		t.Fatal("BuildIndicatorCompressedInput() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "ema_mid") {
+		t.Fatalf("error=%q should mention ema_mid", err.Error())
+	}
+}
+
+func TestBuildIndicatorCompressedInputUsesDefaultsForZeroValueOptions(t *testing.T) {
+	def := DefaultIndicatorCompressOptions()
+	got, err := BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(config.EMARequiredBars(def.EMASlow)+10), IndicatorCompressOptions{})
+	if err != nil {
+		t.Fatalf("BuildIndicatorCompressedInput() error = %v", err)
+	}
+	if got.Data.EMAFast == nil {
+		t.Fatal("EMAFast = nil, want default indicator options to be applied")
+	}
+	if got.Data.ATR == nil {
+		t.Fatal("ATR = nil, want default indicator options to be applied")
+	}
+}
+
+func TestValidateIndicatorCompressOptions(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    IndicatorCompressOptions
+		wantErr string
+	}{
+		{name: "default valid", opts: DefaultIndicatorCompressOptions()},
+		{
+			name: "bb period one rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.BBPeriod = 1
+				return opts
+			}(),
+			wantErr: "bb_period must be > 1",
+		},
+		{
+			name: "chop period one rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.CHOPPeriod = 1
+				return opts
+			}(),
+			wantErr: "chop_period must be > 1",
+		},
+		{
+			name: "chop period two allowed",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.CHOPPeriod = 2
+				return opts
+			}(),
+		},
+		{
+			name: "aroon period zero rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.AroonPeriod = 0
+				return opts
+			}(),
+			wantErr: "aroon_period must be > 0",
+		},
+		{
+			name: "bb multiplier zero rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.BBMultiplier = 0
+				return opts
+			}(),
+			wantErr: "bb_multiplier must be > 0",
+		},
+		{
+			name: "last n zero rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.LastN = 0
+				return opts
+			}(),
+			wantErr: "last_n must be > 0",
+		},
+		{
+			name: "ema ordering rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.EMAFast = opts.EMAMid
+				return opts
+			}(),
+			wantErr: "ema_fast < ema_mid < ema_slow",
+		},
+		{
+			name: "stc ordering rejected",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.STCFast = opts.STCSlow
+				return opts
+			}(),
+			wantErr: "stc_fast must be < stc_slow",
+		},
+		{
+			name: "skip flags allow zero values",
+			opts: func() IndicatorCompressOptions {
+				opts := DefaultIndicatorCompressOptions()
+				opts.SkipEMA = true
+				opts.EMAFast = 0
+				opts.EMAMid = 0
+				opts.EMASlow = 0
+				opts.SkipRSI = true
+				opts.RSIPeriod = 0
+				opts.StochRSIPeriod = 0
+				opts.SkipSTC = true
+				opts.STCFast = 0
+				opts.STCSlow = 0
+				return opts
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateIndicatorCompressOptions(tt.opts)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateIndicatorCompressOptions() error = %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ValidateIndicatorCompressOptions() error = nil, want %q", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ValidateIndicatorCompressOptions() error = %q, want substring %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestBuildIndicatorCompressedInputIncludesCHOPAtThreshold(t *testing.T) {
+	opts := DefaultIndicatorCompressOptions()
+	opts.SkipEMA = true
+	opts.SkipRSI = true
+	opts.SkipSTC = true
+
+	required := config.CHOPRequiredBars(opts.CHOPPeriod)
+	got, err := BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(required), opts)
+	if err != nil {
+		t.Fatalf("BuildIndicatorCompressedInput() error = %v", err)
+	}
+	if got.Data.CHOP == nil {
+		t.Fatalf("CHOP = nil at threshold=%d", required)
+	}
+
+	got, err = BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(required-1), opts)
+	if err != nil {
+		t.Fatalf("BuildIndicatorCompressedInput() error = %v", err)
+	}
+	if got.Data.CHOP != nil {
+		t.Fatalf("CHOP=%+v want nil below threshold", got.Data.CHOP)
+	}
+}
+
+func TestBuildIndicatorCompressedInputIncludesAroonAtThreshold(t *testing.T) {
+	opts := DefaultIndicatorCompressOptions()
+	opts.SkipEMA = true
+	opts.SkipRSI = true
+	opts.SkipSTC = true
+
+	required := config.AroonRequiredBars(opts.AroonPeriod)
+	got, err := BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(required), opts)
+	if err != nil {
+		t.Fatalf("BuildIndicatorCompressedInput() error = %v", err)
+	}
+	if got.Data.Aroon == nil {
+		t.Fatalf("Aroon = nil at threshold=%d", required)
+	}
+
+	got, err = BuildIndicatorCompressedInput("BTCUSDT", "1h", trendTestCandles(required-1), opts)
+	if err != nil {
+		t.Fatalf("BuildIndicatorCompressedInput() error = %v", err)
+	}
+	if got.Data.Aroon != nil {
+		t.Fatalf("Aroon=%+v want nil below threshold", got.Data.Aroon)
+	}
+}

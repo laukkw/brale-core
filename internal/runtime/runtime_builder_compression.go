@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"fmt"
+
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
 	"brale-core/internal/market"
@@ -43,7 +45,12 @@ func buildMetricsService(symbolCfg config.SymbolConfig, enabled config.AgentEnab
 	return svc
 }
 
-func buildCompressor(symbolCfg config.SymbolConfig, enabled config.AgentEnabled, enabledMap map[string]decision.AgentEnabled) (*decision.FeatureCompressor, []RuntimeService) {
+func buildCompressor(symbolCfg config.SymbolConfig, enabled config.AgentEnabled, enabledMap map[string]decision.AgentEnabled) (decision.Compressor, []RuntimeService, error) {
+	primaryEngine := config.NormalizeIndicatorEngine(symbolCfg.Indicators.Engine)
+	computer, err := decision.IndicatorComputerForEngine(primaryEngine)
+	if err != nil {
+		return nil, nil, fmt.Errorf("indicator engine: %w", err)
+	}
 	metricsSvc := buildMetricsService(symbolCfg, enabled)
 	services := make([]RuntimeService, 0, 1)
 	if metricsSvc != nil {
@@ -55,11 +62,17 @@ func buildCompressor(symbolCfg config.SymbolConfig, enabled config.AgentEnabled,
 		trendOptions[iv] = toTrendOptionsFromPreset(preset)
 	}
 	defaultPreset := config.DefaultTrendPreset()
-	return &decision.FeatureCompressor{
-		Indicators: decision.DefaultIndicatorBuilder{Options: toIndicatorOptions(symbolCfg.Indicators, enabled.Indicator)},
+	indicatorOptions := toIndicatorOptions(symbolCfg.Indicators, enabled.Indicator)
+	defaultTrendOptions := toTrendOptionsFromPreset(defaultPreset)
+	base := &decision.FeatureCompressor{
+		Indicators: decision.DefaultIndicatorBuilder{
+			Options:  indicatorOptions,
+			Computer: computer,
+		},
 		Trends: decision.IntervalTrendBuilder{
 			OptionsByInterval: trendOptions,
-			DefaultOptions:    toTrendOptionsFromPreset(defaultPreset),
+			DefaultOptions:    defaultTrendOptions,
+			Computer:          computer,
 		},
 		Mechanics: decision.ConditionalMechanicsBuilder{
 			Enabled: enabledMap,
@@ -67,7 +80,25 @@ func buildCompressor(symbolCfg config.SymbolConfig, enabled config.AgentEnabled,
 				Metrics: metricsSvc,
 			}},
 		},
-	}, services
+	}
+	shadowEngine := config.NormalizeOptionalIndicatorEngine(symbolCfg.Indicators.ShadowEngine)
+	if shadowEngine == "" {
+		return base, services, nil
+	}
+	shadowComputer, err := decision.IndicatorComputerForEngine(shadowEngine)
+	if err != nil {
+		return nil, nil, fmt.Errorf("shadow indicator engine: %w", err)
+	}
+	return &shadowComparingCompressor{
+		primary:            base,
+		primaryName:        primaryEngine,
+		shadowName:         shadowEngine,
+		primaryComputer:    computer,
+		shadowComputer:     shadowComputer,
+		indicatorOptions:   indicatorOptions,
+		trendOptionsByInt:  trendOptions,
+		defaultTrendOption: defaultTrendOptions,
+	}, services, nil
 }
 
 func toIndicatorOptions(cfg config.IndicatorConfig, indicatorEnabled bool) decision.IndicatorCompressOptions {

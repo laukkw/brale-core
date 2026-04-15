@@ -9,6 +9,7 @@ import (
 type IntervalTrendBuilder struct {
 	OptionsByInterval map[string]TrendCompressOptions
 	DefaultOptions    TrendCompressOptions
+	Computer          IndicatorComputer
 }
 
 func (b IntervalTrendBuilder) BuildTrend(_ context.Context, snap snapshot.MarketSnapshot, symbol, interval string) (TrendJSON, error) {
@@ -23,7 +24,7 @@ func (b IntervalTrendBuilder) BuildTrend(_ context.Context, snap snapshot.Market
 	if opts == (TrendCompressOptions{}) {
 		opts = DefaultTrendCompressOptions()
 	}
-	raw, err := BuildTrendCompressedJSON(symbol, interval, candles, opts)
+	raw, err := BuildTrendCompressedJSONWithComputer(symbol, interval, candles, opts, b.Computer)
 	if err != nil {
 		return TrendJSON{}, err
 	}

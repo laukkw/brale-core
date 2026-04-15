@@ -9,12 +9,13 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/snapshot"
-
-	talib "github.com/markcheno/go-talib"
 )
 
 const indicatorCompressVersion = "indicator_compress_v1"
 
+// IndicatorCompressOptions controls indicator compression behavior.
+// A fully zero-value struct means "use defaults"; partially specified options
+// are validated and missing fields are not auto-filled.
 type IndicatorCompressOptions struct {
 	EMAFast        int
 	EMAMid         int
@@ -119,7 +120,11 @@ type obvSnapshot struct {
 }
 
 func BuildIndicatorCompressedJSON(symbol, interval string, candles []snapshot.Candle, opts IndicatorCompressOptions) (string, error) {
-	payload, err := BuildIndicatorCompressedInput(symbol, interval, candles, opts)
+	return BuildIndicatorCompressedJSONWithComputer(symbol, interval, candles, opts, nil)
+}
+
+func BuildIndicatorCompressedJSONWithComputer(symbol, interval string, candles []snapshot.Candle, opts IndicatorCompressOptions, computer IndicatorComputer) (string, error) {
+	payload, err := BuildIndicatorCompressedInputWithComputer(symbol, interval, candles, opts, computer)
 	if err != nil {
 		return "", err
 	}
@@ -137,15 +142,29 @@ func BuildIndicatorCompressedJSON(symbol, interval string, candles []snapshot.Ca
 	return string(raw), nil
 }
 
+// BuildIndicatorCompressedInput converts candles into a structured indicator payload.
+// Zero-value opts use DefaultIndicatorCompressOptions; partially specified opts
+// must already be complete and valid.
 func BuildIndicatorCompressedInput(symbol, interval string, candles []snapshot.Candle, opts IndicatorCompressOptions) (IndicatorCompressedInput, error) {
+	return BuildIndicatorCompressedInputWithComputer(symbol, interval, candles, opts, nil)
+}
+
+func BuildIndicatorCompressedInputWithComputer(symbol, interval string, candles []snapshot.Candle, opts IndicatorCompressOptions, computer IndicatorComputer) (IndicatorCompressedInput, error) {
 	if len(candles) == 0 {
 		return IndicatorCompressedInput{}, fmt.Errorf("no candles")
 	}
-	opts = normalizeIndicatorCompressOptions(opts)
+	var err error
+	opts, err = resolveIndicatorCompressOptions(opts)
+	if err != nil {
+		return IndicatorCompressedInput{}, err
+	}
 	last, closes, highs, lows, volumes := buildIndicatorSeries(candles)
 	meta := buildIndicatorMeta(last)
 	market := buildIndicatorMarket(symbol, interval, candles)
-	data := buildIndicatorData(closes, highs, lows, volumes, last.Close, opts)
+	data, err := buildIndicatorData(closes, highs, lows, volumes, last.Close, opts, defaultIndicatorComputer(computer))
+	if err != nil {
+		return IndicatorCompressedInput{}, err
+	}
 	return IndicatorCompressedInput{Meta: meta, Market: market, Data: data}, nil
 }
 
@@ -195,34 +214,53 @@ func buildIndicatorMarket(symbol, interval string, candles []snapshot.Candle) in
 	return market
 }
 
-func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float64, opts IndicatorCompressOptions) indicatorData {
+func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float64, opts IndicatorCompressOptions, computer IndicatorComputer) (indicatorData, error) {
 	data := indicatorData{}
 	if !opts.SkipEMA {
 		if opts.EMAFast > 0 && len(closes) >= config.EMARequiredBars(opts.EMAFast) {
-			if ema := buildEMASnapshot(sanitizeSeries(talib.Ema(closes, opts.EMAFast)), lastClose, opts.LastN); ema != nil {
+			series, err := computer.ComputeEMA(closes, opts.EMAFast)
+			if err != nil {
+				return indicatorData{}, err
+			}
+			if ema := buildEMASnapshot(sanitizeSeries(series), lastClose, opts.LastN); ema != nil {
 				data.EMAFast = ema
 			}
 		}
 		if opts.EMAMid > 0 && len(closes) >= config.EMARequiredBars(opts.EMAMid) {
-			if ema := buildEMASnapshot(sanitizeSeries(talib.Ema(closes, opts.EMAMid)), lastClose, opts.LastN); ema != nil {
+			series, err := computer.ComputeEMA(closes, opts.EMAMid)
+			if err != nil {
+				return indicatorData{}, err
+			}
+			if ema := buildEMASnapshot(sanitizeSeries(series), lastClose, opts.LastN); ema != nil {
 				data.EMAMid = ema
 			}
 		}
 		if opts.EMASlow > 0 && len(closes) >= config.EMARequiredBars(opts.EMASlow) {
-			if ema := buildEMASnapshot(sanitizeSeries(talib.Ema(closes, opts.EMASlow)), lastClose, opts.LastN); ema != nil {
+			series, err := computer.ComputeEMA(closes, opts.EMASlow)
+			if err != nil {
+				return indicatorData{}, err
+			}
+			if ema := buildEMASnapshot(sanitizeSeries(series), lastClose, opts.LastN); ema != nil {
 				data.EMASlow = ema
 			}
 		}
 	}
 	if !opts.SkipRSI {
 		if opts.RSIPeriod > 0 && len(closes) >= config.RSIRequiredBars(opts.RSIPeriod) {
-			rsiSeries := sanitizeSeries(talib.Rsi(closes, opts.RSIPeriod))
+			rsiSeriesRaw, err := computer.ComputeRSI(closes, opts.RSIPeriod)
+			if err != nil {
+				return indicatorData{}, err
+			}
+			rsiSeries := sanitizeSeries(rsiSeriesRaw)
 			if rsi := buildRSISnapshot(rsiSeries, opts.LastN); rsi != nil {
 				data.RSI = rsi
 			}
 			// StochRSI is computed from the RSI series
 			if opts.StochRSIPeriod > 0 && len(rsiSeries) >= opts.StochRSIPeriod {
-				stochSeries := computeStochRSI(rsiSeries, opts.StochRSIPeriod)
+				stochSeries, err := computer.ComputeStochRSI(rsiSeries, opts.StochRSIPeriod)
+				if err != nil {
+					return indicatorData{}, err
+				}
 				if snap := buildStochRSISnapshot(sanitizeSeries(stochSeries)); snap != nil {
 					data.StochRSI = snap
 				}
@@ -230,45 +268,65 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 		}
 	}
 	if opts.ATRPeriod > 0 && len(closes) >= config.ATRRequiredBars(opts.ATRPeriod) {
-		if atr := buildATRSnapshot(sanitizeSeries(talib.Atr(highs, lows, closes, opts.ATRPeriod)), opts.LastN); atr != nil {
+		series, err := computer.ComputeATR(highs, lows, closes, opts.ATRPeriod)
+		if err != nil {
+			return indicatorData{}, err
+		}
+		if atr := buildATRSnapshot(sanitizeSeries(series), opts.LastN); atr != nil {
 			data.ATR = atr
 		}
 	}
-	if obv := buildOBVSnapshot(closes, volumes); obv != nil {
+	obvSeries, err := computer.ComputeOBV(closes, volumes)
+	if err != nil {
+		return indicatorData{}, err
+	}
+	if obv := buildOBVSnapshot(obvSeries); obv != nil {
 		data.OBV = obv
 	}
 	if !opts.SkipSTC {
 		requiredBars := config.STCRequiredBars(opts.STCFast, opts.STCSlow)
 		if len(closes) >= requiredBars {
-			stcSeries := computeSTCSeries(
+			stcSeries, err := computer.ComputeSTC(
 				closes,
 				opts.STCFast,
 				opts.STCSlow,
 				config.DefaultSTCKPeriod,
 				config.DefaultSTCDPeriod,
 			)
+			if err != nil {
+				return indicatorData{}, err
+			}
 			if stc := buildSTCSnapshot(sanitizeSeries(stcSeries), opts.LastN); stc != nil {
 				data.STC = stc
 			}
 		}
 	}
 	// Bollinger Bands
-	if opts.BBPeriod > 0 && len(closes) >= opts.BBPeriod {
-		upper, middle, lower := computeBollingerBands(closes, opts.BBPeriod, opts.BBMultiplier)
+	if opts.BBPeriod > 0 && len(closes) >= config.BBRequiredBars(opts.BBPeriod) {
+		upper, middle, lower, err := computer.ComputeBB(closes, opts.BBPeriod, opts.BBMultiplier, opts.BBMultiplier)
+		if err != nil {
+			return indicatorData{}, err
+		}
 		if snap := buildBBSnapshot(upper, middle, lower, lastClose); snap != nil {
 			data.BB = snap
 		}
 	}
 	// Choppiness Index
-	if opts.CHOPPeriod > 1 && len(closes) > opts.CHOPPeriod {
-		chopSeries := computeCHOP(highs, lows, closes, opts.CHOPPeriod)
+	if opts.CHOPPeriod > 1 && len(closes) >= config.CHOPRequiredBars(opts.CHOPPeriod) {
+		chopSeries, err := computer.ComputeCHOP(highs, lows, closes, opts.CHOPPeriod)
+		if err != nil {
+			return indicatorData{}, err
+		}
 		if snap := buildCHOPSnapshot(chopSeries); snap != nil {
 			data.CHOP = snap
 		}
 	}
 	// Aroon
-	if opts.AroonPeriod > 0 && len(highs) > opts.AroonPeriod {
-		aroonUp, aroonDown := computeAroon(highs, lows, opts.AroonPeriod)
+	if opts.AroonPeriod > 0 && len(highs) >= config.AroonRequiredBars(opts.AroonPeriod) {
+		aroonUp, aroonDown, err := computer.ComputeAroon(highs, lows, opts.AroonPeriod)
+		if err != nil {
+			return indicatorData{}, err
+		}
 		if snap := buildAroonSnapshot(aroonUp, aroonDown); snap != nil {
 			data.Aroon = snap
 		}
@@ -280,51 +338,73 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 			data.TDSequential = snap
 		}
 	}
-	return data
+	return data, nil
 }
 
-func normalizeIndicatorCompressOptions(opts IndicatorCompressOptions) IndicatorCompressOptions {
-	def := DefaultIndicatorCompressOptions()
-	if opts.EMAFast <= 0 {
-		opts.EMAFast = def.EMAFast
+func resolveIndicatorCompressOptions(opts IndicatorCompressOptions) (IndicatorCompressOptions, error) {
+	if opts == (IndicatorCompressOptions{}) {
+		return DefaultIndicatorCompressOptions(), nil
 	}
-	if opts.EMAMid <= 0 {
-		opts.EMAMid = def.EMAMid
+	if err := ValidateIndicatorCompressOptions(opts); err != nil {
+		return IndicatorCompressOptions{}, err
 	}
-	if opts.EMASlow <= 0 {
-		opts.EMASlow = def.EMASlow
+	return opts, nil
+}
+
+// ValidateIndicatorCompressOptions rejects partially invalid option sets.
+func ValidateIndicatorCompressOptions(opts IndicatorCompressOptions) error {
+	if !opts.SkipEMA {
+		if opts.EMAFast <= 0 {
+			return fmt.Errorf("indicator options ema_fast must be > 0 when EMA is enabled")
+		}
+		if opts.EMAMid <= 0 {
+			return fmt.Errorf("indicator options ema_mid must be > 0 when EMA is enabled")
+		}
+		if opts.EMASlow <= 0 {
+			return fmt.Errorf("indicator options ema_slow must be > 0 when EMA is enabled")
+		}
+		if !(opts.EMAFast < opts.EMAMid && opts.EMAMid < opts.EMASlow) {
+			return fmt.Errorf("indicator options must satisfy ema_fast < ema_mid < ema_slow")
+		}
 	}
-	if opts.RSIPeriod <= 0 {
-		opts.RSIPeriod = def.RSIPeriod
+	if !opts.SkipRSI {
+		if opts.RSIPeriod <= 0 {
+			return fmt.Errorf("indicator options rsi_period must be > 0 when RSI is enabled")
+		}
+		if opts.StochRSIPeriod <= 0 {
+			return fmt.Errorf("indicator options stoch_rsi_period must be > 0 when RSI is enabled")
+		}
 	}
 	if opts.ATRPeriod <= 0 {
-		opts.ATRPeriod = def.ATRPeriod
+		return fmt.Errorf("indicator options atr_period must be > 0")
 	}
-	if opts.STCFast <= 0 {
-		opts.STCFast = def.STCFast
+	if !opts.SkipSTC {
+		if opts.STCFast <= 0 {
+			return fmt.Errorf("indicator options stc_fast must be > 0 when STC is enabled")
+		}
+		if opts.STCSlow <= 0 {
+			return fmt.Errorf("indicator options stc_slow must be > 0 when STC is enabled")
+		}
+		if opts.STCFast >= opts.STCSlow {
+			return fmt.Errorf("indicator options stc_fast must be < stc_slow")
+		}
 	}
-	if opts.STCSlow <= 0 {
-		opts.STCSlow = def.STCSlow
-	}
-	if opts.BBPeriod <= 0 {
-		opts.BBPeriod = def.BBPeriod
+	if opts.BBPeriod <= 1 {
+		return fmt.Errorf("indicator options bb_period must be > 1")
 	}
 	if opts.BBMultiplier <= 0 {
-		opts.BBMultiplier = def.BBMultiplier
+		return fmt.Errorf("indicator options bb_multiplier must be > 0")
 	}
-	if opts.CHOPPeriod <= 0 {
-		opts.CHOPPeriod = def.CHOPPeriod
-	}
-	if opts.StochRSIPeriod <= 0 {
-		opts.StochRSIPeriod = def.StochRSIPeriod
+	if opts.CHOPPeriod <= 1 {
+		return fmt.Errorf("indicator options chop_period must be > 1")
 	}
 	if opts.AroonPeriod <= 0 {
-		opts.AroonPeriod = def.AroonPeriod
+		return fmt.Errorf("indicator options aroon_period must be > 0")
 	}
 	if opts.LastN <= 0 {
-		opts.LastN = def.LastN
+		return fmt.Errorf("indicator options last_n must be > 0")
 	}
-	return opts
+	return nil
 }
 
 func buildEMASnapshot(series []float64, price float64, tail int) *emaSnapshot {
@@ -377,7 +457,7 @@ func buildATRSnapshot(series []float64, tail int) *atrSnapshot {
 	return snap
 }
 
-func buildOBVSnapshot(closes, volumes []float64) *obvSnapshot {
+func computeOBVSeries(closes, volumes []float64) []float64 {
 	if len(closes) == 0 || len(volumes) != len(closes) {
 		return nil
 	}
@@ -395,14 +475,21 @@ func buildOBVSnapshot(closes, volumes []float64) *obvSnapshot {
 		}
 		obv[i] = obv[i-1] + dir*volumes[i]
 	}
-	last := obv[len(obv)-1]
+	return obv
+}
+
+func buildOBVSnapshot(series []float64) *obvSnapshot {
+	if len(series) == 0 {
+		return nil
+	}
+	last := series[len(series)-1]
 	snap := &obvSnapshot{Value: roundFloat(last, 4)}
-	window := len(obv)
+	window := len(series)
 	if window > 30 {
 		window = 30
 	}
 	if window > 1 {
-		base := obv[len(obv)-window]
+		base := series[len(series)-window]
 		if base != 0 {
 			change := (last - base) / base
 			snap.ChangeRate = floatPtr(roundFloat(change, 4))

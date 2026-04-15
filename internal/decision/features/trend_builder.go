@@ -10,7 +10,8 @@ import (
 
 // TrendCompressBuilder wraps BuildTrendCompressedInput to satisfy the TrendBuilder interface.
 type TrendCompressBuilder struct {
-	Options TrendCompressOptions
+	Options  TrendCompressOptions
+	Computer IndicatorComputer
 }
 
 func (b TrendCompressBuilder) BuildIndicator(_ context.Context, _ snapshot.MarketSnapshot, _ string, _ string) (IndicatorJSON, error) {
@@ -26,7 +27,7 @@ func (b TrendCompressBuilder) BuildTrend(_ context.Context, snap snapshot.Market
 	if opts == (TrendCompressOptions{}) {
 		opts = DefaultTrendCompressOptions()
 	}
-	input, err := BuildTrendCompressedInput(symbol, interval, candles, opts)
+	input, err := BuildTrendCompressedInputWithComputer(symbol, interval, candles, opts, b.Computer)
 	if err != nil {
 		return TrendJSON{}, err
 	}

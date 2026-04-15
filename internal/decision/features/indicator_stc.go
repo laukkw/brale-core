@@ -2,50 +2,12 @@ package features
 
 import (
 	"math"
-
-	talib "github.com/markcheno/go-talib"
 )
 
 type stcSnapshot struct {
 	Current float64   `json:"current"`
 	LastN   []float64 `json:"last_n,omitempty"`
 	State   string    `json:"state,omitempty"`
-}
-
-// computeSTCSeries keeps the STC math local instead of calling
-// cinar/indicator's Stc.Compute directly. We still use cinar for the official
-// IdlePeriod requirement, but its channel-based Compute path can block on our
-// finite slice inputs in tests and batch compression.
-func computeSTCSeries(closes []float64, fast, slow, kPeriod, dPeriod int) []float64 {
-	if len(closes) == 0 {
-		return nil
-	}
-	fastEMA := talibEma(closes, fast)
-	slowEMA := talibEma(closes, slow)
-	macd := make([]float64, len(closes))
-	for i := range closes {
-		macd[i] = fastEMA[i] - slowEMA[i]
-	}
-
-	kValues := rollingStochastic(macd, kPeriod)
-	dValues := rollingSMA(kValues, dPeriod)
-	stc := make([]float64, len(closes))
-	for i := range closes {
-		switch {
-		case math.IsNaN(kValues[i]), math.IsInf(kValues[i], 0):
-			stc[i] = math.NaN()
-		case math.IsNaN(dValues[i]), math.IsInf(dValues[i], 0):
-			stc[i] = math.NaN()
-		default:
-			denom := dValues[i] - kValues[i]
-			if math.Abs(denom) <= 1e-12 {
-				stc[i] = math.NaN()
-				continue
-			}
-			stc[i] = clampFloat64(100*(macd[i]-kValues[i])/denom, 0, 100)
-		}
-	}
-	return stc
 }
 
 func buildSTCSnapshot(series []float64, tail int) *stcSnapshot {
@@ -135,8 +97,4 @@ func clampFloat64(v, lo, hi float64) float64 {
 		return hi
 	}
 	return v
-}
-
-func talibEma(series []float64, period int) []float64 {
-	return talib.Ema(series, period)
 }

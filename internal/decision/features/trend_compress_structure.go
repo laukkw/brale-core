@@ -7,8 +7,6 @@ import (
 
 	"brale-core/internal/pkg/numutil"
 	"brale-core/internal/snapshot"
-
-	talib "github.com/markcheno/go-talib"
 )
 
 func selectStructurePoints(candles []snapshot.Candle, highs, lows, rsi, atr []float64, opts TrendCompressOptions) []TrendStructurePoint {
@@ -193,7 +191,7 @@ func trendSlopeState(norm float64) string {
 	}
 }
 
-func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []float64, gc TrendGlobalContext, points []TrendStructurePoint, opts TrendCompressOptions) []TrendStructureCandidate {
+func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []float64, gc TrendGlobalContext, points []TrendStructurePoint, bbUpper, bbLower []float64, opts TrendCompressOptions) []TrendStructureCandidate {
 	n := len(candles)
 	if n == 0 {
 		return nil
@@ -235,9 +233,8 @@ func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []floa
 	addEMA(gc.EMA50, "ema50", opts.EMA50Period)
 	addEMA(gc.EMA200, "ema200", opts.EMA200Period)
 
-	if opts.VolumeMAPeriod > 0 && n >= opts.VolumeMAPeriod {
-		upper, _, lower := talib.BBands(extractCloses(candles), opts.VolumeMAPeriod, 2, 2, talib.SMA)
-		if u := lastNonZero(upper); u > 0 {
+	if len(bbUpper) > 0 || len(bbLower) > 0 {
+		if u := lastNonZero(bbUpper); u > 0 {
 			cands = append(cands, TrendStructureCandidate{
 				Price:  roundFloat(u, 4),
 				Type:   "band_upper",
@@ -245,7 +242,7 @@ func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []floa
 				Window: opts.VolumeMAPeriod,
 			})
 		}
-		if l := lastNonZero(lower); l > 0 {
+		if l := lastNonZero(bbLower); l > 0 {
 			cands = append(cands, TrendStructureCandidate{
 				Price:  roundFloat(l, 4),
 				Type:   "band_lower",
@@ -277,14 +274,6 @@ func buildStructureCandidates(candles []snapshot.Candle, highs, lows, atr []floa
 	}
 
 	return pruneStructureCandidates(dedupCandidates(cands, atrLatest, opts), candles[n-1].Close, 3)
-}
-
-func extractCloses(candles []snapshot.Candle) []float64 {
-	out := make([]float64, 0, len(candles))
-	for _, c := range candles {
-		out = append(out, c.Close)
-	}
-	return out
 }
 
 func dedupCandidates(in []TrendStructureCandidate, atr float64, opts TrendCompressOptions) []TrendStructureCandidate {

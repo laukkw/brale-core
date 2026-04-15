@@ -11,8 +11,6 @@ import (
 	"brale-core/internal/pkg/pattern/evidence"
 	"brale-core/internal/pkg/pattern/geometry"
 	"brale-core/internal/snapshot"
-
-	talib "github.com/markcheno/go-talib"
 )
 
 // Trend compression payload migrated from brale/internal/decision/trend_compress.go.
@@ -194,7 +192,11 @@ type TrendFVG struct {
 }
 
 func BuildTrendCompressedJSON(symbol, interval string, candles []snapshot.Candle, opts TrendCompressOptions) (string, error) {
-	payload, err := BuildTrendCompressedInput(symbol, interval, candles, opts)
+	return BuildTrendCompressedJSONWithComputer(symbol, interval, candles, opts, nil)
+}
+
+func BuildTrendCompressedJSONWithComputer(symbol, interval string, candles []snapshot.Candle, opts TrendCompressOptions, computer IndicatorComputer) (string, error) {
+	payload, err := BuildTrendCompressedInputWithComputer(symbol, interval, candles, opts, computer)
 	if err != nil {
 		return "", err
 	}
@@ -213,10 +215,15 @@ func BuildTrendCompressedJSON(symbol, interval string, candles []snapshot.Candle
 }
 
 func BuildTrendCompressedInput(symbol, interval string, candles []snapshot.Candle, opts TrendCompressOptions) (TrendCompressedInput, error) {
+	return BuildTrendCompressedInputWithComputer(symbol, interval, candles, opts, nil)
+}
+
+func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []snapshot.Candle, opts TrendCompressOptions, computer IndicatorComputer) (TrendCompressedInput, error) {
 	if len(candles) == 0 {
 		return TrendCompressedInput{}, fmt.Errorf("no candles")
 	}
 	opts = normalizeTrendCompressOptions(opts)
+	computer = defaultIndicatorComputer(computer)
 	n := len(candles)
 
 	closes := make([]float64, n)
@@ -247,10 +254,18 @@ func BuildTrendCompressedInput(symbol, interval string, candles []snapshot.Candl
 	var rsiSeries []float64
 	var atrSeries []float64
 	if opts.RSIPeriod > 0 && len(closes) >= config.RSIRequiredBars(opts.RSIPeriod) {
-		rsiSeries = talib.Rsi(closes, opts.RSIPeriod)
+		series, err := computer.ComputeRSI(closes, opts.RSIPeriod)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		rsiSeries = series
 	}
 	if opts.ATRPeriod > 0 && len(closes) >= config.ATRRequiredBars(opts.ATRPeriod) {
-		atrSeries = talib.Atr(highs, lows, closes, opts.ATRPeriod)
+		series, err := computer.ComputeATR(highs, lows, closes, opts.ATRPeriod)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		atrSeries = series
 	}
 
 	meta := TrendCompressedMeta{
@@ -267,22 +282,44 @@ func BuildTrendCompressedInput(symbol, interval string, candles []snapshot.Candl
 	gc.NormalizedSlope = roundFloat(normalizedSlope(closes), 4)
 	gc.SlopeState = trendSlopeState(gc.NormalizedSlope)
 	if opts.EMA20Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA20Period) {
-		if v := lastNonZero(talib.Ema(closes, opts.EMA20Period)); v > 0 {
+		series, err := computer.ComputeEMA(closes, opts.EMA20Period)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		if v := lastNonZero(series); v > 0 {
 			val := roundFloat(v, 4)
 			gc.EMA20 = &val
 		}
 	}
 	if opts.EMA50Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA50Period) {
-		if v := lastNonZero(talib.Ema(closes, opts.EMA50Period)); v > 0 {
+		series, err := computer.ComputeEMA(closes, opts.EMA50Period)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		if v := lastNonZero(series); v > 0 {
 			val := roundFloat(v, 4)
 			gc.EMA50 = &val
 		}
 	}
 	if opts.EMA200Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA200Period) {
-		if v := lastNonZero(talib.Ema(closes, opts.EMA200Period)); v > 0 {
+		series, err := computer.ComputeEMA(closes, opts.EMA200Period)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		if v := lastNonZero(series); v > 0 {
 			val := roundFloat(v, 4)
 			gc.EMA200 = &val
 		}
+	}
+	var bbUpper []float64
+	var bbLower []float64
+	if opts.VolumeMAPeriod > 0 && n >= opts.VolumeMAPeriod {
+		upper, _, lower, err := computer.ComputeBB(closes, opts.VolumeMAPeriod, 2, 2)
+		if err != nil {
+			return TrendCompressedInput{}, err
+		}
+		bbUpper = upper
+		bbLower = lower
 	}
 
 	var superTrend *TrendSuperTrendSnapshot
@@ -295,7 +332,7 @@ func BuildTrendCompressedInput(symbol, interval string, candles []snapshot.Candl
 	}
 
 	structurePoints := selectStructurePoints(candles, highs, lows, rsiSeries, atrSeries, opts)
-	candidates := buildStructureCandidates(candles, highs, lows, atrSeries, gc, structurePoints, opts)
+	candidates := buildStructureCandidates(candles, highs, lows, atrSeries, gc, structurePoints, bbUpper, bbLower, opts)
 	recentCandles := buildRecentCandles(candles, rsiSeries, opts)
 
 	patternEvidence := evidence.Combine(

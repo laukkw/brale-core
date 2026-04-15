@@ -9,7 +9,8 @@ import (
 )
 
 type DefaultIndicatorBuilder struct {
-	Options IndicatorCompressOptions
+	Options  IndicatorCompressOptions
+	Computer IndicatorComputer
 }
 
 func (b DefaultIndicatorBuilder) BuildIndicator(_ context.Context, snap snapshot.MarketSnapshot, symbol, interval string) (IndicatorJSON, error) {
@@ -17,7 +18,7 @@ func (b DefaultIndicatorBuilder) BuildIndicator(_ context.Context, snap snapshot
 	if err != nil {
 		return IndicatorJSON{}, err
 	}
-	raw, err := BuildIndicatorCompressedJSON(symbol, interval, candles, b.Options)
+	raw, err := BuildIndicatorCompressedJSONWithComputer(symbol, interval, candles, b.Options, b.Computer)
 	if err != nil {
 		return IndicatorJSON{}, err
 	}
@@ -25,7 +26,8 @@ func (b DefaultIndicatorBuilder) BuildIndicator(_ context.Context, snap snapshot
 }
 
 type DefaultTrendBuilder struct {
-	Options TrendCompressOptions
+	Options  TrendCompressOptions
+	Computer IndicatorComputer
 }
 
 func (b DefaultTrendBuilder) BuildTrend(_ context.Context, snap snapshot.MarketSnapshot, symbol, interval string) (TrendJSON, error) {
@@ -33,7 +35,7 @@ func (b DefaultTrendBuilder) BuildTrend(_ context.Context, snap snapshot.MarketS
 	if err != nil {
 		return TrendJSON{}, err
 	}
-	raw, err := BuildTrendCompressedJSON(symbol, interval, candles, b.Options)
+	raw, err := BuildTrendCompressedJSONWithComputer(symbol, interval, candles, b.Options, b.Computer)
 	if err != nil {
 		return TrendJSON{}, err
 	}
