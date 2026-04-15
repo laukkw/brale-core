@@ -9,5 +9,7 @@ func llmCmd() *cobra.Command {
 	}
 	cmd.AddCommand(probeLLMCmd())
 	cmd.AddCommand(llmRoundsCmd())
+	cmd.AddCommand(llmEvalCmd())
+	cmd.AddCommand(llmPromptsCmd())
 	return cmd
 }

@@ -48,6 +48,30 @@ structure   OK    model=gpt-4o   endpoint=https://api.openai.com/v1
 mechanics   FAIL  model=gpt-4o   endpoint=https://api.openai.com/v1  err=timeout
 #+end_src
 
+评估最近的 LLM rounds 元数据质量：
+
+#+begin_src bash
+bralectl llm eval [--symbol BTCUSDT] [--limit 20] [--db postgres://...]
+#+end_src
+
+| 参数 | 默认值 | 说明 |
+|------+---------+------|
+| =--symbol= | （空） | 只评估指定交易对 |
+| =--limit= | =20= | 最多评估多少条 rounds |
+| =--db= | （空） | PostgreSQL DSN |
+
+查看 prompt registry：
+
+#+begin_src bash
+bralectl llm prompts list [--role decision] [--active-only] [--db postgres://...]
+#+end_src
+
+| 参数 | 默认值 | 说明 |
+|------+---------+------|
+| =--role= | （空） | 按角色过滤 prompt |
+| =--active-only= | =false= | 只显示激活中的 prompt |
+| =--db= | （空） | PostgreSQL DSN |
+
 *** add-symbol — 添加交易币种
 
 从现有币种模板生成配置文件，注册新的交易对。
@@ -318,6 +342,30 @@ indicator   OK    model=gpt-4o   endpoint=https://api.openai.com/v1
 structure   OK    model=gpt-4o   endpoint=https://api.openai.com/v1
 mechanics   FAIL  model=gpt-4o   endpoint=https://api.openai.com/v1  err=timeout
 #+end_src
+
+Evaluate recent LLM round metadata quality:
+
+#+begin_src bash
+bralectl llm eval [--symbol BTCUSDT] [--limit 20] [--db postgres://...]
+#+end_src
+
+| Flag | Default | Description |
+|------+---------+-------------|
+| =--symbol= | (empty) | Filter rounds by trading pair |
+| =--limit= | =20= | Maximum number of rounds to evaluate |
+| =--db= | (empty) | PostgreSQL DSN |
+
+Inspect the prompt registry:
+
+#+begin_src bash
+bralectl llm prompts list [--role decision] [--active-only] [--db postgres://...]
+#+end_src
+
+| Flag | Default | Description |
+|------+---------+-------------|
+| =--role= | (empty) | Filter prompt entries by role |
+| =--active-only= | =false= | Show only active prompt entries |
+| =--db= | (empty) | PostgreSQL DSN |
 
 *** add-symbol — Register a Trading Pair
 
