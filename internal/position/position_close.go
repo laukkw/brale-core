@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -135,6 +136,15 @@ func (s *PositionService) logCloseIntent(ctx context.Context, pos store.Position
 }
 
 func (s *PositionService) submitCloseOrder(ctx context.Context, pos store.PositionRecord, intentKind string, closeQty float64, clientOrderID string) (execution.PlaceOrderResp, error) {
+	ctx, span := braleOtel.Tracer("brale-core/execution").Start(ctx, "brale.execute.place_order")
+	span.SetAttributes(
+		attribute.String("execution.order_kind", intentKind),
+		attribute.String("execution.symbol", pos.Symbol),
+		attribute.String("execution.side", pos.Side),
+		attribute.String("execution.position_id", pos.PositionID),
+	)
+	defer span.End()
+
 	kind := execution.OrderClose
 	if intentKind == "REDUCE" {
 		kind = execution.OrderReduce
@@ -150,6 +160,7 @@ func (s *PositionService) submitCloseOrder(ctx context.Context, pos store.Positi
 		OrderType:     "market",
 	})
 	if err == nil {
+		span.SetAttributes(attribute.String("execution.external_order_id", strings.TrimSpace(resp.ExternalID)))
 		logging.FromContext(ctx).Named("execution").Info("close order submitted",
 			zap.String("position_id", pos.PositionID),
 			zap.String("symbol", pos.Symbol),
@@ -159,6 +170,8 @@ func (s *PositionService) submitCloseOrder(ctx context.Context, pos store.Positi
 		)
 		return resp, nil
 	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 	s.logCloseSubmitError(ctx, pos, clientOrderID, intentKind, err)
 	return resp, err
 }

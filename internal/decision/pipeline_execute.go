@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,14 @@ const (
 )
 
 func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, intervals []string, limit int, acct execution.AccountState, risk execution.RiskParams, opts RunOptions) ([]PersistResult, error) {
+	ctx, span := braleOtel.Tracer("brale-core/pipeline").Start(ctx, "brale.pipeline.run_once")
+	span.SetAttributes(
+		attribute.Int("pipeline.symbol_count", len(symbols)),
+		attribute.Int("pipeline.interval_count", len(intervals)),
+		attribute.Int("pipeline.limit", limit),
+	)
+	defer span.End()
+
 	logger := logging.FromContext(ctx).Named("pipeline")
 	start := time.Now()
 	logger.Debug("pipeline run start",
@@ -37,12 +46,16 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		zap.Int("limit", limit),
 	)
 	if err := p.validate(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		logger.Error("pipeline validate failed", zap.Error(err))
 		p.notifyError(ctx, err)
 		return nil, err
 	}
 	roundID, err := p.newRoundID()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		logger.Error("pipeline round init failed", zap.Error(err))
 		p.notifyError(ctx, err)
 		return nil, err
@@ -53,6 +66,8 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 	var recorder *llmround.Recorder
 	decisionCtx, err := p.resolveDecisionContexts(ctx, symbols)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		logger.Error("resolve decision context failed", zap.Error(err))
 		p.notifyError(ctx, err)
 		roundOutcome = "context_error"
@@ -103,6 +118,8 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 	runOpts = p.enrichRunOptions(runOpts, runnableSymbols, modeBySymbol)
 	results, snap, comp, err := p.Runner.RunOnceWithOptions(ctx, runnableSymbols, intervals, limit, acct, risk, runOpts)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		logger.Error("pipeline runner failed", zap.Error(err))
 		p.notifyError(ctx, err)
 		roundOutcome = "runner_error"
@@ -139,6 +156,8 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 		}
 		pr, err := p.handleSymbol(ctx, *res, snapID, snap, comp, state, posID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			logger.Error("persist error", zap.Error(err), zap.String("symbol", res.Symbol))
 			roundOutcome = "persist_error"
 			braleOtel.PipelineErrorsTotal.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("phase", "persist")))
@@ -176,6 +195,11 @@ func (p *Pipeline) runOnceWithOptions(ctx context.Context, symbols []string, int
 			braleOtel.PipelineGateDecisions.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("action", action)))
 		}
 	}
+	span.SetAttributes(
+		attribute.String("pipeline.outcome", roundOutcome),
+		attribute.Int("pipeline.result_count", len(out)),
+		attribute.Int64("pipeline.latency_ms", latencyMs),
+	)
 	return out, nil
 }
 

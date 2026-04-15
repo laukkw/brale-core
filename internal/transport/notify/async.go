@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	braleOtel "brale-core/internal/otel"
 	"brale-core/internal/decision/decisionfmt"
 	"brale-core/internal/jobs"
 	"brale-core/internal/notifyport"
+	braleOtel "brale-core/internal/otel"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -54,11 +55,23 @@ func (m *AsyncManager) SetClient(client *river.Client[pgx.Tx]) {
 }
 
 func (m *AsyncManager) enqueue(ctx context.Context, eventType, symbol string, payload any) error {
+	ctx, span := braleOtel.Tracer("brale-core/notify").Start(ctx, "brale.notify.enqueue")
+	span.SetAttributes(
+		attribute.String("notify.event_type", eventType),
+		attribute.String("notify.symbol", symbol),
+	)
+	defer span.End()
+
 	if m.client == nil {
-		return fmt.Errorf("river client is required for async notifications")
+		err := fmt.Errorf("river client is required for async notifications")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("marshal async notify payload: %w", err)
 	}
 	args := jobs.NotifyRenderArgs{
@@ -72,6 +85,8 @@ func (m *AsyncManager) enqueue(ctx context.Context, eventType, symbol string, pa
 		_, err = m.client.Insert(ctx, args, nil)
 	}
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("enqueue async notification: %w", err)
 	}
 	braleOtel.NotifyEnqueueTotal.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("event_type", eventType)))
@@ -129,10 +144,17 @@ func (m *AsyncManager) SendTradeCloseSummary(ctx context.Context, notice TradeCl
 }
 
 func (m *AsyncManager) Render(ctx context.Context, eventType, _ string, payload json.RawMessage) (json.RawMessage, error) {
+	ctx, span := braleOtel.Tracer("brale-core/notify").Start(ctx, "brale.notify.render")
+	span.SetAttributes(attribute.String("notify.event_type", eventType))
+	defer span.End()
 	return payload, nil
 }
 
 func (m *AsyncManager) Deliver(ctx context.Context, eventType, _ string, rendered json.RawMessage) error {
+	ctx, span := braleOtel.Tracer("brale-core/notify").Start(ctx, "brale.notify.deliver")
+	span.SetAttributes(attribute.String("notify.event_type", eventType))
+	defer span.End()
+
 	if m.sync == nil {
 		return nil
 	}
@@ -184,9 +206,14 @@ func (m *AsyncManager) Deliver(ctx context.Context, eventType, _ string, rendere
 			err = m.sync.SendTradeCloseSummary(ctx, notice)
 		}
 	default:
-		return fmt.Errorf("unsupported notify event type: %s", eventType)
+		err = fmt.Errorf("unsupported notify event type: %s", eventType)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		braleOtel.NotifyFailTotal.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("event_type", eventType)))
 		return err
 	}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -95,11 +96,25 @@ func (s *PositionService) OpenFromPlan(ctx context.Context, plan execution.Execu
 }
 
 func (s *PositionService) SubmitOpenFromPlan(ctx context.Context, plan execution.ExecutionPlan, triggerPrice float64) (execution.PlaceOrderResp, error) {
+	ctx, span := braleOtel.Tracer("brale-core/execution").Start(ctx, "brale.execute.place_order")
+	span.SetAttributes(
+		attribute.String("execution.order_kind", string(execution.OrderOpen)),
+		attribute.String("execution.symbol", plan.Symbol),
+		attribute.String("execution.side", plan.Direction),
+	)
+	defer span.End()
+
 	if s.Store == nil || s.Executor == nil {
-		return execution.PlaceOrderResp{}, fmt.Errorf("store/executor is required")
+		err := fmt.Errorf("store/executor is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return execution.PlaceOrderResp{}, err
 	}
 	if plan.StopLoss <= 0 {
-		return execution.PlaceOrderResp{}, fmt.Errorf("stop_loss is required")
+		err := fmt.Errorf("stop_loss is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return execution.PlaceOrderResp{}, err
 	}
 	if s.PlanCache != nil {
 		if entry, ok := s.PlanCache.GetEntry(plan.Symbol); ok && entry != nil {
@@ -147,6 +162,8 @@ func (s *PositionService) SubmitOpenFromPlan(ctx context.Context, plan execution
 		Leverage:      plan.Leverage,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		logger := logging.FromContext(ctx).Named("execution")
 		logger.Error("order submit failed",
 			zap.String("position_id", plan.PositionID),
@@ -178,6 +195,7 @@ func (s *PositionService) SubmitOpenFromPlan(ctx context.Context, plan execution
 	if s.PlanCache != nil {
 		s.PlanCache.UpdateOrder(plan.Symbol, strings.TrimSpace(resp.ExternalID), clientOrderID, time.Now().UnixMilli())
 	}
+	span.SetAttributes(attribute.String("execution.external_order_id", strings.TrimSpace(resp.ExternalID)))
 	return resp, nil
 }
 
