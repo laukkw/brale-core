@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"brale-core/internal/pgstore/queries"
 	"brale-core/internal/store"
 
 	"github.com/jackc/pgx/v5"
@@ -47,41 +48,29 @@ func (s *PGStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) e
 }
 
 func (s *PGStore) FindLLMRound(ctx context.Context, id string) (store.LLMRoundRecord, bool, error) {
-	row := s.queryRow(ctx, llmRoundSelectSQL+` WHERE id = $1`, id)
-	rec, err := scanLLMRoundRow(row)
+	rec, err := s.sqlc(ctx).FindLLMRound(ctx, id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return store.LLMRoundRecord{}, false, nil
 		}
 		return store.LLMRoundRecord{}, false, err
 	}
-	return rec, true, nil
+	return mapLLMRound(rec), true, nil
 }
 
 func (s *PGStore) ListLLMRounds(ctx context.Context, symbol string, limit int) ([]store.LLMRoundRecord, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	var rows pgx.Rows
-	var err error
-	if symbol != "" {
-		rows, err = s.query(ctx, llmRoundSelectSQL+` WHERE symbol = $1 ORDER BY started_at DESC LIMIT $2`, symbol, limit)
-	} else {
-		rows, err = s.query(ctx, llmRoundSelectSQL+` ORDER BY started_at DESC LIMIT $1`, limit)
-	}
+	rows, err := s.sqlc(ctx).ListLLMRoundsLatest(ctx, queries.ListLLMRoundsLatestParams{Column1: symbol, Limit: int32(limit)})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []store.LLMRoundRecord
-	for rows.Next() {
-		rec, err := scanLLMRoundRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
+	out := make([]store.LLMRoundRecord, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapLLMRound(row))
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 const llmRoundSelectSQL = `SELECT id, snapshot_id, symbol, round_type, started_at, finished_at,

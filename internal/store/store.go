@@ -45,6 +45,20 @@ type TimelineQueryStore interface {
 	ListDistinctSnapshotIDs(ctx context.Context, symbol string, start, end int64) ([]uint, error)
 }
 
+type GateEventCursor struct {
+	CreatedAt time.Time
+	ID        uint64
+}
+
+type GateEventPage struct {
+	Items []GateEventRecord
+	Next  *GateEventCursor
+}
+
+type GateEventPageStore interface {
+	ListGateEventsPage(ctx context.Context, symbol string, cursor *GateEventCursor, limit int) (GateEventPage, error)
+}
+
 type SymbolCatalogQueryStore interface {
 	ListSymbols(ctx context.Context) ([]string, error)
 }
@@ -68,6 +82,10 @@ type LLMRoundStore interface {
 	SaveLLMRound(ctx context.Context, rec *LLMRoundRecord) error
 	FindLLMRound(ctx context.Context, id string) (LLMRoundRecord, bool, error)
 	ListLLMRounds(ctx context.Context, symbol string, limit int) ([]LLMRoundRecord, error)
+}
+
+type TxRunner interface {
+	WithinTx(ctx context.Context, fn func(context.Context) error) error
 }
 
 type PromptRegistryStore interface {

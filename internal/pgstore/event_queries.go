@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"brale-core/internal/decision/decisionutil"
+	"brale-core/internal/pgstore/queries"
 	"brale-core/internal/store"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ─── TimelineQueryStore ──────────────────────────────────────────
@@ -131,23 +133,54 @@ func (s *PGStore) ListProviderEventsByTimeRange(ctx context.Context, symbol stri
 }
 
 func (s *PGStore) ListGateEvents(ctx context.Context, symbol string, limit int) ([]store.GateEventRecord, error) {
+	page, err := s.ListGateEventsPage(ctx, symbol, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+	return page.Items, nil
+}
+
+func (s *PGStore) ListGateEventsPage(ctx context.Context, symbol string, cursor *store.GateEventCursor, limit int) (store.GateEventPage, error) {
 	symbol = decisionutil.NormalizeSymbol(symbol)
 	if symbol == "" {
-		return nil, fmt.Errorf("symbol is required")
+		return store.GateEventPage{}, fmt.Errorf("symbol is required")
 	}
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.query(ctx,
-		`SELECT id, snapshot_id, round_id, symbol, timestamp,
-		        global_tradeable, decision_action, grade, gate_reason, direction,
-		        provider_refs_json, rule_hit_json, derived_json,
-		        fingerprint, system_config_hash, strategy_config_hash, source_version, created_at
-		 FROM gate_events WHERE symbol = $1 ORDER BY timestamp DESC LIMIT $2`, symbol, limit)
-	if err != nil {
-		return nil, err
+	var (
+		rows []queries.GateEvent
+		err  error
+	)
+	if cursor != nil && !cursor.CreatedAt.IsZero() && cursor.ID > 0 {
+		ts := pgtype.Timestamptz{Time: cursor.CreatedAt.UTC(), Valid: true}
+		rows, err = s.sqlc(ctx).ListGateEventsBefore(ctx, queries.ListGateEventsBeforeParams{
+			Symbol:    symbol,
+			CreatedAt: ts,
+			ID:        int64(cursor.ID),
+			Limit:     int32(limit + 1),
+		})
+	} else {
+		rows, err = s.sqlc(ctx).ListGateEventsLatest(ctx, queries.ListGateEventsLatestParams{
+			Symbol: symbol,
+			Limit:  int32(limit + 1),
+		})
 	}
-	return collectGateRows(rows)
+	if err != nil {
+		return store.GateEventPage{}, err
+	}
+	items := make([]store.GateEventRecord, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, mapGateEvent(row))
+	}
+	page := store.GateEventPage{Items: items}
+	if len(items) <= limit {
+		return page, nil
+	}
+	last := items[limit]
+	page.Next = &store.GateEventCursor{CreatedAt: last.CreatedAt.UTC(), ID: uint64(last.ID)}
+	page.Items = items[:limit]
+	return page, nil
 }
 
 func (s *PGStore) ListGateEventsByTimeRange(ctx context.Context, symbol string, start, end int64) ([]store.GateEventRecord, error) {

@@ -1,9 +1,11 @@
 -- 001_init.up.sql: PostgreSQL/TimescaleDB schema for brale-core.
 -- Replaces the former SQLite/GORM auto-migration.
 
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
 -- ─── agent_events ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS agent_events (
-    id              BIGSERIAL PRIMARY KEY,
+    id              BIGSERIAL    NOT NULL,
     snapshot_id     BIGINT       NOT NULL,
     round_id        TEXT,
     symbol          TEXT         NOT NULL,
@@ -27,14 +29,17 @@ CREATE TABLE IF NOT EXISTS agent_events (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_agent_events_symbol_ts   ON agent_events (symbol, timestamp DESC);
-CREATE INDEX idx_agent_events_snapshot    ON agent_events (symbol, snapshot_id);
-CREATE INDEX idx_agent_events_fingerprint ON agent_events (fingerprint);
-CREATE INDEX idx_agent_events_round       ON agent_events (round_id) WHERE round_id IS NOT NULL;
+SELECT create_hypertable('agent_events', 'created_at', if_not_exists => TRUE, migrate_data => TRUE);
+CREATE UNIQUE INDEX idx_agent_events_created_id ON agent_events (created_at, id);
+CREATE INDEX idx_agent_events_symbol_created    ON agent_events (symbol, created_at DESC, id DESC);
+CREATE INDEX idx_agent_events_symbol_ts         ON agent_events (symbol, timestamp DESC);
+CREATE INDEX idx_agent_events_snapshot          ON agent_events (symbol, snapshot_id);
+CREATE INDEX idx_agent_events_fingerprint       ON agent_events (fingerprint);
+CREATE INDEX idx_agent_events_round             ON agent_events (round_id) WHERE round_id IS NOT NULL;
 
 -- ─── provider_events ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS provider_events (
-    id              BIGSERIAL PRIMARY KEY,
+    id              BIGSERIAL    NOT NULL,
     snapshot_id     BIGINT       NOT NULL,
     round_id        TEXT,
     symbol          TEXT         NOT NULL,
@@ -60,14 +65,17 @@ CREATE TABLE IF NOT EXISTS provider_events (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_provider_events_symbol_ts   ON provider_events (symbol, timestamp DESC);
-CREATE INDEX idx_provider_events_snapshot    ON provider_events (symbol, snapshot_id);
-CREATE INDEX idx_provider_events_fingerprint ON provider_events (fingerprint);
-CREATE INDEX idx_provider_events_round       ON provider_events (round_id) WHERE round_id IS NOT NULL;
+SELECT create_hypertable('provider_events', 'created_at', if_not_exists => TRUE, migrate_data => TRUE);
+CREATE UNIQUE INDEX idx_provider_events_created_id ON provider_events (created_at, id);
+CREATE INDEX idx_provider_events_symbol_created    ON provider_events (symbol, created_at DESC, id DESC);
+CREATE INDEX idx_provider_events_symbol_ts         ON provider_events (symbol, timestamp DESC);
+CREATE INDEX idx_provider_events_snapshot          ON provider_events (symbol, snapshot_id);
+CREATE INDEX idx_provider_events_fingerprint       ON provider_events (fingerprint);
+CREATE INDEX idx_provider_events_round             ON provider_events (round_id) WHERE round_id IS NOT NULL;
 
 -- ─── gate_events ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS gate_events (
-    id              BIGSERIAL PRIMARY KEY,
+    id              BIGSERIAL    NOT NULL,
     snapshot_id     BIGINT       NOT NULL,
     round_id        TEXT,
     symbol          TEXT         NOT NULL,
@@ -87,9 +95,12 @@ CREATE TABLE IF NOT EXISTS gate_events (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_gate_events_symbol_ts   ON gate_events (symbol, timestamp DESC);
-CREATE INDEX idx_gate_events_snapshot    ON gate_events (symbol, snapshot_id);
-CREATE INDEX idx_gate_events_fingerprint ON gate_events (fingerprint);
+SELECT create_hypertable('gate_events', 'created_at', if_not_exists => TRUE, migrate_data => TRUE);
+CREATE UNIQUE INDEX idx_gate_events_created_id ON gate_events (created_at, id);
+CREATE INDEX idx_gate_events_symbol_created    ON gate_events (symbol, created_at DESC, id DESC);
+CREATE INDEX idx_gate_events_symbol_ts         ON gate_events (symbol, timestamp DESC);
+CREATE INDEX idx_gate_events_snapshot          ON gate_events (symbol, snapshot_id);
+CREATE INDEX idx_gate_events_fingerprint       ON gate_events (fingerprint);
 
 -- ─── risk_plan_history ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS risk_plan_history (
@@ -195,6 +206,7 @@ CREATE TABLE IF NOT EXISTS llm_rounds (
 );
 
 CREATE INDEX idx_llm_rounds_symbol   ON llm_rounds (symbol, started_at DESC);
+CREATE INDEX idx_llm_rounds_started  ON llm_rounds (started_at DESC, id DESC);
 CREATE INDEX idx_llm_rounds_snapshot ON llm_rounds (snapshot_id);
 
 -- ─── prompt_registry (task 66) ───────────────────────────────────
@@ -212,3 +224,7 @@ CREATE TABLE IF NOT EXISTS prompt_registry (
 );
 
 CREATE INDEX idx_prompt_registry_active ON prompt_registry (role, stage) WHERE active = true;
+
+SELECT add_retention_policy('agent_events', INTERVAL '180 days', if_not_exists => TRUE);
+SELECT add_retention_policy('provider_events', INTERVAL '180 days', if_not_exists => TRUE);
+SELECT add_retention_policy('gate_events', INTERVAL '180 days', if_not_exists => TRUE);
