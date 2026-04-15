@@ -163,14 +163,15 @@ bralectl backtest rules --symbol BTCUSDT \
 | =--from= / =--to= | （必填） | 日期范围，支持 =YYYY-MM-DD= 或 RFC 3339 |
 | =--system= | =configs/system.toml= | system.toml 路径 |
 | =--index= | =configs/symbols-index.toml= | symbols-index.toml 路径 |
-| =--db= | 从 system.toml 读取 | SQLite 数据库路径 |
+| =--db= | 从 system.toml 读取 | PostgreSQL DSN |
 | =--format= | =text= | 输出格式：=text=, =json=, =html= |
 | =--output= | stdout | 报告输出文件路径（=html= 格式必须指定） |
 
 *** memory — 记忆系统管理
 
 管理语义规则（Semantic Rule）存储，查看情景式交易反思（Episodic Reflection）。
-所有 memory 子命令支持 =--db= 参数指定数据库路径（默认 =data/brale/brale.db=）。
+所有 memory 子命令支持 =--db= 参数指定 PostgreSQL DSN。
+当前未提供 =--system=；留空时会回退到本地默认 DSN。
 
 | 子命令 | 说明 |
 |--------+------|
@@ -435,14 +436,15 @@ bralectl backtest rules --symbol BTCUSDT \
 | =--from= / =--to= | (required) | Date range — =YYYY-MM-DD= or RFC 3339 |
 | =--system= | =configs/system.toml= | System config path |
 | =--index= | =configs/symbols-index.toml= | Symbol index path |
-| =--db= | from system config | SQLite database path |
+| =--db= | from system config | PostgreSQL DSN |
 | =--format= | =text= | Output format: =text=, =json=, or =html= |
 | =--output= | stdout | Write report to file (required for =html= format) |
 
 *** memory — Memory System Management
 
 Manage the semantic rule store and view episodic trade reflections.
-All memory subcommands accept =--db= to specify the database path (default =data/brale/brale.db=).
+All memory subcommands accept =--db= to specify the PostgreSQL DSN.
+There is currently no =--system= flag here; when omitted, the command falls back to a local default DSN.
 
 | Subcommand | Description |
 |------------+-------------|

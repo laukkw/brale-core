@@ -4,17 +4,48 @@
 
 ** Docker 服务
 
-docker-compose.yml 默认编排 3 个服务：
+docker-compose.yml 默认运行 3 个核心服务，另有 2 个可选 profile 服务：
 
 | 服务 | 默认端口 | 说明 |
 |------+----------+------|
-| onboarding | 127.0.0.1:9992 | 初始化引导页 |
+| timescaledb | 127.0.0.1:5432 | PostgreSQL / TimescaleDB |
 | freqtrade | 127.0.0.1:8080 | 交易执行系统 API |
 | brale | 127.0.0.1:9991 | 运行时 API / 健康检查 / webhook |
+
+可选 profile 服务：
+- =onboarding= — 初始化引导页（127.0.0.1:9992）
+- =mcp-sse= — MCP SSE 服务（127.0.0.1:8765）
 
 ** Runtime API
 
 路由定义在 =internal/transport/runtimeapi/server.go=。
+
+*** Dashboard
+
+| 路径 | 说明 |
+|------+------|
+| =/api/runtime/dashboard/overview= | Dashboard 概览卡片 |
+| =/api/runtime/dashboard/kline= | K 线与关键点位 |
+| =/api/runtime/dashboard/decision_flow= | 决策链路图 |
+| =/api/runtime/dashboard/decision_history= | 历史决策列表与详情 |
+
+**** =/api/runtime/dashboard/decision_history=
+
+- 必填查询参数：=symbol=
+- 可选查询参数：
+  - =limit= — 每页条数，默认 20
+  - =cursor= — 来自上一页 =next_cursor= 的 keyset 游标
+  - =snapshot_id= — 指定要查看详情的快照
+- 返回字段：
+  - =items= — 当前页历史决策
+  - =next_cursor= — 下一页游标；为空表示没有更多数据
+  - =detail= — 当传入 =snapshot_id= 时返回该快照详情
+
+分页语义：
+
+1. 历史列表基于 =created_at DESC, id DESC= 做稳定 keyset 排序
+2. 客户端应将 =next_cursor= 原样透传到下一次请求
+3. Dashboard 前端使用“加载更多”增量请求，而不是单次放大 =limit=
 
 *** 调度控制
 
@@ -79,24 +110,55 @@ docker-compose.yml 默认编排 3 个服务：
 
 | 路径 | 内容 |
 |------+------|
-| =data/brale/= | Brale 运行时数据（SQLite 等） |
+| =data/brale/= | Brale 运行时数据（日志、缓存、pgdata 子目录等） |
 | =data/freqtrade/user_data/= | Freqtrade 运行数据 |
 
 * English Version
 
 ** Docker Services
 
-docker-compose.yml defines three services by default:
+docker-compose.yml runs three core services by default, plus two optional profile services:
 
 | Service | Default Port | Description |
 |---------+--------------+-------------|
-| onboarding | 127.0.0.1:9992 | Setup and onboarding UI |
+| timescaledb | 127.0.0.1:5432 | PostgreSQL / TimescaleDB |
 | freqtrade | 127.0.0.1:8080 | Trading execution system API |
 | brale | 127.0.0.1:9991 | Runtime API / health check / webhook |
+
+Optional profile services:
+- =onboarding= — setup UI (127.0.0.1:9992)
+- =mcp-sse= — MCP SSE service (127.0.0.1:8765)
 
 ** Runtime API
 
 Routes are defined in =internal/transport/runtimeapi/server.go=.
+
+*** Dashboard
+
+| Path | Description |
+|------+-------------|
+| =/api/runtime/dashboard/overview= | Dashboard summary cards |
+| =/api/runtime/dashboard/kline= | Candles and key price markers |
+| =/api/runtime/dashboard/decision_flow= | Decision flow graph |
+| =/api/runtime/dashboard/decision_history= | Decision history list and detail |
+
+**** =/api/runtime/dashboard/decision_history=
+
+- Required query parameter: =symbol=
+- Optional query parameters:
+  - =limit= — page size, defaults to 20
+  - =cursor= — keyset cursor returned as =next_cursor=
+  - =snapshot_id= — snapshot whose detail should be loaded
+- Response fields:
+  - =items= — current page of decision history
+  - =next_cursor= — cursor for the next page; empty when exhausted
+  - =detail= — snapshot detail when =snapshot_id= is provided
+
+Pagination semantics:
+
+1. The list uses stable keyset ordering on =created_at DESC, id DESC=
+2. Clients should pass =next_cursor= through unchanged on the next request
+3. The dashboard UI appends pages with “load more” instead of inflating =limit=
 
 *** Schedule Control
 
@@ -161,5 +223,5 @@ Notification types:
 
 | Path | Contents |
 |------+----------|
-| =data/brale/= | Brale runtime data (SQLite, etc.) |
+| =data/brale/= | Brale runtime data (logs, caches, pgdata subdirectory, etc.) |
 | =data/freqtrade/user_data/= | Freqtrade runtime data |
