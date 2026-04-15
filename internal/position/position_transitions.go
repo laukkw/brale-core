@@ -32,7 +32,7 @@ func shouldCloseEntirePosition(closeQty, positionQty float64) bool {
 	if closeQty >= positionQty {
 		return true
 	}
-	dust := math.Max(positionQty*0.001, closeQtyPrecision)
+	dust := math.Max(positionQty*DustThresholdRatio, closeQtyPrecision)
 	return positionQty-closeQty <= dust
 }
 

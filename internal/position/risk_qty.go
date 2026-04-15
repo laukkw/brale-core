@@ -72,7 +72,7 @@ func cleanupDustCloseQty(closeQty, limitQty float64) float64 {
 	if closeQty <= 0 || limitQty <= 0 || closeQty >= limitQty {
 		return closeQty
 	}
-	dust := math.Max(limitQty*0.001, closeQtyPrecision)
+	dust := math.Max(limitQty*DustThresholdRatio, closeQtyPrecision)
 	if limitQty-closeQty <= dust {
 		return limitQty
 	}

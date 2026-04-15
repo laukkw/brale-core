@@ -76,13 +76,13 @@ func BuildPositionSummary(pos store.PositionRecord, plan risk.RiskPlan, currentP
 	}
 	var bucket string
 	switch {
-	case relative <= -0.75:
+	case relative <= RBucketNeg1:
 		bucket = "-1R"
-	case relative <= -0.25:
+	case relative <= RBucketNegHalf:
 		bucket = "-0.5R"
-	case relative < 0.25:
+	case relative < RBucketPosHalf:
 		bucket = "BE"
-	case relative < 0.75:
+	case relative < RBucketPos1:
 		bucket = "+0.5R"
 	default:
 		bucket = "+1R"
