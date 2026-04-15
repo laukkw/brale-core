@@ -278,7 +278,7 @@ func (s *RecoveryService) notifyError(ctx context.Context, logger *zap.Logger, e
 	if s.Notifier == nil || err == nil {
 		return
 	}
-	if notifyErr := s.Notifier.SendError(ctx, err.Error()); notifyErr != nil {
+	if notifyErr := s.Notifier.SendError(ctx, ErrorNotice{Component: "reconcile", Message: err.Error()}); notifyErr != nil {
 		logger.Error("notify error failed", zap.Error(notifyErr))
 	}
 }

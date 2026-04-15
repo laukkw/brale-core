@@ -103,7 +103,7 @@ func (s *ReconcileService) notifyError(ctx context.Context, logger *zap.Logger, 
 	if s.Notifier == nil {
 		return
 	}
-	if notifyErr := s.Notifier.SendError(ctx, err.Error()); notifyErr != nil {
+	if notifyErr := s.Notifier.SendError(ctx, ErrorNotice{Component: "reconcile", Message: err.Error()}); notifyErr != nil {
 		logger.Error("notify error failed", zap.Error(notifyErr))
 	}
 }

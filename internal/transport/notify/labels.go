@@ -49,6 +49,16 @@ var labelMap = map[string]string{
 	"profit_pct":            "总盈亏%",
 	"trade_duration":        "持仓时长(分)",
 	"trade_duration_s":      "持仓时长(秒)",
+	// startup / shutdown / error
+	"symbols":       "运行币种",
+	"intervals":     "分析周期",
+	"bar_interval":  "决策间隔",
+	"balance":       "账户余额",
+	"schedule_mode": "调度模式",
+	"uptime":        "运行时长",
+	"severity":      "严重程度",
+	"component":     "来源组件",
+	"detail":        "详细信息",
 }
 
 func Label(key string) string {

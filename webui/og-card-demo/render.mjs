@@ -117,14 +117,59 @@ const valueMap = new Map([
 ]);
 
 const sentenceMap = new Map([
+  // general terms
   ['stable', '稳定'],
   ['medium', '中'],
   ['low', '低'],
-  ['negative funding', '负资金费率'],
+  ['high', '高'],
   ['mixed', '混合'],
   ['positive', '正向'],
   ['negative', '负向'],
+  ['bullish', '看多'],
+  ['bearish', '看空'],
+  ['neutral', '中性'],
+  ['overbought', '超买'],
+  ['oversold', '超卖'],
+  ['slightly', '小幅'],
+  ['significantly', '大幅'],
+  ['versus', '对比'],
+  ['but', '但'],
+  ['and', '且'],
+  // EMA / indicator terms
+  ['ema_fast', '快线EMA'],
+  ['ema_mid', '中线EMA'],
+  ['ema_slow', '慢线EMA'],
+  ['delta_pct', '变化率'],
+  ['BB', '布林带'],
+  ['CHOP', '震荡指数'],
+  ['Aroon', '阿隆指标'],
+  ['StochRSI', '随机RSI'],
+  // OI / funding / mechanics
+  ['OI increased', '持仓量上升'],
+  ['OI decreased', '持仓量下降'],
+  ['OI declined', '持仓量回落'],
+  ['OI stable', '持仓量稳定'],
+  ['increased', '上升'],
+  ['decreased', '下降'],
+  ['declined', '回落'],
+  ['funding rate negative', '资金费率为负'],
+  ['funding rate positive', '资金费率为正'],
+  ['funding rate', '资金费率'],
+  ['negative funding', '负资金费率'],
+  ['open interest', '持仓量'],
+  // crowding / anomaly
   ['long crowding', '多头拥挤'],
+  ['short crowding', '空头拥挤'],
+  ['fear_greed', '恐贪指数'],
+  // time frames
+  ['in 15m', '在15分钟内'],
+  ['in 1h', '在1小时内'],
+  ['in 4h', '在4小时内'],
+  ['over 4h', '4小时以上'],
+  ['over 1h', '1小时以上'],
+  // structure
+  ['expanding', '扩张'],
+  ['contracting', '收缩'],
 ]);
 
 function mapValue(value) {
@@ -374,6 +419,24 @@ function estimateRenderHeight(model) {
 }
 
 export function buildModel(raw) {
+  const cardType = String(raw?.card_type || 'decision').trim();
+  switch (cardType) {
+    case 'position_open':
+      return buildPositionOpenModel(raw);
+    case 'position_close':
+      return buildPositionCloseModel(raw);
+    case 'risk_update':
+      return buildRiskUpdateModel(raw);
+    case 'startup':
+      return buildStartupModel(raw);
+    case 'partial_close':
+      return buildPartialCloseModel(raw);
+    default:
+      return buildDecisionModel(raw);
+  }
+}
+
+function buildDecisionModel(raw) {
   const gate = raw?.raw_blocks?.gate ?? {};
   const agent = raw?.raw_blocks?.agent ?? {};
   const indicator = agent.indicator ?? {};
@@ -447,37 +510,77 @@ export function buildModel(raw) {
   const qualityPassed = setupQuality >= qualityThreshold;
   const edgePassed = entryEdge >= edgeThreshold;
 
-  const evidenceCards = [
-    {
-      key: 'setup_quality',
-      title: '建仓质量',
-      value: `当前 ${setupQuality.toFixed(3)} / 达成率 ${withPercent(qualityRate)}`,
-      progressPct: ratioToPercent(setupQuality),
-      thresholdPct: ratioToPercent(qualityThreshold),
-      thresholdLabel: '质量阈值',
-      thresholdText: qualityThreshold.toFixed(2),
-      status: qualityPassed ? '达到质量门槛' : '质量不足',
-      tone: qualityPassed ? 'emerald' : 'amber',
-      isSuccess: qualityPassed,
-    },
-    {
-      key: 'entry_edge',
-      title: '执行价值',
-      value: `当前 ${entryEdge.toFixed(3)} / 达成率 ${withPercent(edgeRate)}`,
-      progressPct: ratioToPercent(entryEdge),
-      thresholdPct: ratioToPercent(edgeThreshold),
-      thresholdLabel: '执行阈值',
-      thresholdText: edgeThreshold.toFixed(2),
-      status: edgePassed ? '达到执行门槛' : '执行价值不足',
-      tone: edgePassed ? 'emerald' : 'amber',
-      isSuccess: edgePassed,
-    },
-  ];
+  const hasQualityData = setupQuality > 0 || entryEdge > 0;
+  const execution = gate.execution && typeof gate.execution === 'object' ? gate.execution : null;
+  const hasEntryPlan = execution && (parseNumber(execution.stop_loss, 0) > 0 || Array.isArray(execution.take_profits));
+
+  let evidenceCards;
+  if (hasQualityData) {
+    evidenceCards = [
+      {
+        key: 'setup_quality',
+        title: '建仓质量',
+        value: `当前 ${setupQuality.toFixed(3)} / 达成率 ${withPercent(qualityRate)}`,
+        progressPct: ratioToPercent(setupQuality),
+        thresholdPct: ratioToPercent(qualityThreshold),
+        thresholdLabel: '质量阈值',
+        thresholdText: qualityThreshold.toFixed(2),
+        status: qualityPassed ? '达到质量门槛' : '质量不足',
+        tone: qualityPassed ? 'emerald' : 'amber',
+        isSuccess: qualityPassed,
+      },
+      {
+        key: 'entry_edge',
+        title: '执行价值',
+        value: `当前 ${entryEdge.toFixed(3)} / 达成率 ${withPercent(edgeRate)}`,
+        progressPct: ratioToPercent(entryEdge),
+        thresholdPct: ratioToPercent(edgeThreshold),
+        thresholdLabel: '执行阈值',
+        thresholdText: edgeThreshold.toFixed(2),
+        status: edgePassed ? '达到执行门槛' : '执行价值不足',
+        tone: edgePassed ? 'emerald' : 'amber',
+        isSuccess: edgePassed,
+      },
+    ];
+  } else {
+    // Replace empty quality/edge with agent signal strength
+    const indicatorScore = parseNumber(indicator.movement_score, 0);
+    const mechanicsScore = parseNumber(mechanics.movement_score, 0);
+    const structureScore = parseNumber(structure.movement_score, 0);
+    const maxAgentScore = Math.max(Math.abs(indicatorScore), Math.abs(mechanicsScore), Math.abs(structureScore));
+    const maxAgentName = Math.abs(indicatorScore) >= Math.abs(mechanicsScore) && Math.abs(indicatorScore) >= Math.abs(structureScore)
+      ? '指标' : Math.abs(mechanicsScore) >= Math.abs(structureScore) ? '市场机制' : '结构';
+    evidenceCards = [
+      {
+        key: 'max_signal',
+        title: '最强信号',
+        value: `${maxAgentName} ${maxAgentScore.toFixed(3)}`,
+        progressPct: ratioToPercent(Math.abs(maxAgentScore)),
+        thresholdPct: ratioToPercent(consensusScoreThreshold),
+        thresholdLabel: '方向阈值',
+        thresholdText: consensusScoreThreshold.toFixed(3),
+        status: Math.abs(maxAgentScore) >= consensusScoreThreshold ? '信号有效' : '信号不足',
+        tone: Math.abs(maxAgentScore) >= consensusScoreThreshold ? 'emerald' : 'rose',
+        isSuccess: Math.abs(maxAgentScore) >= consensusScoreThreshold,
+      },
+      {
+        key: 'risk_penalty',
+        title: '风控惩罚',
+        value: `${parseNumber(gate.risk_penalty, 0).toFixed(3)}`,
+        progressPct: ratioToPercent(Math.abs(parseNumber(gate.risk_penalty, 0))),
+        thresholdPct: 50,
+        thresholdLabel: '中性线',
+        thresholdText: '0.00',
+        status: parseNumber(gate.risk_penalty, 0) <= 0 ? '无惩罚' : '扣分中',
+        tone: parseNumber(gate.risk_penalty, 0) <= 0 ? 'emerald' : 'amber',
+        isSuccess: parseNumber(gate.risk_penalty, 0) <= 0,
+      },
+    ];
+  }
 
   const trace = Array.isArray(gate.trace)
     ? gate.trace.filter((item) => item && typeof item === 'object' && String(item.step ?? '').trim())
     : [];
-  const execution = gate.execution && typeof gate.execution === 'object' ? gate.execution : null;
   const failedTrace = trace.find((item) => {
     const status = parseKnownBool(item.ok);
     return status.known && status.value === false;
@@ -565,6 +668,16 @@ export function buildModel(raw) {
       kind: 'default',
     });
   }
+  // Show entry plan when gate allows
+  if (tradeable && hasEntryPlan) {
+    const slText = trimFloat(execution.stop_loss);
+    const tpList = formatTakeProfitList(execution.take_profits);
+    sourceLines.push({
+      text: `📌 开仓计划 — 止损：${slText} · 止盈：${tpList}`,
+      note: false,
+      kind: 'success',
+    });
+  }
   sourceLines.push({
     text: '说明：共识卡展示方向/置信门槛；结构与清算风险卡展示判断可靠度阈值。',
     note: true,
@@ -581,7 +694,7 @@ export function buildModel(raw) {
 
   const analysisItems = [
     {
-      tag: 'Indicator',
+      tag: '指标综合',
       text: `扩张状态=${emptyDash(mapValue(indicator.expansion))} 一致性=${emptyDash(mapValue(indicator.alignment))} 噪音=${emptyDash(mapValue(indicator.noise))}`,
       variant: 'indicator',
       isCategory: true,
@@ -599,7 +712,7 @@ export function buildModel(raw) {
       isCategory: false,
     },
     {
-      tag: 'Mechanics',
+      tag: '市场机制',
       text: `杠杆=${emptyDash(mapValue(mechanics.leverage_state))} 拥挤度=${emptyDash(mapValue(mechanics.crowding))} 风险等级=${emptyDash(mapValue(mechanics.risk_level))}`,
       variant: 'mechanics',
       isCategory: true,
@@ -617,13 +730,13 @@ export function buildModel(raw) {
       isCategory: false,
     },
     {
-      tag: 'Structure',
+      tag: '结构分析',
       text: `结构状态=${emptyDash(mapValue(structure.regime))} 最近突破=${emptyDash(mapValue(structure.last_break))} 形态=${emptyDash(mapValue(structure.pattern))} 质量=${emptyDash(mapValue(structure.quality))}`,
       variant: 'structure',
       isCategory: true,
     },
     {
-      tag: 'Structure细节',
+      tag: '结构细节',
       text: `量能配合=${mapSentence(structure.volume_action)} K线反应=${mapSentence(structure.candle_reaction)}`,
       variant: 'structure',
       isCategory: false,
@@ -639,6 +752,289 @@ export function buildModel(raw) {
     progressCards: [...summaryCards, ...evidenceCards],
     analysisItems,
   };
+}
+
+// ===== Position Open Card =====
+function buildPositionOpenModel(raw) {
+  const d = raw?.data ?? {};
+  const symbol = normalizeBaseSymbol(raw?.symbol || 'UNKNOWN');
+  const direction = String(d.direction || '-').trim();
+  const directionCN = direction === 'long' ? '做多' : direction === 'short' ? '做空' : direction;
+  const entryPrice = parseNumber(d.entry_price, 0);
+  const stopPrice = parseNumber(d.stop_price, 0);
+  const riskPct = parseNumber(d.risk_pct, 0);
+  const leverage = parseNumber(d.leverage, 0);
+  const qty = parseNumber(d.qty, 0);
+  const tpList = Array.isArray(d.take_profits) ? d.take_profits.filter((v) => v > 0) : [];
+
+  const sourceCard = {
+    title: '开仓详情',
+    tradeable: true,
+    sourceLabel: '仓位管理',
+    verdictText: `${directionCN}开仓`,
+    lines: [
+      { text: `方向：${directionCN} · 数量：${trimFloat(qty)}`, note: false, kind: 'default' },
+      { text: `开仓价格：${trimFloat(entryPrice)}`, note: false, kind: 'default' },
+      { text: `止损：${stopPrice > 0 ? trimFloat(stopPrice) : '—'} · 止盈：${formatTakeProfitList(tpList)}`, note: false, kind: 'success' },
+      ...(String(d.stop_reason || '').trim() ? [{ text: `止损策略：${d.stop_reason}`, note: false, kind: 'default' }] : []),
+    ],
+  };
+
+  const progressCards = [
+    buildSimpleInfoCard('开仓价格', trimFloat(entryPrice), 'emerald'),
+    buildSimpleInfoCard('止损价格', stopPrice > 0 ? trimFloat(stopPrice) : '—', stopPrice > 0 ? 'amber' : 'rose'),
+    buildSimpleInfoCard('风险比例', riskPct > 0 ? `${(riskPct * 100).toFixed(1)}%` : '—', 'amber'),
+    buildSimpleInfoCard('杠杆倍数', leverage > 0 ? `${leverage}x` : '—', 'emerald'),
+  ];
+
+  return {
+    symbol,
+    title: `${symbol} 开仓通知`,
+    titlePrice: entryPrice > 0 ? trimFloat(entryPrice) : '',
+    reportTimeCN: formatReportTime(),
+    sourceCard,
+    progressCards,
+    analysisItems: tpList.length > 0 ? tpList.map((tp, i) => ({
+      tag: `止盈 ${i + 1}`,
+      text: trimFloat(tp),
+      variant: 'indicator',
+      isCategory: i === 0,
+    })) : [],
+  };
+}
+
+// ===== Position Close Card =====
+function buildPositionCloseModel(raw) {
+  const d = raw?.data ?? {};
+  const symbol = normalizeBaseSymbol(raw?.symbol || 'UNKNOWN');
+  const direction = String(d.direction || '-').trim();
+  const directionCN = direction === 'long' ? '做多' : direction === 'short' ? '做空' : direction;
+  const closeType = String(d.close_type || 'full').trim();
+  const isFullClose = closeType === 'full';
+  const entryPrice = parseNumber(d.entry_price, 0);
+  const exitPrice = parseNumber(d.exit_price, 0) || parseNumber(d.trigger_price, 0);
+  const pnlAmount = parseNumber(d.pnl_amount, 0);
+  const pnlPct = parseNumber(d.pnl_pct, 0);
+  const reason = String(d.reason || d.exit_reason || '-').trim();
+  const qty = parseNumber(d.qty, 0);
+  const leverage = parseNumber(d.leverage, 0);
+  const tradeDuration = parseNumber(d.trade_duration_s, 0);
+
+  const isProfit = pnlAmount > 0;
+  const headerEmoji = isProfit ? '📈' : '📉';
+  const headerText = isFullClose ? '全部平仓' : '仓位关闭';
+  const pnlDisplay = pnlAmount !== 0 ? `${isProfit ? '+' : ''}${trimFloat(pnlAmount)} (${isProfit ? '+' : ''}${(pnlPct * 100).toFixed(2)}%)` : '—';
+
+  const sourceLines = [
+    { text: `方向：${directionCN} · 数量：${trimFloat(qty)}`, note: false, kind: 'default' },
+  ];
+  if (entryPrice > 0) sourceLines.push({ text: `入场价：${trimFloat(entryPrice)}`, note: false, kind: 'default' });
+  if (exitPrice > 0) sourceLines.push({ text: `出场价：${trimFloat(exitPrice)}`, note: false, kind: 'default' });
+  if (pnlAmount !== 0) sourceLines.push({ text: `${headerEmoji} 盈亏：${pnlDisplay}`, note: false, kind: isProfit ? 'success' : 'danger' });
+  sourceLines.push({ text: `原因：${mapValue(reason)}`, note: false, kind: 'default' });
+  if (tradeDuration > 0) sourceLines.push({ text: `持仓时长：${formatDuration(tradeDuration)}`, note: false, kind: 'default' });
+
+  const sourceCard = {
+    title: `${headerText}详情`,
+    tradeable: false,
+    sourceLabel: isFullClose ? '全部平仓' : '部分关闭',
+    verdictText: `${directionCN}${headerText}`,
+    lines: sourceLines,
+  };
+
+  const progressCards = [];
+  if (entryPrice > 0) progressCards.push(buildSimpleInfoCard('入场价', trimFloat(entryPrice), 'emerald'));
+  if (exitPrice > 0) progressCards.push(buildSimpleInfoCard('出场价', trimFloat(exitPrice), isProfit ? 'emerald' : 'rose'));
+  progressCards.push(buildSimpleInfoCard('盈亏', pnlDisplay, isProfit ? 'emerald' : 'rose'));
+  progressCards.push(buildSimpleInfoCard('杠杆', leverage > 0 ? `${leverage}x` : '—', 'amber'));
+
+  return {
+    symbol,
+    title: `${symbol} ${headerText}`,
+    titlePrice: exitPrice > 0 ? trimFloat(exitPrice) : '',
+    reportTimeCN: formatReportTime(),
+    sourceCard,
+    progressCards,
+    analysisItems: [],
+  };
+}
+
+// ===== Risk Update Card =====
+function buildRiskUpdateModel(raw) {
+  const d = raw?.data ?? {};
+  const symbol = normalizeBaseSymbol(raw?.symbol || 'UNKNOWN');
+  const direction = String(d.direction || '-').trim();
+  const directionCN = direction === 'long' ? '做多' : direction === 'short' ? '做空' : direction;
+  const entryPrice = parseNumber(d.entry_price, 0);
+  const oldStop = parseNumber(d.old_stop, 0);
+  const newStop = parseNumber(d.new_stop, 0);
+  const markPrice = parseNumber(d.mark_price, 0);
+  const source = String(d.source || '-').trim();
+  const sourceMap = { tighten: '收紧', initial: '初始', manual: '手动', native: '原生策略', llm: 'LLM 策略' };
+  const sourceCN = sourceMap[source.toLowerCase()] || source;
+  const tpList = Array.isArray(d.take_profits) ? d.take_profits.filter((v) => v > 0) : [];
+  const gateSatisfied = parseBool(d.gate_satisfied, false);
+  const scoreTotal = parseNumber(d.score_total, 0);
+  const scoreThreshold = parseNumber(d.score_threshold, 0);
+  const tightenReason = String(d.tighten_reason || '-').trim();
+  const stopReason = String(d.stop_reason || d.reason || '-').trim();
+
+  const sourceLines = [
+    { text: `方向：${directionCN} · 来源：${sourceCN}`, note: false, kind: 'default' },
+    { text: `旧止损：${oldStop > 0 ? trimFloat(oldStop) : '—'} → 新止损：${newStop > 0 ? trimFloat(newStop) : '—'}`, note: false, kind: oldStop !== newStop ? 'success' : 'default' },
+    { text: `止盈：${formatTakeProfitList(tpList)}`, note: false, kind: 'default' },
+    { text: `止损原因：${mapValue(stopReason)}`, note: false, kind: 'default' },
+  ];
+  if (tightenReason !== '-') sourceLines.push({ text: `收紧原因：${mapValue(tightenReason)}`, note: false, kind: 'default' });
+  if (scoreTotal !== 0) sourceLines.push({ text: `Gate 得分：${scoreTotal.toFixed(3)} / 阈值 ${scoreThreshold.toFixed(3)} · ${gateSatisfied ? '✅ 满足' : '❌ 不满足'}`, note: false, kind: gateSatisfied ? 'success' : 'danger' });
+
+  const sourceCard = {
+    title: '风控计划更新',
+    tradeable: gateSatisfied,
+    sourceLabel: sourceCN,
+    verdictText: `${directionCN} · ${sourceCN}`,
+    lines: sourceLines,
+  };
+
+  const progressCards = [
+    buildSimpleInfoCard('入场价', entryPrice > 0 ? trimFloat(entryPrice) : '—', 'emerald'),
+    buildSimpleInfoCard('新止损', newStop > 0 ? trimFloat(newStop) : '—', 'amber'),
+    buildSimpleInfoCard('标记价', markPrice > 0 ? trimFloat(markPrice) : '—', 'emerald'),
+    buildSimpleInfoCard('Gate', gateSatisfied ? '满足' : '不满足', gateSatisfied ? 'emerald' : 'rose'),
+  ];
+
+  return {
+    symbol,
+    title: `${symbol} 风控更新`,
+    titlePrice: markPrice > 0 ? trimFloat(markPrice) : '',
+    reportTimeCN: formatReportTime(),
+    sourceCard,
+    progressCards,
+    analysisItems: tpList.length > 0 ? tpList.map((tp, i) => ({
+      tag: `止盈 ${i + 1}`,
+      text: trimFloat(tp),
+      variant: 'indicator',
+      isCategory: i === 0,
+    })) : [],
+  };
+}
+
+// ===== Startup Card =====
+function buildStartupModel(raw) {
+  const d = raw?.data ?? {};
+  const symbols = Array.isArray(d.symbols) ? d.symbols : [];
+  const intervals = Array.isArray(d.intervals) ? d.intervals : [];
+  const barInterval = String(d.bar_interval || '-').trim();
+  const balance = parseNumber(d.balance, 0);
+  const currency = String(d.currency || 'USDT').trim();
+  const scheduleMode = String(d.schedule_mode || '自动调度').trim();
+
+  const sourceCard = {
+    title: '系统启动',
+    tradeable: true,
+    sourceLabel: '启动完成',
+    verdictText: '🚀 Brale 已启动',
+    lines: [
+      { text: `监控币种：${symbols.length > 0 ? symbols.join(', ') : '—'}`, note: false, kind: 'default' },
+      { text: `分析周期：${intervals.length > 0 ? intervals.join(', ') : '—'}`, note: false, kind: 'default' },
+      { text: `调度模式：${scheduleMode} · 决策间隔：${barInterval}`, note: false, kind: 'default' },
+      ...(balance > 0 ? [{ text: `账户余额：${trimFloat(balance)} ${currency}`, note: false, kind: 'success' }] : []),
+    ],
+  };
+
+  const progressCards = [
+    buildSimpleInfoCard('币种数量', `${symbols.length}`, 'emerald'),
+    buildSimpleInfoCard('分析周期', `${intervals.length}`, 'emerald'),
+    buildSimpleInfoCard('决策间隔', barInterval, 'amber'),
+    buildSimpleInfoCard('余额', balance > 0 ? `${trimFloat(balance)} ${currency}` : '—', 'emerald'),
+  ];
+
+  return {
+    symbol: 'BRALE',
+    title: 'Brale 系统启动',
+    titlePrice: '',
+    reportTimeCN: formatReportTime(),
+    sourceCard,
+    progressCards,
+    analysisItems: symbols.map((s, i) => ({
+      tag: `币种 ${i + 1}`,
+      text: s,
+      variant: 'indicator',
+      isCategory: i === 0,
+    })),
+  };
+}
+
+// ===== Partial Close Card =====
+function buildPartialCloseModel(raw) {
+  const d = raw?.data ?? {};
+  const symbol = normalizeBaseSymbol(raw?.symbol || 'UNKNOWN');
+  const direction = String(d.direction || '-').trim();
+  const directionCN = direction === 'long' ? '做多' : direction === 'short' ? '做空' : direction;
+  const openRate = parseNumber(d.open_rate, 0);
+  const closeRate = parseNumber(d.close_rate, 0);
+  const amount = parseNumber(d.amount, 0);
+  const realizedProfit = parseNumber(d.realized_profit, 0);
+  const realizedProfitRatio = parseNumber(d.realized_profit_ratio, 0);
+  const exitReason = String(d.exit_reason || '-').trim();
+  const exitType = String(d.exit_type || '-').trim();
+  const isProfit = realizedProfit > 0;
+
+  const sourceCard = {
+    title: '部分平仓详情',
+    tradeable: false,
+    sourceLabel: '部分平仓',
+    verdictText: `${directionCN} · 部分平仓`,
+    lines: [
+      { text: `方向：${directionCN} · 数量：${trimFloat(amount)}`, note: false, kind: 'default' },
+      { text: `开仓价：${trimFloat(openRate)} → 平仓价：${trimFloat(closeRate)}`, note: false, kind: 'default' },
+      { text: `${isProfit ? '📈' : '📉'} 已实现盈亏：${isProfit ? '+' : ''}${trimFloat(realizedProfit)} (${isProfit ? '+' : ''}${(realizedProfitRatio * 100).toFixed(2)}%)`, note: false, kind: isProfit ? 'success' : 'danger' },
+      { text: `退出原因：${mapValue(exitReason)} · 类型：${mapValue(exitType)}`, note: false, kind: 'default' },
+    ],
+  };
+
+  const progressCards = [
+    buildSimpleInfoCard('开仓价', trimFloat(openRate), 'emerald'),
+    buildSimpleInfoCard('平仓价', trimFloat(closeRate), isProfit ? 'emerald' : 'rose'),
+    buildSimpleInfoCard('已实现盈亏', `${isProfit ? '+' : ''}${trimFloat(realizedProfit)}`, isProfit ? 'emerald' : 'rose'),
+    buildSimpleInfoCard('盈亏比率', `${(realizedProfitRatio * 100).toFixed(2)}%`, isProfit ? 'emerald' : 'rose'),
+  ];
+
+  return {
+    symbol,
+    title: `${symbol} 部分平仓`,
+    titlePrice: closeRate > 0 ? trimFloat(closeRate) : '',
+    reportTimeCN: formatReportTime(),
+    sourceCard,
+    progressCards,
+    analysisItems: [],
+  };
+}
+
+// ===== Shared Helpers for Card Models =====
+function buildSimpleInfoCard(title, value, tone) {
+  return {
+    key: title,
+    title,
+    value,
+    progressPct: 100,
+    thresholdPct: 0,
+    thresholdLabel: '',
+    thresholdText: '',
+    status: '',
+    tone,
+    isSuccess: tone === 'emerald',
+    isSimple: true,
+  };
+}
+
+function formatDuration(seconds) {
+  if (seconds <= 0) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}小时${m > 0 ? ` ${m}分钟` : ''}`;
+  if (m > 0) return `${m}分钟`;
+  return `${seconds}秒`;
 }
 
 function tonePalette(tone) {
@@ -689,6 +1085,46 @@ function normalTagStyle(variant) {
 function progressCard(card, scale) {
   const tone = tonePalette(card.tone);
   const thresholdColor = '#2563eb';
+
+  // Simple info card: large value display without progress bar
+  if (card.isSimple) {
+    return h(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: Math.max(6, scale.gap - 12),
+          width: '100%',
+          minWidth: 0,
+          background: 'rgba(255,255,255,0.72)',
+          border: '1px solid rgba(203,213,225,0.9)',
+          borderRadius: 18,
+          padding: `${Math.max(12, scale.cardPad - 10)}px ${Math.max(14, scale.cardPad - 8)}px`,
+        },
+      },
+      h(
+        'div',
+        { style: { display: 'flex', fontSize: scale.small, color: '#6b7280', fontWeight: 600 } },
+        card.title,
+      ),
+      h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            fontSize: Math.max(22, scale.heading - 2),
+            color: tone.badgeText,
+            fontWeight: 800,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          },
+        },
+        card.value,
+      ),
+    );
+  }
+
   return h(
     'div',
     {
@@ -1071,19 +1507,25 @@ function sourceCard(card, scale) {
       ...card.lines.map((line) => {
         const dotColor = line.kind === 'danger'
           ? '#ef4444'
-          : line.note
-            ? '#3b82f6'
-            : '#94a3b8';
+          : line.kind === 'success'
+            ? '#10b981'
+            : line.note
+              ? '#3b82f6'
+              : '#94a3b8';
         const textColor = line.kind === 'danger'
           ? '#dc2626'
-          : line.note
-            ? '#2563eb'
-            : '#475569';
+          : line.kind === 'success'
+            ? '#059669'
+            : line.note
+              ? '#2563eb'
+              : '#475569';
         const textWeight = line.kind === 'danger'
           ? 700
-          : line.note
+          : line.kind === 'success'
             ? 700
-            : 500;
+            : line.note
+              ? 700
+              : 500;
         return h(
         'div',
         {
@@ -1404,7 +1846,7 @@ function buildTree(model, meta, canvasHeight) {
               'div',
               { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: Math.max(16, scale.small - 2), color: '#334155', letterSpacing: '0.05em', fontWeight: 800, textTransform: 'uppercase' } },
               h('div', { style: { display: 'flex', width: 10, height: 10, borderRadius: 999, background: '#64748b' } }),
-              h('div', { style: { display: 'flex' } }, 'Analysis Report'),
+              h('div', { style: { display: 'flex' } }, '分析报告'),
             ),
             h(
               'div',

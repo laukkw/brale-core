@@ -9,12 +9,14 @@ import (
 type Notifier interface {
 	SendPositionOpen(ctx context.Context, notice PositionOpenNotice) error
 	SendPositionCloseSummary(ctx context.Context, notice PositionCloseSummaryNotice) error
-	SendError(ctx context.Context, message string) error
+	SendError(ctx context.Context, notice ErrorNotice) error
 }
 
 type PositionOpenNotice = notifyport.PositionOpenNotice
 
 type PositionCloseSummaryNotice = notifyport.PositionCloseSummaryNotice
+
+type ErrorNotice = notifyport.ErrorNotice
 
 type NopNotifier struct{}
 
@@ -26,6 +28,6 @@ func (NopNotifier) SendPositionCloseSummary(ctx context.Context, notice Position
 	return nil
 }
 
-func (NopNotifier) SendError(ctx context.Context, message string) error {
+func (NopNotifier) SendError(ctx context.Context, notice ErrorNotice) error {
 	return nil
 }

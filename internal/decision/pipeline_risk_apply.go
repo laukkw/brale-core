@@ -295,7 +295,13 @@ func (p *Pipeline) notifyMissingRiskPlan(ctx context.Context, pos store.Position
 		formatRiskFloat(pos.Leverage),
 		openedAt,
 	)
-	if err := p.Notifier.SendError(ctx, message); err != nil {
+	notice := ErrorNotice{
+		Severity:  "warn",
+		Component: "risk_monitor",
+		Symbol:    strings.TrimSpace(pos.Symbol),
+		Message:   message,
+	}
+	if err := p.Notifier.SendError(ctx, notice); err != nil {
 		logger.Error("missing risk plan notify failed", zap.Error(err))
 	}
 }

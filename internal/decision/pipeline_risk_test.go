@@ -29,7 +29,7 @@ func (n *captureRiskPlanNotifier) SendRiskPlanUpdate(ctx context.Context, notice
 	return nil
 }
 
-func (n *captureRiskPlanNotifier) SendError(ctx context.Context, message string) error {
+func (n *captureRiskPlanNotifier) SendError(ctx context.Context, notice ErrorNotice) error {
 	return nil
 }
 

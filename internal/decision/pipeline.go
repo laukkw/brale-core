@@ -80,7 +80,11 @@ func (p *Pipeline) notifyError(ctx context.Context, err error) {
 	if err == nil || p.Notifier == nil {
 		return
 	}
-	if notifyErr := p.Notifier.SendError(ctx, formatErrorNotification(ctx, err)); notifyErr != nil {
+	notice := ErrorNotice{
+		Component: "decision",
+		Message:   formatErrorNotification(ctx, err),
+	}
+	if notifyErr := p.Notifier.SendError(ctx, notice); notifyErr != nil {
 		logging.FromContext(ctx).Named("pipeline").Error("notify error failed", zap.Error(notifyErr))
 	}
 }

@@ -3,6 +3,7 @@ package notify
 
 import (
 	"context"
+	"time"
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision/decisionfmt"
@@ -17,8 +18,9 @@ type Notifier interface {
 
 type GateNotifier interface {
 	SendGate(ctx context.Context, input decisionfmt.DecisionInput, report decisionfmt.DecisionReport) error
-	SendStartup(ctx context.Context) error
-	SendError(ctx context.Context, message string) error
+	SendStartup(ctx context.Context, info StartupInfo) error
+	SendShutdown(ctx context.Context, info ShutdownInfo) error
+	SendError(ctx context.Context, notice ErrorNotice) error
 }
 
 type PositionNotifier interface {
@@ -33,6 +35,22 @@ type TradeNotifier interface {
 	SendTradePartialClose(ctx context.Context, notice TradePartialCloseNotice) error
 	SendTradeCloseSummary(ctx context.Context, notice TradeCloseSummaryNotice) error
 }
+
+type StartupInfo struct {
+	Symbols       []string
+	Intervals     []string
+	BarInterval   string
+	Balance       float64
+	Currency      string
+	ScheduleMode  string
+}
+
+type ShutdownInfo struct {
+	Reason string
+	Uptime time.Duration
+}
+
+type ErrorNotice = notifyport.ErrorNotice
 
 type PositionOpenNotice = notifyport.PositionOpenNotice
 

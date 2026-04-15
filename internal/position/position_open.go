@@ -155,7 +155,7 @@ func (s *PositionService) SubmitOpenFromPlan(ctx context.Context, plan execution
 			}
 		}
 		if s.Notifier != nil {
-			if notifyErr := s.Notifier.SendError(ctx, err.Error()); notifyErr != nil {
+			if notifyErr := s.Notifier.SendError(ctx, ErrorNotice{Component: "execution", Symbol: strings.TrimSpace(plan.Symbol), Message: err.Error()}); notifyErr != nil {
 				logger.Error("notify error failed", zap.Error(notifyErr))
 			}
 		}

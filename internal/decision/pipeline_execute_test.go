@@ -34,8 +34,8 @@ func (c *countingNotifier) SendRiskPlanUpdate(context.Context, RiskPlanUpdateNot
 	return nil
 }
 
-func (c *countingNotifier) SendError(_ context.Context, message string) error {
-	c.messages = append(c.messages, message)
+func (c *countingNotifier) SendError(_ context.Context, notice ErrorNotice) error {
+	c.messages = append(c.messages, notice.Message)
 	return nil
 }
 

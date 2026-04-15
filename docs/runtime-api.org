@@ -65,6 +65,16 @@ docker-compose.yml 默认编排 3 个服务：
 
 系统启动后自动拉起已配置的 Bot。启动通知由 =startup_notify_enabled= 控制。
 
+通知类型：
+- 决策报告（图片卡片）— 每轮决策后推送
+- 开仓通知（图片卡片）— 开仓时推送，包含入场价、止损、止盈
+- 平仓通知（图片卡片）— 平仓时推送，重复通知自动合并
+- 部分平仓通知（图片卡片）— 减仓时推送
+- 风控更新通知（图片卡片）— 止损/止盈调整时推送
+- 启动通知（图片卡片）— 系统就绪后推送，含币种、周期、余额
+- 停止通知 — 系统关闭时推送，含运行时长
+- 错误通知 — 严重错误时推送至配置的通知渠道
+
 ** 数据存储
 
 | 路径 | 内容 |
@@ -136,6 +146,16 @@ Two messaging channels are supported:
 - Feishu Bot — decision push
 
 Configured bots start automatically on launch. Startup notifications are controlled by =startup_notify_enabled=.
+
+Notification types:
+- Decision report (image card) — sent after each decision round
+- Position open (image card) — sent on entry, showing entry price, stop loss, take profit
+- Position close (image card) — sent on full close, duplicate notifications merged
+- Partial close (image card) — sent on partial exit
+- Risk update (image card) — sent on stop loss / take profit adjustment
+- Startup (image card) — sent after system initialization, includes symbols, intervals, balance
+- Shutdown — sent on graceful stop with uptime
+- Error — critical errors pushed to configured channels
 
 ** Data Storage
 

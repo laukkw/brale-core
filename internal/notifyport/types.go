@@ -75,3 +75,10 @@ type RiskPlanUpdateNotice struct {
 	Leverage       float64
 	PositionID     string
 }
+
+type ErrorNotice struct {
+	Severity  string // critical, error, warn
+	Component string // execution, decision, reconcile, market, llm
+	Symbol    string
+	Message   string
+}

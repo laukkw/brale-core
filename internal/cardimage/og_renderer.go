@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"brale-core/internal/decision/decisionfmt"
 )
@@ -29,9 +30,11 @@ type OGRenderer struct {
 }
 
 type ogPayload struct {
+	CardType     string      `json:"card_type,omitempty"`
 	Symbol       string      `json:"symbol"`
 	CurrentPrice float64     `json:"current_price,omitempty"`
 	RawBlocks    ogRawBlocks `json:"raw_blocks"`
+	Data         any         `json:"data,omitempty"`
 }
 
 type ogRawBlocks struct {
@@ -198,6 +201,60 @@ func (r *OGRenderer) RenderRuntimePayload(ctx context.Context, symbol string, sn
 		return nil, err
 	}
 	return r.renderPayload(ctx, raw, symbol, snapshotID, title)
+}
+
+func (r *OGRenderer) RenderCard(ctx context.Context, cardType string, symbol string, data map[string]any, title string) (*ImageAsset, error) {
+	if r == nil {
+		return nil, fmt.Errorf("renderer is nil")
+	}
+	if _, err := os.Stat(r.script); err != nil {
+		return nil, fmt.Errorf("og render script unavailable: %w", err)
+	}
+	payload := map[string]any{
+		"card_type": strings.TrimSpace(cardType),
+		"symbol":    strings.TrimSpace(symbol),
+		"data":      data,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return r.renderCardPayload(ctx, raw, cardType, symbol, title)
+}
+
+func (r *OGRenderer) renderCardPayload(ctx context.Context, raw []byte, cardType string, symbol string, title string) (*ImageAsset, error) {
+	tmpDir, err := os.MkdirTemp("", "brale-og-render-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+	inputPath := filepath.Join(tmpDir, "input.json")
+	outputPath := filepath.Join(tmpDir, "output.png")
+	if err := os.WriteFile(inputPath, raw, 0o644); err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, r.nodeBin, r.script, inputPath, outputPath)
+	cmd.Dir = r.scriptDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("render og image (%s) failed: %w (%s)", cardType, err, strings.TrimSpace(string(out)))
+	}
+	pngBytes, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, err
+	}
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	filename := fmt.Sprintf("%s-%s-%s.png", strings.ToLower(strings.TrimSpace(symbol)), strings.ToLower(cardType), ts)
+	caption := title
+	if caption == "" {
+		caption = fmt.Sprintf("[%s][%s]", symbol, cardType)
+	}
+	return &ImageAsset{
+		Data:        pngBytes,
+		Filename:    filename,
+		ContentType: "image/png",
+		Caption:     caption,
+		AltText:     caption,
+	}, nil
 }
 
 func (r *OGRenderer) renderPayload(ctx context.Context, raw []byte, symbol string, snapshotID uint, title string) (*ImageAsset, error) {

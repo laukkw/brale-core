@@ -37,7 +37,7 @@ Brale 是一个量化交易引擎，通过多个大语言模型智能体（LLM A
 - *三条独立智能体车道（Agent Lane）* — 指标（Indicator）、结构（Structure）和力学（Mechanics）智能体各自独立运行。共识阈值防止单一模型的误判。
 - *Provider 锚定因子（Grounding Anchors）* — 每个 Provider 不仅接收其 Agent 的摘要，还会收到代码提取的结构化锚定数据（跨时间框架对齐、结构突破、力学冲突），用于交叉验证，降低幻觉风险。
 - *经验驱动的记忆系统* — 三层记忆系统（工作记忆 Working、情景记忆 Episodic、语义记忆 Semantic）将近期上下文、历史交易复盘和长期规则注入 LLM 提示词。
-- *影子指标引擎（Shadow Indicator Engine）* — 内置参考计算引擎与 Talib 交叉校验，确保指标数据可信。
+- *影子指标引擎（Shadow Indicator Engine）* — 内置参考计算引擎与 go-talib 交叉校验，确保指标数据可信。差异检测通过 ~bralectl indicator diff~ 执行。
 - *Gate Replay 回测* — 将历史决策通过当前规则集重放，零 LLM 调用开销，用于快速验证规则调优效果。
 - *全自动调度* — 决策周期、监控和对账均由内置定时器驱动，无需外部 cron。
 - *可插拔执行层* — 当前对接 Freqtrade；接口已解耦，可替换其他执行后端。
@@ -101,7 +101,7 @@ make start ENABLE_MCP=1 ENABLE_ONBOARDING=0
 | =schedule= | 启用 / 禁用 / 查看调度器状态 |
 | =config= | 查看 / 校验配置 |
 | =backtest= | Gate Replay — 用当前规则重放历史决策（零 LLM 开销） |
-| =indicator= | 交叉对比 Talib 与参考指标引擎 |
+| =indicator= | 交叉对比 go-talib 与参考指标引擎 |
 | =memory= | 管理语义规则、查看交易复盘 |
 | =mcp= | 启动 MCP 服务器或安装到 AI 工具 |
 | =llm= | 测试 LLM 端点连通性 |
@@ -220,8 +220,8 @@ six stages:
   cross-verification, reducing hallucination risk.
 - *Experience-driven memory* — three-layer memory system (working, episodic, semantic) feeds
   recent context, historical trade reflections, and long-term rules into LLM prompts.
-- *Shadow indicator engine* — built-in reference computation engine cross-validates against Talib,
-  ensuring indicator data integrity.
+- *Shadow indicator engine* — built-in reference computation engine cross-validates against go-talib,
+  ensuring indicator data integrity. Run ~bralectl indicator diff~ for diff checks.
 - *Gate Replay backtesting* — replay historical decisions through the current rule set with zero
   LLM calls, enabling rapid rule-tuning validation.
 - *Fully automated scheduling* — decision cycles, monitoring, and reconciliation run on built-in
@@ -285,7 +285,7 @@ make start ENABLE_MCP=1 ENABLE_ONBOARDING=0
 | =schedule= | Enable / disable / status of the scheduler |
 | =config= | View / validate configuration |
 | =backtest= | Gate Replay — replay decisions through current rules (zero LLM cost) |
-| =indicator= | Cross-check Talib vs reference indicator engine |
+| =indicator= | Cross-check go-talib vs reference indicator engine |
 | =memory= | Manage semantic rules and view trade reflections |
 | =mcp= | Start MCP server or install into AI tools |
 | =llm= | Test LLM endpoint connectivity |
