@@ -4,7 +4,7 @@
 # Symbol identifier (must match the exchange/market data source exactly).
 symbol = "ETHUSDT"
 # Candlestick intervals to collect. Order affects display only, not logic.
-intervals = ["1h","4h"]
+intervals = ["15m","1h","4h"]
 # Number of candles to fetch per interval. Higher = slower but better structure detection.
 kline_limit = 300
 
