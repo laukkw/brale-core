@@ -108,7 +108,7 @@ func (s *Server) handleDashboardDecisionHistory(w http.ResponseWriter, r *http.R
 		writeError(ctx, w, http.StatusBadRequest, "invalid_limit", "limit 非法或超出范围", map[string]any{"max_limit": dashboardHistoryMaxLimit})
 		return
 	}
-	resp, useErr := newDashboardHistoryUsecase(s).build(ctx, symbol, limit, r.URL.Query().Get("snapshot_id"))
+	resp, useErr := newDashboardHistoryUsecase(s).build(ctx, symbol, limit, r.URL.Query().Get("snapshot_id"), r.URL.Query().Get("cursor"))
 	if useErr != nil {
 		writeError(ctx, w, useErr.Status, useErr.Code, useErr.Message, useErr.Details)
 		return

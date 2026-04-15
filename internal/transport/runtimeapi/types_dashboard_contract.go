@@ -191,6 +191,7 @@ type DashboardDecisionHistoryResponse struct {
 	Symbol    string                         `json:"symbol"`
 	Limit     int                            `json:"limit"`
 	Items     []DashboardDecisionHistoryItem `json:"items"`
+	NextCursor string                        `json:"next_cursor,omitempty"`
 	Detail    *DashboardDecisionDetail       `json:"detail,omitempty"`
 	Message   string                         `json:"message,omitempty"`
 	Summary   string                         `json:"summary"`

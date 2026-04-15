@@ -2,9 +2,11 @@ package runtimeapi
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	readmodel "brale-core/internal/readmodel/decisionflow"
 	"brale-core/internal/runtime"
@@ -29,7 +31,7 @@ func newDashboardHistoryUsecase(s *Server) dashboardHistoryUsecase {
 	return dashboardHistoryUsecase{store: s.Store, allowSymbol: s.AllowSymbol, configs: s.SymbolConfigs}
 }
 
-func (u dashboardHistoryUsecase) build(ctx context.Context, rawSymbol string, limit int, snapshotQuery string) (DashboardDecisionHistoryResponse, *usecaseError) {
+func (u dashboardHistoryUsecase) build(ctx context.Context, rawSymbol string, limit int, snapshotQuery string, cursorQuery string) (DashboardDecisionHistoryResponse, *usecaseError) {
 	if u.store == nil {
 		return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 500, Code: "store_missing", Message: "Store 未配置"}
 	}
@@ -42,18 +44,37 @@ func (u dashboardHistoryUsecase) build(ctx context.Context, rawSymbol string, li
 		return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 400, Code: "symbol_not_allowed", Message: "symbol 不在允许列表", Details: normalizedSymbol}
 	}
 
-	gates, err := u.store.ListGateEvents(ctx, normalizedSymbol, limit)
-	if err != nil {
-		return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: err.Error()}
+	var (
+		gates []store.GateEventRecord
+		next  *store.GateEventCursor
+	)
+	if pageStore, ok := u.store.(store.GateEventPageStore); ok {
+		cursor, err := parseGateEventCursor(cursorQuery)
+		if err != nil {
+			return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 400, Code: "invalid_cursor", Message: "cursor 非法", Details: err.Error()}
+		}
+		page, err := pageStore.ListGateEventsPage(ctx, normalizedSymbol, cursor, limit)
+		if err != nil {
+			return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: err.Error()}
+		}
+		gates = page.Items
+		next = page.Next
+	} else {
+		var err error
+		gates, err = u.store.ListGateEvents(ctx, normalizedSymbol, limit)
+		if err != nil {
+			return DashboardDecisionHistoryResponse{}, &usecaseError{Status: 500, Code: "gate_events_failed", Message: "gate 事件读取失败", Details: err.Error()}
+		}
 	}
 
 	items := mapDashboardDecisionHistoryItems(readmodel.MapHistoryItems(gates))
 	response := DashboardDecisionHistoryResponse{
-		Status:  "ok",
-		Symbol:  normalizedSymbol,
-		Limit:   limit,
-		Items:   items,
-		Summary: dashboardContractSummary,
+		Status:     "ok",
+		Symbol:     normalizedSymbol,
+		Limit:      limit,
+		Items:      items,
+		NextCursor: encodeGateEventCursor(next),
+		Summary:    dashboardContractSummary,
 	}
 	if len(items) == 0 {
 		response.Message = "no_history_available"
@@ -77,6 +98,38 @@ func (u dashboardHistoryUsecase) build(ctx context.Context, rawSymbol string, li
 	}
 
 	return response, nil
+}
+
+func encodeGateEventCursor(cursor *store.GateEventCursor) string {
+	if cursor == nil || cursor.CreatedAt.IsZero() || cursor.ID == 0 {
+		return ""
+	}
+	raw := cursor.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatUint(cursor.ID, 10)
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func parseGateEventCursor(raw string) (*store.GateEventCursor, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("decode cursor: %w", err)
+	}
+	parts := strings.Split(string(decoded), "|")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("cursor payload is invalid")
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse cursor time: %w", err)
+	}
+	id, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil || id == 0 {
+		return nil, fmt.Errorf("parse cursor id: invalid value")
+	}
+	return &store.GateEventCursor{CreatedAt: createdAt.UTC(), ID: id}, nil
 }
 
 func parseDetailSnapshotQuery(raw string) (uint, bool, error) {

@@ -20,6 +20,8 @@ const state = {
   lastPositionHistory: [],
   selectedDecisionAt: "",
   historyRequestSeq: 0,
+  historyNextCursor: "",
+  historyLoadingMore: false,
   reportCollapsed: true,
   refreshing: false,
   pendingRefreshMode: "",
@@ -54,6 +56,7 @@ const els = {
   flowMeta: document.getElementById("flow-meta"),
   positionHistoryBody: document.getElementById("position-history-body"),
   decisionHistoryBody: document.getElementById("decision-history-body"),
+  decisionHistoryMore: document.getElementById("decision-history-more"),
   decisionDetail: document.getElementById("decision-detail"),
   decisionViewLink: document.getElementById("decision-view-link")
 };
@@ -1883,7 +1886,7 @@ function renderDecisionHistoryRows(items, selectedSnapshotID) {
     .map((item) => {
       const active = Number(item.snapshot_id) === Number(selectedSnapshotID) ? "active" : "";
       return `<tr class="${active}" data-snapshot-id="${Number(item.snapshot_id || 0)}" tabindex="0" role="button" aria-label="查看快照 ${Number(item.snapshot_id || 0)} 的决策详情">
-        <td>${escapeHtml(formatBeijingDateTime(item.at))}</td>
+        <td data-decision-at="${escapeHtml(String(item.at || ""))}">${escapeHtml(formatBeijingDateTime(item.at))}</td>
         <td>${escapeHtml(actionLabel(String(item.action || "--").toUpperCase()))}</td>
         <td>${escapeHtml(item.reason || "--")}</td>
         <td>${escapeHtml(fmtConsensusValue(item.consensus_score))}</td>
@@ -1901,8 +1904,13 @@ function renderDecisionHistoryRows(items, selectedSnapshotID) {
   els.decisionHistoryBody.querySelectorAll("tr[data-snapshot-id]").forEach((row) => {
     const openDetail = async () => {
       addTransientClass(row, "row-activated", 220);
-      const snapshotID = row.getAttribute("data-snapshot-id");
-      await refreshDecisionHistory(snapshotID);
+      const snapshotID = Number(row.getAttribute("data-snapshot-id") || 0);
+      const atCell = row.querySelector("td[data-decision-at]");
+      state.selectedDecisionSnapshotID = snapshotID;
+      state.selectedDecisionSnapshotSymbol = state.symbol;
+      state.selectedDecisionAt = atCell ? String(atCell.getAttribute("data-decision-at") || "") : "";
+      renderDecisionHistoryRows(state.lastDecisionItems, snapshotID);
+      await openDecisionHistoryDetail(snapshotID, state.selectedDecisionAt, state.historyRequestSeq);
     };
     row.addEventListener("click", openDetail);
     row.addEventListener("keydown", async (event) => {
@@ -1913,6 +1921,91 @@ function renderDecisionHistoryRows(items, selectedSnapshotID) {
       await openDetail();
     });
   });
+}
+
+function renderDecisionHistoryPagination() {
+  const button = els.decisionHistoryMore;
+  if (!button) {
+    return;
+  }
+  const hasMore = Boolean(state.symbol && state.historyNextCursor);
+  const loading = Boolean(state.historyLoadingMore);
+  button.hidden = !hasMore && !loading;
+  button.disabled = !hasMore || loading;
+  button.textContent = loading ? "正在加载更多..." : "加载更多历史决策";
+}
+
+function mergeDecisionHistoryItems(existingItems, incomingItems) {
+  const merged = [];
+  const seen = new Set();
+  for (const item of [...(Array.isArray(existingItems) ? existingItems : []), ...(Array.isArray(incomingItems) ? incomingItems : [])]) {
+    const snapshotID = Number(item && item.snapshot_id ? item.snapshot_id : 0);
+    const dedupeKey = snapshotID > 0
+      ? `snapshot:${snapshotID}`
+      : JSON.stringify([item && item.at, item && item.action, item && item.reason]);
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    merged.push(item);
+  }
+  return merged;
+}
+
+async function openDecisionHistoryDetail(snapshotID, selectedDecisionAt, requestSeq) {
+  if (!Number.isFinite(Number(snapshotID)) || Number(snapshotID) <= 0) {
+    renderDecisionDetail(null, "暂无历史决策，请等待下一次策略评估。", "");
+    const flow = await refreshFlow();
+    if (requestSeq !== state.historyRequestSeq) {
+      return;
+    }
+    await refreshKline(flow);
+    return;
+  }
+  const detailData = await fetchJSON(`${apiBase}/decision_history`, {
+    symbol: state.symbol,
+    limit: 20,
+    snapshot_id: Number(snapshotID)
+  });
+  if (requestSeq !== state.historyRequestSeq) {
+    return;
+  }
+  renderDecisionDetail(detailData.detail || null, detailData.message || "", selectedDecisionAt);
+  const flow = await refreshFlow(Number(snapshotID));
+  if (requestSeq !== state.historyRequestSeq) {
+    return;
+  }
+  await refreshKline(flow);
+}
+
+async function loadMoreDecisionHistory() {
+  if (!state.symbol || !state.historyNextCursor || state.historyLoadingMore) {
+    return;
+  }
+  const requestSeq = state.historyRequestSeq;
+  state.historyLoadingMore = true;
+  renderDecisionHistoryPagination();
+  try {
+    const data = await fetchJSON(`${apiBase}/decision_history`, {
+      symbol: state.symbol,
+      limit: 20,
+      cursor: state.historyNextCursor
+    });
+    if (requestSeq !== state.historyRequestSeq) {
+      return;
+    }
+    const items = Array.isArray(data.items) ? data.items : [];
+    const merged = mergeDecisionHistoryItems(state.lastDecisionItems, items);
+    state.lastDecisionItems = merged;
+    state.lastHistoryItems = merged;
+    state.historyNextCursor = String(data.next_cursor || "");
+    renderDecisionHistoryRows(merged, state.selectedDecisionSnapshotID);
+  } finally {
+    if (requestSeq === state.historyRequestSeq) {
+      state.historyLoadingMore = false;
+      renderDecisionHistoryPagination();
+    }
+  }
 }
 
 function renderDecisionPlan(plan) {
@@ -2316,7 +2409,10 @@ async function refreshDecisionHistory(snapshotID) {
     state.selectedDecisionSnapshotID = 0;
     state.selectedDecisionSnapshotSymbol = "";
     state.selectedDecisionAt = "";
+    state.historyNextCursor = "";
+    state.historyLoadingMore = false;
     renderDecisionHistoryRows([], 0);
+    renderDecisionHistoryPagination();
     renderDecisionDetail(null, "暂无历史决策，请等待下一次策略评估。", "");
     const flow = await refreshFlow();
     await refreshKline(flow);
@@ -2327,6 +2423,7 @@ async function refreshDecisionHistory(snapshotID) {
     state.selectedDecisionSnapshotSymbol = state.symbol;
   }
   const requestSeq = ++state.historyRequestSeq;
+  state.historyLoadingMore = false;
   const data = await fetchJSON(`${apiBase}/decision_history`, {
     symbol: state.symbol,
     limit: 20
@@ -2334,9 +2431,10 @@ async function refreshDecisionHistory(snapshotID) {
   if (requestSeq !== state.historyRequestSeq) {
     return;
   }
-  const items = sortByDateFieldDesc(Array.isArray(data.items) ? data.items : [], "at");
+  const items = Array.isArray(data.items) ? data.items : [];
   state.lastDecisionItems = items;
   state.lastHistoryItems = items;
+  state.historyNextCursor = String(data.next_cursor || "");
   const preferredSnapshotID = Number(snapshotID || state.selectedDecisionSnapshotID || 0);
   const matchedSnapshot = items.find((item) => Number(item.snapshot_id || 0) === preferredSnapshotID);
   const selectedSnapshotID = matchedSnapshot
@@ -2347,29 +2445,8 @@ async function refreshDecisionHistory(snapshotID) {
   state.selectedDecisionSnapshotID = selectedSnapshotID;
   state.selectedDecisionSnapshotSymbol = state.symbol;
   renderDecisionHistoryRows(items, selectedSnapshotID);
-  if (selectedSnapshotID > 0) {
-    const detailData = await fetchJSON(`${apiBase}/decision_history`, {
-      symbol: state.symbol,
-      limit: 20,
-      snapshot_id: selectedSnapshotID
-    });
-    if (requestSeq !== state.historyRequestSeq) {
-      return;
-    }
-    renderDecisionDetail(detailData.detail || null, detailData.message || "", state.selectedDecisionAt);
-    const flow = await refreshFlow(selectedSnapshotID);
-    if (requestSeq !== state.historyRequestSeq) {
-      return;
-    }
-    await refreshKline(flow);
-    return;
-  }
-  renderDecisionDetail(null, data.message || "暂无历史决策，请等待下一次策略评估。", "");
-  const flow = await refreshFlow();
-  if (requestSeq !== state.historyRequestSeq) {
-    return;
-  }
-  await refreshKline(flow);
+  renderDecisionHistoryPagination();
+  await openDecisionHistoryDetail(selectedSnapshotID, state.selectedDecisionAt, requestSeq);
 }
 
 async function refreshStatus() {
@@ -2451,6 +2528,13 @@ async function bootstrap() {
     }
     await refreshKline(state.lastFlow);
   });
+
+  if (els.decisionHistoryMore) {
+    els.decisionHistoryMore.addEventListener("click", async () => {
+      addTransientClass(els.decisionHistoryMore, "control-bump", 240);
+      await loadMoreDecisionHistory();
+    });
+  }
 
   await runRefreshCycle("full");
 

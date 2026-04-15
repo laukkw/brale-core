@@ -8,5 +8,6 @@ func llmCmd() *cobra.Command {
 		Short: "LLM 诊断工具",
 	}
 	cmd.AddCommand(probeLLMCmd())
+	cmd.AddCommand(llmRoundsCmd())
 	return cmd
 }

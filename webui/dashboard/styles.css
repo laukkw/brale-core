@@ -1585,6 +1585,14 @@ tbody tr {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.decision-history-footer {
+  margin-top: 12px;
+}
+
+.decision-history-more[hidden] {
+  display: none;
+}
+
 .decision-report-collapsible {
   display: grid;
   grid-template-rows: 1fr;
