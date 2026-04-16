@@ -3,7 +3,6 @@ SHELL := /bin/bash
 COMPOSE_FILE ?= docker-compose.yml
 COMPOSE_PROJECT_NAME ?= brale-core
 ENABLE_MCP ?= 0
-ENABLE_ONBOARDING ?= 0
 SETUP_LANG ?=
 SETUP_ARGS ?=
 
@@ -17,8 +16,6 @@ STACK_PROXY_ENV_FILE ?= $(CURDIR)/data/freqtrade/proxy.env
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 HOST_REPO_ROOT ?= $(CURDIR)
-ONBOARDING_ADDR ?= 127.0.0.1:9992
-ONBOARDING_URL ?= http://$(ONBOARDING_ADDR)
 BRALECTL_BIN ?= $(BRALE_DATA_ROOT)/bin/bralectl
 OUTPUT_ROOT ?= $(CURDIR)/_output
 BRALECTL_OUTPUT_BIN ?= $(OUTPUT_ROOT)/bralectl
@@ -26,8 +23,7 @@ BRALECTL_DOCKER_IMAGE ?= brale-core-go-builder
 TEMPLATE_SYMBOL ?=
 
 ENABLE_MCP_NORM := $(if $(filter 1 true TRUE yes YES on ON,$(ENABLE_MCP)),1,0)
-ENABLE_ONBOARDING_NORM := $(if $(filter 1 true TRUE yes YES on ON,$(ENABLE_ONBOARDING)),1,0)
-OPTIONAL_STACK_SERVICES := $(if $(filter 1,$(ENABLE_MCP_NORM)),mcp-sse,) $(if $(filter 1,$(ENABLE_ONBOARDING_NORM)),onboarding,)
+OPTIONAL_STACK_SERVICES := $(if $(filter 1,$(ENABLE_MCP_NORM)),mcp-sse,)
 REBUILD_SERVICES := brale $(if $(filter 1,$(ENABLE_MCP_NORM)),mcp-sse,)
 
 STACK_EXPORTS = export HOST_UID="$(HOST_UID)"; export HOST_GID="$(HOST_GID)"; export COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)"; export HOST_REPO_ROOT="$(HOST_REPO_ROOT)"; export BRALE_CONFIG_ROOT="$(BRALE_CONFIG_ROOT)"; export BRALE_DATA_ROOT="$(BRALE_DATA_ROOT)"; export PGDATA_ROOT="$(PGDATA_ROOT)"; export FREQTRADE_CONFIG_ROOT="$(FREQTRADE_CONFIG_ROOT)"; export FREQTRADE_RUNTIME_ROOT="$(FREQTRADE_RUNTIME_ROOT)"; export FREQTRADE_CONFIG_FILE="$(FREQTRADE_CONFIG_FILE)"; export STACK_PROXY_ENV_FILE="$(STACK_PROXY_ENV_FILE)";
@@ -55,16 +51,18 @@ STACK_PROXY_SOURCE = if [ -f "$$STACK_PROXY_ENV_FILE" ]; then \
 	done < "$$STACK_PROXY_ENV_FILE"; \
 fi;
 COMPOSE = $(STACK_EXPORTS) $(STACK_PROXY_SOURCE) docker compose -f "$(COMPOSE_FILE)"
-ONBOARDING_PREPARE = $(COMPOSE) run --rm --no-deps onboarding prepare-stack
 
-.PHONY: help env-init setup init init-stop init-status init-logs check prepare start apply-config onboarding-start onboarding-pull onboarding-refresh-brale start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs build bralectl-build bralectl-builder-image add-symbol llm-probe migrate-up migrate-down
+# PREPARE_STACK runs the prepare-stack logic locally (via Go) or in Docker.
+PREPARE_STACK_ARGS = -env-file .env -config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" -config-out "$(FREQTRADE_CONFIG_FILE)" -proxy-env-out "$(STACK_PROXY_ENV_FILE)" -system-in "$(BRALE_CONFIG_ROOT)/system.toml"
+
+.PHONY: help env-init setup init check prepare start apply-config start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs build bralectl-build bralectl-builder-image add-symbol llm-probe migrate-up migrate-down
 
 help: ## Show the main make targets and optional component switches
 	@printf '%-22s %s\n' "env-init" "Create .env from .env.example if missing"; \
 	printf '%-22s %s\n' "build" "Build bralectl into _output/bralectl"; \
 	printf '%-22s %s\n' "setup" "Run bralectl setup (env init + optional MCP client config)"; \
-	printf '%-22s %s\n' "init" "Start the onboarding UI only"; \
-	printf '%-22s %s\n' "start" "Start freqtrade + brale; add ENABLE_MCP=1 and/or ENABLE_ONBOARDING=1"; \
+	printf '%-22s %s\n' "init" "Interactive CLI wizard: configure .env + generate runtime configs"; \
+	printf '%-22s %s\n' "start" "Start freqtrade + brale; add ENABLE_MCP=1 for MCP service"; \
 	printf '%-22s %s\n' "mcp-start" "Start only the MCP SSE service (dependencies auto-start)"; \
 	printf '%-22s %s\n' "rebuild" "Rebuild brale (and mcp-sse when ENABLE_MCP=1)"; \
 	printf '%-22s %s\n' "stop / down" "Stop services / remove the full compose stack"; \
@@ -72,7 +70,6 @@ help: ## Show the main make targets and optional component switches
 	echo ""; \
 	echo "Optional switches:"; \
 	printf '  %-18s %s\n' "ENABLE_MCP=1" "Include the mcp-sse service"; \
-	printf '  %-18s %s\n' "ENABLE_ONBOARDING=1" "Keep onboarding UI running with the stack"; \
 	printf '  %-18s %s\n' "SETUP_LANG=zh|en" "Preselect the setup wizard language"; \
 	printf '  %-18s %s\n' "SETUP_ARGS='...'" "Pass extra flags to bralectl setup"
 
@@ -91,72 +88,10 @@ env-init: ## Create .env from .env.example when missing
 setup: bralectl-build env-init ## Run the local setup wizard (env init + optional MCP install)
 	@"$(BRALECTL_BIN)" setup --repo "$(CURDIR)" $(if $(SETUP_LANG),--lang $(SETUP_LANG),) $(SETUP_ARGS)
 
-init: ## Start the onboarding UI only
-	@set -e; \
-	if ! command -v docker >/dev/null 2>&1; then \
-		echo "[ERR] docker command not found. Please install Docker first."; \
-		echo "[TIP] macOS: ./scripts/install_docker_mac.sh"; \
-		echo "[TIP] Linux: ./scripts/install_docker_linux.sh"; \
-		exit 1; \
-	fi; \
-	if ! docker compose version >/dev/null 2>&1; then \
-		echo "[ERR] docker compose command not found. Please install Docker Compose first."; \
-		echo "[TIP] macOS: install/start Docker Desktop, then run: docker compose version"; \
-		echo "[TIP] Linux: ./scripts/install_docker_linux.sh"; \
-		echo "[TIP] Verify: docker compose version"; \
-		exit 1; \
-	fi; \
-	if ! docker info >/dev/null 2>&1; then \
-		echo "[ERR] Docker daemon is not running. Please start Docker Desktop / dockerd first."; \
-		exit 1; \
-	fi; \
-	status_json="$$(curl -fsS "$(ONBOARDING_URL)/api/status" 2>/dev/null || true)"; \
-	if [ -n "$$status_json" ]; then \
-		echo "[OK] Onboarding already running at $(ONBOARDING_URL)"; \
-		echo "[OPEN] $(ONBOARDING_URL)"; \
-		exit 0; \
-	fi; \
-	host="$(ONBOARDING_ADDR)"; host="$${host%:*}"; \
-	port="$(ONBOARDING_ADDR)"; port="$${port##*:}"; \
-	if [ -z "$$host" ]; then host="127.0.0.1"; fi; \
-	if (echo >"/dev/tcp/$$host/$$port") >/dev/null 2>&1; then \
-		echo "[ERR] port $$host:$$port is already in use by another process"; \
-		echo "[TIP] free this port or run: make init ONBOARDING_ADDR=127.0.0.1:9993"; \
-		exit 1; \
-	fi; \
-	echo "[OK] Docker is ready"; \
-	echo "[INFO] Starting onboarding container at $(ONBOARDING_URL)"; \
-	$(COMPOSE) up -d --build onboarding; \
-	for i in $$(seq 1 60); do \
-		if curl -fsS "$(ONBOARDING_URL)/api/status" >/dev/null 2>&1; then \
-			echo "[OK] onboarding running at $(ONBOARDING_URL)"; \
-			echo "[OPEN] $(ONBOARDING_URL)"; \
-			exit 0; \
-		fi; \
-		sleep 1; \
-	done; \
-	echo "[ERR] onboarding did not become ready in time"; \
-	$(COMPOSE) logs --tail=200 onboarding; \
-	exit 1
+init: bralectl-build env-init ## Interactive CLI wizard: configure .env + generate runtime configs
+	@"$(BRALECTL_BIN)" init --repo "$(CURDIR)"
 
-init-stop: ## Stop the onboarding UI container
-	@set -e; \
-	$(COMPOSE) stop onboarding >/dev/null 2>&1 || true; \
-	echo "[OK] stopped onboarding container"
-
-init-status: ## Show onboarding UI status
-	@set -e; \
-	if curl -fsS "$(ONBOARDING_URL)/api/status" >/dev/null 2>&1; then \
-		echo "[OK] onboarding running at $(ONBOARDING_URL)"; \
-		$(COMPOSE) ps onboarding; \
-		exit 0; \
-	fi; \
-	echo "[INFO] onboarding not running"
-
-init-logs: ## Tail onboarding UI logs
-	@$(COMPOSE) logs -f --tail=200 onboarding
-
-check:
+check: bralectl-build
 	@if [ ! -f ".env" ]; then \
 		echo "[ERR] .env not found in project root"; \
 		exit 1; \
@@ -181,9 +116,9 @@ check:
 		echo "[ERR] strategy file not found: $(FREQTRADE_CONFIG_ROOT)/brale_shared_strategy.py"; \
 		exit 1; \
 	fi
-	@$(ONBOARDING_PREPARE) --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml" --check-only
+	@"$(BRALECTL_BIN)" prepare-stack $(PREPARE_STACK_ARGS) -check-only
 
-prepare:
+prepare: bralectl-build
 	@mkdir -p "$(BRALE_DATA_ROOT)" \
 		"$(PGDATA_ROOT)" \
 		"$(FREQTRADE_RUNTIME_ROOT)" \
@@ -198,7 +133,7 @@ prepare:
 		"$(FREQTRADE_RUNTIME_ROOT)/strategies" \
 		"$(dir $(FREQTRADE_CONFIG_FILE))" \
 		"$(dir $(STACK_PROXY_ENV_FILE))"
-	@$(ONBOARDING_PREPARE) --env-file .env --config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" --config-out "$(FREQTRADE_CONFIG_FILE)" --proxy-env-out "$(STACK_PROXY_ENV_FILE)" --system-in "$(BRALE_CONFIG_ROOT)/system.toml"
+	@"$(BRALECTL_BIN)" prepare-stack $(PREPARE_STACK_ARGS)
 	@cp -f "$(FREQTRADE_CONFIG_ROOT)/brale_shared_strategy.py" "$(FREQTRADE_RUNTIME_ROOT)/strategies/BraleSharedStrategy.py"
 	@if [ -d "$(BRALE_DATA_ROOT)/pgdata" ] && [ -z "$$(find "$(PGDATA_ROOT)" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then \
 		echo "[WARN] detected legacy PostgreSQL data at $(BRALE_DATA_ROOT)/pgdata"; \
@@ -209,31 +144,13 @@ prepare:
 		chown -R "$(HOST_UID):$(HOST_GID)" "$(BRALE_DATA_ROOT)" "$(PGDATA_ROOT)" "$(FREQTRADE_RUNTIME_ROOT)" "$(dir $(STACK_PROXY_ENV_FILE))"; \
 	fi
 
-start: check prepare ## Start the core stack; use ENABLE_MCP=1 and/or ENABLE_ONBOARDING=1 for optional services
+start: check prepare ## Start the core stack; use ENABLE_MCP=1 for optional MCP service
 	@$(MAKE) start-freqtrade
 	@$(MAKE) wait-freqtrade
 	@$(COMPOSE) up -d --build brale $(OPTIONAL_STACK_SERVICES)
 
 apply-config: check prepare stop ## Regenerate configs and restart the stack
-	@$(MAKE) start ENABLE_MCP="$(ENABLE_MCP)" ENABLE_ONBOARDING="$(ENABLE_ONBOARDING)"
-
-onboarding-start: apply-config
-
-onboarding-pull:
-	@$(COMPOSE) pull freqtrade
-
-onboarding-refresh-brale:
-	@echo "[INFO] onboarding-refresh-brale: start"
-	@set -e; \
-	if [ -n "$$(git status --porcelain)" ]; then \
-		echo "[WARN] 检测到本地修改，跳过 git pull，直接执行 make rebuild。"; \
-	else \
-		echo "[INFO] 工作区干净，开始拉取 brale-core 最新代码..."; \
-		git pull --ff-only --no-rebase; \
-	fi
-	@echo "[INFO] 开始执行 make rebuild..."
-	@$(MAKE) rebuild
-	@echo "[OK] onboarding-refresh-brale: done"
+	@$(MAKE) start ENABLE_MCP="$(ENABLE_MCP)"
 
 start-freqtrade: ## Start the freqtrade service
 	@$(COMPOSE) up -d --build freqtrade
@@ -280,7 +197,7 @@ rebuild: check prepare ## Rebuild brale (and mcp-sse when ENABLE_MCP=1)
 	@$(COMPOSE) up -d --build $(REBUILD_SERVICES)
 
 stop: ## Stop the running compose services
-	@$(COMPOSE) stop brale freqtrade mcp-sse onboarding
+	@$(COMPOSE) stop brale freqtrade mcp-sse
 
 restart: apply-config
 

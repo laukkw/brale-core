@@ -1,53 +1,6 @@
 name: ${COMPOSE_PROJECT_NAME:-brale-core}
 
 services:
-  onboarding:
-    profiles: ["onboarding"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: onboarding-runtime
-      extra_hosts:
-        - "host.docker.internal:host-gateway"
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-        http_proxy: ${http_proxy:-}
-        https_proxy: ${https_proxy:-}
-        no_proxy: ${no_proxy:-}
-        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
-        GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
-    restart: unless-stopped
-    working_dir: ${HOST_REPO_ROOT:-/workspace}
-    environment:
-      HOST_REPO_ROOT: ${HOST_REPO_ROOT:-/workspace}
-      HOST_UID: ${HOST_UID:-1000}
-      HOST_GID: ${HOST_GID:-1000}
-      TZ: Asia/Shanghai
-    command:
-      - "serve"
-      - "-addr"
-      - "0.0.0.0:9992"
-      - "-repo"
-      - ${HOST_REPO_ROOT:-/workspace}
-      - "-allow-non-loopback"
-    ports:
-      - "127.0.0.1:9992:9992"
-    volumes:
-      - type: bind
-        source: .
-        target: ${HOST_REPO_ROOT:-/workspace}
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9992/api/status"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
   timescaledb:
     build:
       context: .

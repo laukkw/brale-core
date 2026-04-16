@@ -17,7 +17,6 @@ COPY webui ./webui
 COPY --from=node-runtime /usr/local/ /usr/local/
 RUN npm ci --prefix /src/webui/og-card-demo
 RUN CGO_ENABLED=0 go build -o /out/bralectl ./cmd/bralectl
-RUN CGO_ENABLED=0 go build -o /out/onboarding ./cmd/onboarding
 RUN CGO_ENABLED=0 go build -o /out/brale-core ./cmd/brale-core
 
 FROM debian:bookworm-slim AS brale-runtime
@@ -39,15 +38,3 @@ COPY --from=builder /src/webui/og-card-demo /app/webui/og-card-demo
 
 ENTRYPOINT ["brale-core"]
 CMD ["-system", "configs/system.toml", "-symbols", "configs/symbols-index.toml"]
-
-FROM docker:28-cli AS onboarding-runtime
-
-ENV TZ=Asia/Shanghai
-
-RUN apk add --no-cache bash curl git make tzdata
-
-WORKDIR /workspace
-COPY --from=builder /out/onboarding /usr/local/bin/onboarding
-
-ENTRYPOINT ["onboarding"]
-CMD ["serve", "-addr", "0.0.0.0:9992", "-repo", "/workspace"]
