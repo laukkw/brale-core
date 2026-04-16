@@ -268,13 +268,14 @@ func (m Manager) SendStartup(ctx context.Context, info StartupInfo) error {
 		scheduleText = "自动调度"
 	}
 
-	lines := []string{
-		fmt.Sprintf("- %s: %s", Label("symbols"), symbolList),
-		fmt.Sprintf("- %s: %s", Label("intervals"), intervalList),
-		fmt.Sprintf("- %s: %s", Label("bar_interval"), barIntervalText),
-		fmt.Sprintf("- %s: %s", Label("balance"), balanceText),
-		fmt.Sprintf("- %s: %s", Label("schedule_mode"), scheduleText),
-	}
+	var sb strings.Builder
+	sb.WriteString("🚀 Brale 已启动\n")
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("symbols"), symbolList))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("intervals"), intervalList))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("bar_interval"), barIntervalText))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("balance"), balanceText))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("schedule_mode"), scheduleText))
 	for _, item := range info.SymbolStatuses {
 		symbol := strings.TrimSpace(item.Symbol)
 		if symbol == "" {
@@ -288,20 +289,12 @@ func (m Manager) SendStartup(ctx context.Context, info StartupInfo) error {
 		if nextText == "" {
 			nextText = "—"
 		}
-		lines = append(lines, fmt.Sprintf("- %s: 周期 %s · 下次决策 %s", symbol, intervalText, nextText))
+		sb.WriteString(fmt.Sprintf("  · %s：周期 %s · 下次决策 %s\n", symbol, intervalText, nextText))
 	}
-	fallback := prependNoticeHeader("🚀 Brale 已启动", strings.Join(lines, "\n"))
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━")
+	body := sb.String()
 
-	data := map[string]any{
-		"symbols":         info.Symbols,
-		"intervals":       info.Intervals,
-		"bar_interval":    barIntervalText,
-		"balance":         info.Balance,
-		"currency":        strings.TrimSpace(info.Currency),
-		"schedule_mode":   scheduleText,
-		"symbol_statuses": info.SymbolStatuses,
-	}
-	msg := m.renderCardMessage(ctx, "startup", "", data, "Brale 已启动", fallback)
+	msg := Message{Title: "Brale 已启动", Markdown: body, Plain: body}
 	return m.sendWithKey(ctx, msg, "startup")
 }
 
@@ -314,18 +307,16 @@ func (m Manager) SendShutdown(ctx context.Context, info ShutdownInfo) error {
 	if info.Uptime > 0 {
 		uptimeText = info.Uptime.Truncate(time.Second).String()
 	}
-	lines := []string{
-		fmt.Sprintf("- %s: %s", Label("reason"), reason),
-		fmt.Sprintf("- %s: %s", Label("uptime"), uptimeText),
-	}
-	body := strings.Join(lines, "\n")
-	body = prependNoticeHeader("🛑 Brale 已停止", body)
 
-	data := map[string]any{
-		"reason": reason,
-		"uptime": uptimeText,
-	}
-	msg := m.renderCardMessage(ctx, "shutdown", "", data, "Brale 已停止", body)
+	var sb strings.Builder
+	sb.WriteString("🛑 Brale 已停止\n")
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("reason"), reason))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("uptime"), uptimeText))
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━")
+	body := sb.String()
+
+	msg := Message{Title: "Brale 已停止", Markdown: body, Plain: body}
 	return m.sendWithKey(ctx, msg, "shutdown")
 }
 
@@ -605,14 +596,6 @@ func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNo
 	if notice.MarkPrice > 0 {
 		markText = formatFloat(notice.MarkPrice)
 	}
-	atrText := "-"
-	if notice.ATR > 0 {
-		atrText = formatFloat(notice.ATR)
-	}
-	volatilityText := "-"
-	if notice.Volatility != 0 {
-		volatilityText = formatFloat(notice.Volatility)
-	}
 	stopReasonText := strings.TrimSpace(notice.StopReason)
 	if stopReasonText == "" {
 		stopReasonText = strings.TrimSpace(notice.Reason)
@@ -627,14 +610,6 @@ func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNo
 	if reasonText == "" {
 		reasonText = "-"
 	}
-	riskText := "-"
-	if notice.RiskPct > 0 {
-		riskText = formatPercent(notice.RiskPct)
-	}
-	leverageText := "-"
-	if notice.Leverage > 0 {
-		leverageText = formatFloat(notice.Leverage)
-	}
 	gateText := fmt.Sprintf("%t", notice.GateSatisfied)
 	scoreTotalText := "-"
 	if notice.ScoreTotal != 0 {
@@ -644,46 +619,34 @@ func (m Manager) SendRiskPlanUpdate(ctx context.Context, notice RiskPlanUpdateNo
 	if notice.ScoreThreshold != 0 {
 		scoreThresholdText = formatFloat(notice.ScoreThreshold)
 	}
-	breakdownText := "-"
-	if len(notice.ScoreBreakdown) > 0 {
-		parts := make([]string, 0, len(notice.ScoreBreakdown))
-		for _, item := range notice.ScoreBreakdown {
-			valueText := strings.TrimSpace(item.Value)
-			if valueText == "" {
-				valueText = "-"
-			}
-			parts = append(parts, fmt.Sprintf("%s=%s (w=%s, c=%s)", strings.TrimSpace(item.Signal), valueText, formatFloat(item.Weight), formatFloat(item.Contribution)))
-		}
-		breakdownText = strings.Join(parts, "; ")
-	}
-	parseText := fmt.Sprintf("%t", notice.ParseOK)
 	tightenReasonText := strings.TrimSpace(notice.TightenReason)
 	if tightenReasonText == "" {
 		tightenReasonText = "-"
 	}
-	tpTightenedText := fmt.Sprintf("%t", notice.TPTightened)
 	lines := []string{
 		fmt.Sprintf("- %s: %s", Label("symbol"), symbol),
 		fmt.Sprintf("- %s: %s", Label("direction"), direction),
 		fmt.Sprintf("- %s: %s", Label("entry"), entryText),
-		fmt.Sprintf("- %s: %s", Label("stop_prev"), oldStopText),
-		fmt.Sprintf("- %s: %s", Label("stop_new"), newStopText),
-		fmt.Sprintf("- %s: %s", Label("stop_reason"), stopReasonText),
-		fmt.Sprintf("- %s: %s", Label("reason"), reasonText),
-		fmt.Sprintf("- %s: %s", Label("take_profits"), tpText),
-		fmt.Sprintf("- %s: %s", Label("source"), sourceText),
-		fmt.Sprintf("- %s: %s", Label("mark_price"), markText),
-		fmt.Sprintf("- %s: %s", Label("atr"), atrText),
-		fmt.Sprintf("- %s: %s", Label("volatility"), volatilityText),
-		fmt.Sprintf("- %s: %s", Label("gate_satisfied"), gateText),
-		fmt.Sprintf("- %s: %s", Label("score_total"), scoreTotalText),
-		fmt.Sprintf("- %s: %s", Label("score_threshold"), scoreThresholdText),
-		fmt.Sprintf("- %s: %s", Label("score_breakdown"), breakdownText),
-		fmt.Sprintf("- %s: %s", Label("parse_ok"), parseText),
-		fmt.Sprintf("- %s: %s", Label("tighten_reason"), tightenReasonText),
-		fmt.Sprintf("- %s: %s", Label("tp_tightened"), tpTightenedText),
-		fmt.Sprintf("- %s: %s", Label("risk_pct"), riskText),
-		fmt.Sprintf("- %s: %s", Label("leverage"), leverageText),
+		fmt.Sprintf("- %s: %s → %s", Label("stop_prev"), oldStopText, newStopText),
+	}
+	if stopReasonText != "-" && stopReasonText != reasonText {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("stop_reason"), stopReasonText))
+	}
+	if reasonText != "-" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("reason"), reasonText))
+	}
+	if tpText != "-" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("take_profits"), tpText))
+	}
+	lines = append(lines, fmt.Sprintf("- %s: %s", Label("source"), sourceText))
+	if markText != "-" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("mark_price"), markText))
+	}
+	if scoreTotalText != "-" || scoreThresholdText != "-" {
+		lines = append(lines, fmt.Sprintf("- 评分: %s / %s · 通过: %s", scoreTotalText, scoreThresholdText, gateText))
+	}
+	if tightenReasonText != "-" {
+		lines = append(lines, fmt.Sprintf("- %s: %s", Label("tighten_reason"), tightenReasonText))
 	}
 	posID := strings.TrimSpace(notice.PositionID)
 	if posID != "" {
@@ -732,36 +695,25 @@ func (m Manager) SendTradeOpen(ctx context.Context, notice TradeOpenNotice) erro
 	if notice.IsShort {
 		direction = "short"
 	}
-	lines := []string{
-		fmt.Sprintf("- %s: %s", Label("pair"), pair),
-		fmt.Sprintf("- %s: %s", Label("amount"), formatFloat(notice.Amount)),
-		fmt.Sprintf("- %s: %s", Label("stake_amount"), formatFloat(notice.StakeAmount)),
-		fmt.Sprintf("- %s: %t", Label("is_short"), notice.IsShort),
-		fmt.Sprintf("- %s: %s", Label("open_rate"), formatFloat(notice.OpenRate)),
-		fmt.Sprintf("- %s: %s", Label("leverage"), formatFloat(notice.Leverage)),
-		fmt.Sprintf("- %s: %d", Label("trade_id"), notice.TradeID),
-	}
-	if strings.TrimSpace(notice.EnterTag) != "" {
-		lines = append(lines, fmt.Sprintf("- %s: %s", Label("enter_tag"), strings.TrimSpace(notice.EnterTag)))
-	}
-	if notice.OpenTimestamp > 0 {
-		lines = append(lines, fmt.Sprintf("- %s: %d", Label("open_ts"), notice.OpenTimestamp))
-	}
-	title := fmt.Sprintf("[OPEN][%s] %s", pair, strings.ToUpper(direction))
-	fallback := prependNoticeHeader("📈 开仓通知", strings.Join(lines, "\n"))
 
-	symbol := normalizeCloseSymbol(pair)
-	data := map[string]any{
-		"direction":      direction,
-		"entry_price":    notice.OpenRate,
-		"qty":            notice.Amount,
-		"stake_amount":   notice.StakeAmount,
-		"leverage":       notice.Leverage,
-		"trade_id":       notice.TradeID,
-		"enter_tag":      strings.TrimSpace(notice.EnterTag),
-		"open_timestamp": notice.OpenTimestamp,
+	var sb strings.Builder
+	sb.WriteString("📈 开仓通知\n")
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("pair"), pair))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("direction"), direction))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("open_rate"), formatFloat(notice.OpenRate)))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("amount"), formatFloat(notice.Amount)))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("stake_amount"), formatFloat(notice.StakeAmount)))
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("leverage"), formatFloat(notice.Leverage)))
+	if strings.TrimSpace(notice.EnterTag) != "" {
+		sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("enter_tag"), strings.TrimSpace(notice.EnterTag)))
 	}
-	msg := m.renderCardMessage(ctx, "position_open", symbol, data, title, fallback)
+	sb.WriteString(fmt.Sprintf("▸ %s：%d\n", Label("trade_id"), notice.TradeID))
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━")
+	body := sb.String()
+
+	title := fmt.Sprintf("[OPEN][%s] %s", pair, strings.ToUpper(direction))
+	msg := Message{Title: title, Markdown: body, Plain: body}
 	key := fmt.Sprintf("trade_open:%s:%d:%d", pair, notice.TradeID, notice.OpenTimestamp)
 	return m.sendWithKey(ctx, msg, key)
 }
@@ -784,17 +736,11 @@ func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialC
 		exitType = "-"
 	}
 	lines := []string{
-		fmt.Sprintf("- %s: %s", Label("pair"), pair),
-		fmt.Sprintf("- %s: %t", Label("is_short"), notice.IsShort),
-		fmt.Sprintf("- %s: %s", Label("open_rate"), formatFloat(notice.OpenRate)),
-		fmt.Sprintf("- %s: %s", Label("close_rate"), formatFloat(notice.CloseRate)),
-		fmt.Sprintf("- %s: %s", Label("amount"), formatFloat(notice.Amount)),
-		fmt.Sprintf("- %s: %s", Label("stake_amount"), formatFloat(notice.StakeAmount)),
-		fmt.Sprintf("- %s: %s", Label("realized_profit"), formatFloat(notice.RealizedProfit)),
-		fmt.Sprintf("- %s: %s", Label("realized_profit_ratio"), formatFloat(notice.RealizedProfitRatio)),
-		fmt.Sprintf("- %s: %s", Label("exit_reason"), exitReason),
-		fmt.Sprintf("- %s: %s", Label("exit_type"), exitType),
-		fmt.Sprintf("- %s: %d", Label("trade_id"), notice.TradeID),
+		fmt.Sprintf("- %s: %s · %s", Label("pair"), pair, direction),
+		fmt.Sprintf("- %s: %s → %s", Label("open_rate"), formatFloat(notice.OpenRate), formatFloat(notice.CloseRate)),
+		fmt.Sprintf("- %s: %s · %s: %s", Label("amount"), formatFloat(notice.Amount), Label("stake_amount"), formatFloat(notice.StakeAmount)),
+		fmt.Sprintf("- %s: %s (%s)", Label("realized_profit"), formatFloat(notice.RealizedProfit), formatFloat(notice.RealizedProfitRatio)),
+		fmt.Sprintf("- %s: %s · %s: %s", Label("exit_reason"), exitReason, Label("exit_type"), exitType),
 	}
 	title := fmt.Sprintf("[PARTIAL][%s] %s", pair, strings.ToUpper(direction))
 	fallback := prependNoticeHeader("🔄 部分平仓", strings.Join(lines, "\n"))
@@ -841,23 +787,17 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 	if exitType == "" {
 		exitType = "-"
 	}
+	durationText := "-"
+	if notice.TradeDurationS > 0 {
+		durationText = formatDuration(notice.TradeDurationS)
+	}
 	lines := []string{
-		fmt.Sprintf("- %s: %s", Label("pair"), pair),
-		fmt.Sprintf("- %s: %t", Label("is_short"), notice.IsShort),
-		fmt.Sprintf("- %s: %s", Label("open_rate"), formatFloat(notice.OpenRate)),
-		fmt.Sprintf("- %s: %s", Label("close_rate"), formatFloat(notice.CloseRate)),
-		fmt.Sprintf("- %s: %s", Label("amount"), formatFloat(notice.Amount)),
-		fmt.Sprintf("- %s: %s", Label("stake_amount"), formatFloat(notice.StakeAmount)),
-		fmt.Sprintf("- %s: %s", Label("close_profit_abs"), formatFloat(notice.CloseProfitAbs)),
-		fmt.Sprintf("- %s: %s", Label("close_profit_pct"), formatFloat(notice.CloseProfitPct)),
-		fmt.Sprintf("- %s: %s", Label("profit_abs"), formatFloat(notice.ProfitAbs)),
-		fmt.Sprintf("- %s: %s", Label("profit_pct"), formatFloat(notice.ProfitPct)),
-		fmt.Sprintf("- %s: %d", Label("trade_duration_s"), notice.TradeDurationS),
-		fmt.Sprintf("- %s: %d", Label("trade_duration"), notice.TradeDuration),
-		fmt.Sprintf("- %s: %s", Label("exit_reason"), exitReason),
-		fmt.Sprintf("- %s: %s", Label("exit_type"), exitType),
-		fmt.Sprintf("- %s: %s", Label("leverage"), formatFloat(notice.Leverage)),
-		fmt.Sprintf("- %s: %d", Label("trade_id"), notice.TradeID),
+		fmt.Sprintf("- %s: %s · %s", Label("pair"), pair, direction),
+		fmt.Sprintf("- %s: %s → %s", Label("open_rate"), formatFloat(notice.OpenRate), formatFloat(notice.CloseRate)),
+		fmt.Sprintf("- %s: %s · %s: %s", Label("amount"), formatFloat(notice.Amount), Label("leverage"), formatFloat(notice.Leverage)),
+		fmt.Sprintf("- %s: %s (%s)", Label("profit_abs"), formatFloat(notice.ProfitAbs), formatFloat(notice.ProfitPct)),
+		fmt.Sprintf("- %s: %s · %s: %s", Label("exit_reason"), exitReason, Label("exit_type"), exitType),
+		fmt.Sprintf("- 持仓时长: %s", durationText),
 	}
 	title := fmt.Sprintf("[CLOSED][%s] %s", pair, strings.ToUpper(direction))
 	fallback := prependNoticeHeader("📉 全部平仓完成", strings.Join(lines, "\n"))
@@ -1074,21 +1014,6 @@ func (m Manager) SendError(ctx context.Context, notice ErrorNotice) error {
 	component := strings.TrimSpace(notice.Component)
 	symbol := strings.TrimSpace(notice.Symbol)
 
-	lines := []string{}
-	if severity != "" {
-		lines = append(lines, fmt.Sprintf("- %s: %s", Label("severity"), severity))
-	}
-	if component != "" {
-		lines = append(lines, fmt.Sprintf("- %s: %s", Label("component"), component))
-	}
-	if symbol != "" {
-		lines = append(lines, fmt.Sprintf("- %s: %s", Label("symbol"), symbol))
-	}
-	lines = append(lines, fmt.Sprintf("- %s: %s", Label("detail"), msgText))
-
-	body := strings.Join(lines, "\n")
-	body = prependNoticeHeader("⚠️ 错误提醒", body)
-
 	title := "[ERROR]"
 	if symbol != "" {
 		title = fmt.Sprintf("[ERROR][%s]", symbol)
@@ -1097,13 +1022,23 @@ func (m Manager) SendError(ctx context.Context, notice ErrorNotice) error {
 		title = fmt.Sprintf("%s %s", title, component)
 	}
 
-	data := map[string]any{
-		"severity":  severity,
-		"component": component,
-		"symbol":    symbol,
-		"message":   msgText,
+	var sb strings.Builder
+	sb.WriteString("⚠️ 错误提醒\n")
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
+	if severity != "" {
+		sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("severity"), severity))
 	}
-	msg := m.renderCardMessage(ctx, "error", symbol, data, title, body)
+	if component != "" {
+		sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("component"), component))
+	}
+	if symbol != "" {
+		sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("symbol"), symbol))
+	}
+	sb.WriteString(fmt.Sprintf("▸ %s：%s\n", Label("detail"), msgText))
+	sb.WriteString("━━━━━━━━━━━━━━━━━━━━")
+	body := sb.String()
+
+	msg := Message{Title: title, Markdown: body, Plain: body}
 	return m.send(ctx, msg)
 }
 
@@ -1171,6 +1106,19 @@ func formatPercent(value float64) string {
 	}
 	text := formatFloat(value * 100)
 	return text + "%"
+}
+
+func formatDuration(seconds int64) string {
+	if seconds <= 0 {
+		return "-"
+	}
+	d := time.Duration(seconds) * time.Second
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh%dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
 }
 
 func (m Manager) send(ctx context.Context, msg Message) error {

@@ -47,14 +47,13 @@ func TestRiskPlanUpdateNotificationPayload(t *testing.T) {
 	}
 
 	body := sender.msg.Markdown
-	assertContains(t, body, formatNoticeLine("volatility", "0.08"))
-	assertContains(t, body, formatNoticeLine("gate_satisfied", "true"))
-	assertContains(t, body, formatNoticeLine("score_total", "3.5"))
-	assertContains(t, body, formatNoticeLine("score_threshold", "3"))
-	assertContains(t, body, formatNoticeLine("score_breakdown", "monitor_tag=true (w=2, c=2)"))
-	assertContains(t, body, formatNoticeLine("parse_ok", "true"))
-	assertContains(t, body, formatNoticeLine("tighten_reason", "monitor-tighten"))
-	assertContains(t, body, formatNoticeLine("tp_tightened", "true"))
+	assertContains(t, body, "交易对: BTCUSDT")
+	assertContains(t, body, "方向: long")
+	assertContains(t, body, "原止损: 90 → 95")
+	assertContains(t, body, "来源: monitor-tighten")
+	assertContains(t, body, "标记价: 102")
+	assertContains(t, body, "评分: 3.5 / 3 · 通过: true")
+	assertContains(t, body, "收紧原因: monitor-tighten")
 }
 
 func formatNoticeLine(labelKey string, value string) string {
