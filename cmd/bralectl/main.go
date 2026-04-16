@@ -40,6 +40,8 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(mcpCmd())
 	root.AddCommand(memoryCmd())
 	root.AddCommand(setupCmd())
+	root.AddCommand(initCmd())
+	root.AddCommand(prepareStackCmd())
 	return root
 }
 

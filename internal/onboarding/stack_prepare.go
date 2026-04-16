@@ -79,7 +79,7 @@ func RunPrepareStack(args []string, repoRoot string, out io.Writer) error {
 		}
 	}
 
-	env, err := parseEnvFile(envFile)
+	env, err := ParseEnvFile(envFile)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,9 @@ func resolvePathUnderRoot(root string, path string) (string, error) {
 	return clean, nil
 }
 
-func parseEnvFile(path string) (map[string]string, error) {
+// ParseEnvFile reads a .env file and returns a map of key-value pairs.
+// It supports comments, export prefixes, and quoted values.
+func ParseEnvFile(path string) (map[string]string, error) {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return nil, fmt.Errorf("env file not found: %s", path)
