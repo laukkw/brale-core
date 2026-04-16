@@ -2,10 +2,16 @@ package onboarding
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/creachadair/tomledit"
 )
+
+// tomlQuoted wraps a string value in TOML-compatible double quotes.
+func tomlQuoted(v string) string {
+	return strconv.Quote(v)
+}
 
 type tomlUpdate struct {
 	Path  []string
