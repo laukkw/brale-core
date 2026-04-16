@@ -493,6 +493,16 @@ func TestTranslateSentence(t *testing.T) {
 			"funding rate negative",
 			"资金费率为负",
 		},
+		{
+			"Chinese text with embedded event key preserves runes",
+			"呈现价格上涨/OI上升的price_up_oi_up关系",
+			"呈现价格上涨/OI上升的价格上涨/OI上升关系",
+		},
+		{
+			"event key flanked by Chinese chars",
+			"处于price_down_oi_down区间",
+			"处于价格下跌/OI下降区间",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

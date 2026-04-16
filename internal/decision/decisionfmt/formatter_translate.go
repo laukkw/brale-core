@@ -631,8 +631,9 @@ func TranslateSentence(text string) string {
 				}
 				prefix += string(r)
 			}
-			for i := len(match) - 1; i >= 0; i-- {
-				r := rune(match[i])
+			runes := []rune(match)
+			for i := len(runes) - 1; i >= 0; i-- {
+				r := runes[i]
 				if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
 					break
 				}
