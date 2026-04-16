@@ -367,7 +367,9 @@ func translatePayload(p *ogPayload) {
 	g.StopStep = tr(g.StopStep)
 	g.ActionBefore = tr(g.ActionBefore)
 	g.SieveAction = tr(g.SieveAction)
-	g.SieveReason = ts(g.SieveReason)
+	// Use TranslateValue (not TranslateSentence) so empty sieve_reason stays empty
+	// instead of becoming "—" which would render as a spurious "· —" suffix.
+	g.SieveReason = tr(g.SieveReason)
 	g.ReasonCategory = tr(g.ReasonCategory)
 	if g.Execution != nil {
 		if reason, ok := g.Execution["blocked_reason"]; ok {

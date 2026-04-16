@@ -495,8 +495,13 @@ function buildDecisionModel(raw) {
     });
   }
   if (sieveTriggered) {
+    const beforeText = emptyDash(mapValue(actionBefore || '—'));
+    const afterText = emptyDash(mapValue(sieveAction || finalDecision || '—'));
+    const reasonText = sieveReason && sieveReason !== '—' ? ` · ${emptyDash(mapValue(sieveReason))}` : '';
+    // When before and after are the same, show only the final action
+    const arrowText = beforeText === afterText ? afterText : `${beforeText} → ${afterText}`;
     sourceLines.push({
-      text: `风控筛选：${emptyDash(mapValue(actionBefore || '—'))} → ${emptyDash(mapValue(sieveAction || finalDecision || '—'))}${sieveReason ? ` · ${emptyDash(mapValue(sieveReason))}` : ''}`,
+      text: `风控筛选：${arrowText}${reasonText}`,
       note: false,
       kind: 'default',
     });
