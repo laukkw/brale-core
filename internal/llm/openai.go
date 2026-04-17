@@ -30,6 +30,7 @@ type OpenAIClient struct {
 	Timeout          time.Duration
 	Temperature      float64
 	StructuredOutput bool
+	Breaker          *CircuitBreaker
 }
 
 type chatRequest struct {
@@ -111,6 +112,15 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 	)
 	defer span.End()
 
+	breaker := c.Breaker
+	if breaker == nil {
+		breaker = defaultCircuitBreakers.get(endpoint + "|" + c.Model)
+	}
+	if err := breaker.Allow(); err != nil {
+		emitCallStats(ctx, endpoint, meta, CallStats{Model: c.Model, Endpoint: endpoint, Role: meta.Role, Stage: meta.Stage, Symbol: meta.Symbol, PromptVersion: meta.PromptVersion, Err: err})
+		logger.Error("llm circuit breaker open", zap.Error(err))
+		return "", err
+	}
 	release, err := defaultModelGates.Acquire(ctx, c.Model)
 	if err != nil {
 		emitCallStats(ctx, endpoint, meta, CallStats{Model: c.Model, Endpoint: endpoint, Role: meta.Role, Stage: meta.Stage, Symbol: meta.Symbol, PromptVersion: meta.PromptVersion, Err: err})
@@ -156,6 +166,7 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 				TokenIn:       result.TokenIn,
 				TokenOut:      result.TokenOut,
 			})
+			breaker.RecordSuccess()
 			logger.Info("llm request completed", zap.Duration("latency", time.Since(start)), zap.Int("token_in", result.TokenIn), zap.Int("token_out", result.TokenOut))
 			return result.Content, nil
 		}
@@ -187,6 +198,7 @@ func (c *OpenAIClient) doCall(ctx context.Context, messages []ChatMessage, respo
 		LatencyMs:     time.Since(start).Milliseconds(),
 		Err:           lastErr,
 	})
+	breaker.RecordFailure()
 	logger.Error("llm request failed", zap.Error(lastErr), zap.Duration("latency", time.Since(start)))
 	return "", lastErr
 }
@@ -304,7 +316,7 @@ func newLLMRetryClient(base *http.Client) *retryablehttp.Client {
 	client.RetryMax = 2
 	client.RetryWaitMin = 200 * time.Millisecond
 	client.RetryWaitMax = 2 * time.Second
-	client.Logger = nil
+	client.Logger = logging.RetryableHTTPLogger{Logger: logging.L().Named("llm-retry")}
 	client.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	client.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
 		if err != nil {
