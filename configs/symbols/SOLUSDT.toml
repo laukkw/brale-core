@@ -4,7 +4,7 @@
 # 交易对标识（必须与交易所数据源完全一致）。
 symbol = "SOLUSDT"
 # K 线周期。第一个元素（最短周期）同时作为 decisionInterval 注入 Agent prompt。
-intervals = ["30m","1h","4h"]
+intervals = ["30m", "1h", "4h"]
 # 每个周期拉取的 K 线数量。越大结构检测越好，但速度越慢。
 kline_limit = 205
 
