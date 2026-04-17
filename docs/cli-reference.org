@@ -216,14 +216,14 @@ bralectl backtest rules --symbol BTCUSDT \
 # stdio 模式（用于 Claude Code / Claude Desktop）
 bralectl mcp serve --mode stdio --system PATH --index PATH
 
-# SSE 模式（用于远程或容器化访问）
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765 --system PATH --index PATH
+# HTTP 模式（用于远程或容器化访问）
+bralectl mcp serve --mode http --addr 0.0.0.0:8765 --system PATH --index PATH
 #+end_src
 
 | 参数 | 默认值 | 说明 |
 |------+---------+------|
-| =--mode= | =stdio= | 传输模式：=stdio= 或 =sse= |
-| =--addr= | =127.0.0.1:8765= | SSE 模式监听地址 |
+| =--mode= | =stdio= | 传输模式：=stdio= 或 =http= |
+| =--addr= | =127.0.0.1:8765= | HTTP 模式监听地址 |
 | =--system= | =configs/system.toml= | system.toml 路径 |
 | =--index= | =configs/symbols-index.toml= | symbols-index.toml 路径 |
 | =--audit-log= | 自动生成 | MCP 审计日志文件路径 |
@@ -240,12 +240,45 @@ bralectl mcp install --target codex
 | 参数 | 默认值 | 说明 |
 |------+---------+------|
 | =--target= | =claude-code= | 安装目标：=claude-code=、=claude-desktop=、=opencode=、=codex= 或 =custom= |
+| =--mode= | =http= | 安装模式：默认写入 Streamable HTTP 配置；未显式指定时，=codex= 会自动退回 =stdio= |
 | =--config= | （自动检测） | 显式指定 MCP 配置文件路径 |
 | =--command= | （自动检测） | bralectl 可执行文件路径 |
 | =--name= | =brale-core= | MCP server 名称 |
 | =--system= | =configs/system.toml= | system.toml 路径 |
 | =--index= | =configs/symbols-index.toml= | symbols-index.toml 路径 |
 | =--audit-log= | （空） | MCP 审计日志文件路径 |
+
+*** test — E2E 测试
+
+在隔离的 Docker 栈中执行 E2E 回归测试。
+
+**** test list — 列出可用 suite
+
+#+begin_src bash
+bralectl test list
+#+end_src
+
+**** test run — 执行测试
+
+#+begin_src bash
+bralectl test run --suites ctl,decision --symbol SOLUSDT --timeout 15m
+BRALE_E2E_TELEGRAM_TOKEN=123456:ABC... BRALE_E2E_TELEGRAM_CHAT_ID=-1001234567890 \
+  bralectl test run --suites ctl,decision,reconcile
+#+end_src
+
+| 参数 | 默认值 | 说明 |
+|------+---------+------|
+| =--profile= | =quick-lifecycle= | E2E 配置 profile |
+| =--suites= | =ctl= | 要执行的 suite，逗号分隔 |
+| =--symbol= | =SOLUSDT= | 测试交易对 |
+| =--ft-endpoint= | =http://127.0.0.1:18080= | Freqtrade API 地址 |
+| =--pg-port= | =15432= | PostgreSQL 端口 |
+| =--timeout= | =15m= | 全局超时 |
+| =--force-close-after= | =5m= | 强制平仓等待时间 |
+| =--report-dir= | =_output/e2e= | 报告输出目录 |
+| =--bootstrap= | =auto= | 引导模式 (auto/strict) |
+| =--telegram-token= | 环境变量 | Telegram Bot token；默认读 =BRALE_E2E_TELEGRAM_TOKEN= / =NOTIFICATION_TELEGRAM_TOKEN= |
+| =--telegram-chat-id= | 环境变量 | Telegram chat_id；默认读 =BRALE_E2E_TELEGRAM_CHAT_ID= / =NOTIFICATION_TELEGRAM_CHAT_ID= |
 
 ** 使用示例
 
@@ -286,7 +319,7 @@ bralectl memory episodic --symbol BTCUSDT    # 查看交易反思
 #+begin_src bash
 bralectl setup --install-mcp --mcp-target opencode  # 初始化并安装到 OpenCode
 bralectl mcp install --target opencode       # 一键安装到 OpenCode
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765  # 远程 SSE 模式
+bralectl mcp serve --mode http --addr 0.0.0.0:8765  # 远程 HTTP 模式
 #+end_src
 
 *** LLM 诊断与币种管理
@@ -296,6 +329,18 @@ bralectl llm probe                           # 探测所有 stage
 bralectl llm probe --stage indicator         # 只探测 indicator stage
 bralectl add-symbol ETHUSDT --dry-run        # 预览新币种配置
 bralectl add-symbol SOLUSDT --template-symbol BTCUSDT  # 以 BTC 为模板
+#+end_src
+
+*** E2E 测试
+
+#+begin_src bash
+bralectl test list                           # 列出所有可用 suite
+bralectl test run --suites ctl               # 快速回归
+bralectl test run --suites ctl,decision,reconcile  # 多 suite 回归
+BRALE_E2E_TELEGRAM_TOKEN=123456:ABC... BRALE_E2E_TELEGRAM_CHAT_ID=-1001234567890 \
+  bralectl test run --suites ctl,decision,reconcile  # 测试完成后推送 Telegram 摘要
+bralectl test run --suites lifecycle-force-close \
+  --timeout 30m --ft-endpoint http://127.0.0.1:18080  # 完整生命周期
 #+end_src
 
 -----
@@ -513,14 +558,14 @@ Expose brale-core analysis capabilities to AI Agents via the Model Context Proto
 # stdio mode (for Claude Code / Claude Desktop)
 bralectl mcp serve --mode stdio --system PATH --index PATH
 
-# SSE mode (for remote / containerized access)
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765 --system PATH --index PATH
+# HTTP mode (for remote / containerized access)
+bralectl mcp serve --mode http --addr 0.0.0.0:8765 --system PATH --index PATH
 #+end_src
 
 | Flag | Default | Description |
 |------+---------+-------------|
-| =--mode= | =stdio= | Transport mode: =stdio= or =sse= |
-| =--addr= | =127.0.0.1:8765= | SSE listen address |
+| =--mode= | =stdio= | Transport mode: =stdio= or =http= |
+| =--addr= | =127.0.0.1:8765= | HTTP listen address |
 | =--system= | =configs/system.toml= | System config path |
 | =--index= | =configs/symbols-index.toml= | Symbol index path |
 | =--audit-log= | auto-generated | MCP audit log file path |
@@ -543,6 +588,38 @@ bralectl mcp install --target codex
 | =--system= | =configs/system.toml= | System config path |
 | =--index= | =configs/symbols-index.toml= | Symbol index path |
 | =--audit-log= | (empty) | MCP audit log file path |
+
+*** test — E2E Testing
+
+Run E2E regression tests against an isolated Docker stack.
+
+**** test list — List Available Suites
+
+#+begin_src bash
+bralectl test list
+#+end_src
+
+**** test run — Run Tests
+
+#+begin_src bash
+bralectl test run --suites ctl,decision --symbol SOLUSDT --timeout 15m
+BRALE_E2E_TELEGRAM_TOKEN=123456:ABC... BRALE_E2E_TELEGRAM_CHAT_ID=-1001234567890 \
+  bralectl test run --suites ctl,decision,reconcile
+#+end_src
+
+| Flag | Default | Description |
+|------+---------+-------------|
+| =--profile= | =quick-lifecycle= | E2E config profile |
+| =--suites= | =ctl= | Suites to run, comma-separated |
+| =--symbol= | =SOLUSDT= | Test trading pair |
+| =--ft-endpoint= | =http://127.0.0.1:18080= | Freqtrade API endpoint |
+| =--pg-port= | =15432= | PostgreSQL port |
+| =--timeout= | =15m= | Global timeout |
+| =--force-close-after= | =5m= | Wait before force close |
+| =--report-dir= | =_output/e2e= | Report output directory |
+| =--bootstrap= | =auto= | Bootstrap mode (auto/strict) |
+| =--telegram-token= | env var | Telegram Bot token; defaults to =BRALE_E2E_TELEGRAM_TOKEN= / =NOTIFICATION_TELEGRAM_TOKEN= |
+| =--telegram-chat-id= | env var | Telegram chat_id; defaults to =BRALE_E2E_TELEGRAM_CHAT_ID= / =NOTIFICATION_TELEGRAM_CHAT_ID= |
 
 ** Usage Examples
 
@@ -583,7 +660,7 @@ bralectl memory episodic --symbol BTCUSDT    # view trade reflections
 #+begin_src bash
 bralectl setup --install-mcp --mcp-target opencode  # bootstrap env + install into OpenCode
 bralectl mcp install --target opencode       # one-click install into OpenCode
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765  # remote SSE mode
+bralectl mcp serve --mode http --addr 0.0.0.0:8765  # remote HTTP mode
 #+end_src
 
 *** LLM Diagnostics and Symbol Management
@@ -593,4 +670,16 @@ bralectl llm probe                           # probe all stages
 bralectl llm probe --stage indicator         # probe indicator stage only
 bralectl add-symbol ETHUSDT --dry-run        # preview new symbol config
 bralectl add-symbol SOLUSDT --template-symbol BTCUSDT  # use BTC as template
+#+end_src
+
+*** E2E Testing
+
+#+begin_src bash
+bralectl test list                           # list available suites
+bralectl test run --suites ctl               # quick regression
+bralectl test run --suites ctl,decision,reconcile  # multi-suite regression
+BRALE_E2E_TELEGRAM_TOKEN=123456:ABC... BRALE_E2E_TELEGRAM_CHAT_ID=-1001234567890 \
+  bralectl test run --suites ctl,decision,reconcile  # send Telegram summary after the run
+bralectl test run --suites lifecycle-force-close \
+  --timeout 30m --ft-endpoint http://127.0.0.1:18080  # full lifecycle
 #+end_src

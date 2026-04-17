@@ -29,10 +29,10 @@ bralectl mcp serve --mode stdio \
 
 适用于 Claude Code 和 Claude Desktop 等直接启动子进程的客户端。
 
-*** SSE 模式（适用于远程或容器化访问）
+*** HTTP 模式（适用于远程或容器化访问）
 
 #+begin_src bash
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765 \
+bralectl mcp serve --mode http --addr 0.0.0.0:8765 \
   --system ./configs/system.toml \
   --index ./configs/symbols-index.toml
 #+end_src
@@ -116,13 +116,14 @@ args = [
 ]
 #+end_src
 
-**** SSE 远程客户端
+**** HTTP 远程客户端
 
 #+begin_src json
 {
   "mcpServers": {
     "brale-core": {
-      "url": "http://your-server:8765/sse"
+      "type": "streamable-http",
+      "url": "http://your-server:8765/mcp"
     }
   }
 }
@@ -161,15 +162,15 @@ args = [
 
 两个模板均接受 =symbol=（必填）和 =interval=（可选，默认 =1h=）参数。
 
-** Docker 部署（SSE 模式）
+** Docker 部署（HTTP 模式）
 
-=docker-compose.yml= 中包含 =mcp-sse= 服务，位于 =mcp= profile 下：
+=docker-compose.yml= 中包含 =mcp= 服务，位于 =mcp= profile 下：
 
 #+begin_src bash
 docker compose --profile mcp up -d
 #+end_src
 
-SSE 端点默认监听 =127.0.0.1:8765=。
+HTTP 端点默认监听 =127.0.0.1:8765=。
 
 ** 安全设计
 
@@ -202,10 +203,10 @@ bralectl mcp serve --mode stdio \
 
 Best for Claude Code and Claude Desktop, which launch the process directly.
 
-*** SSE Mode (for remote or containerized access)
+*** HTTP Mode (for remote or containerized access)
 
 #+begin_src bash
-bralectl mcp serve --mode sse --addr 0.0.0.0:8765 \
+bralectl mcp serve --mode http --addr 0.0.0.0:8765 \
   --system ./configs/system.toml \
   --index ./configs/symbols-index.toml
 #+end_src
@@ -289,13 +290,14 @@ args = [
 ]
 #+end_src
 
-**** SSE Remote Client
+**** HTTP Remote Client
 
 #+begin_src json
 {
   "mcpServers": {
     "brale-core": {
-      "url": "http://your-server:8765/sse"
+      "type": "streamable-http",
+      "url": "http://your-server:8765/mcp"
     }
   }
 }
@@ -334,15 +336,15 @@ All tools are *read-only* and will never trigger trades.
 
 Both prompts accept =symbol= (required) and =interval= (optional, defaults to =1h=).
 
-** Docker Deployment (SSE)
+** Docker Deployment (HTTP)
 
-The =docker-compose.yml= includes an =mcp-sse= service behind the =mcp= profile:
+The =docker-compose.yml= includes an =mcp= service behind the =mcp= profile:
 
 #+begin_src bash
 docker compose --profile mcp up -d
 #+end_src
 
-The SSE endpoint defaults to =127.0.0.1:8765=.
+The HTTP endpoint defaults to =127.0.0.1:8765=.
 
 ** Security
 
