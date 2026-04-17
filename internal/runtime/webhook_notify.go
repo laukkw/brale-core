@@ -150,9 +150,9 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 		Amount:         float64(trade.Amount),
 		StakeAmount:    float64(trade.StakeAmount),
 		CloseProfitAbs: float64(trade.CloseProfitAbs),
-		CloseProfitPct: float64(trade.CloseProfitPct),
+		CloseProfitPct: normalizeFreqtradePercent(float64(trade.CloseProfitPct)),
 		ProfitAbs:      float64(trade.ProfitAbs),
-		ProfitPct:      float64(trade.ProfitPct),
+		ProfitPct:      normalizeFreqtradePercent(float64(trade.ProfitPct)),
 		TradeDuration:  trade.TradeDuration,
 		TradeDurationS: int64(trade.TradeDurationSeconds),
 		ExitReason:     exitReason,
@@ -328,6 +328,13 @@ func resolveExitType(internalReason string, exitReason string) string {
 		return "take_profit"
 	}
 	return "external"
+}
+
+func normalizeFreqtradePercent(value float64) float64 {
+	if value == 0 {
+		return 0
+	}
+	return value / 100
 }
 
 func firstNonEmpty(values ...string) string {

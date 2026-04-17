@@ -757,40 +757,40 @@ func (m Manager) sendAggregatedClose(ctx context.Context, aggregated aggregatedC
 	}
 
 	entryPrice := 0.0
-	if aggregated.CloseSummary != nil && aggregated.CloseSummary.EntryPrice > 0 {
-		entryPrice = aggregated.CloseSummary.EntryPrice
-	} else if aggregated.TradeClose != nil && aggregated.TradeClose.OpenRate > 0 {
+	if aggregated.TradeClose != nil && aggregated.TradeClose.OpenRate > 0 {
 		entryPrice = aggregated.TradeClose.OpenRate
+	} else if aggregated.CloseSummary != nil && aggregated.CloseSummary.EntryPrice > 0 {
+		entryPrice = aggregated.CloseSummary.EntryPrice
 	} else if aggregated.PositionClose != nil && aggregated.PositionClose.EntryPrice > 0 {
 		entryPrice = aggregated.PositionClose.EntryPrice
 	}
 
 	exitPrice := 0.0
-	if aggregated.CloseSummary != nil && aggregated.CloseSummary.ExitPrice > 0 {
-		exitPrice = aggregated.CloseSummary.ExitPrice
-	} else if aggregated.TradeClose != nil && aggregated.TradeClose.CloseRate > 0 {
+	if aggregated.TradeClose != nil && aggregated.TradeClose.CloseRate > 0 {
 		exitPrice = aggregated.TradeClose.CloseRate
+	} else if aggregated.CloseSummary != nil && aggregated.CloseSummary.ExitPrice > 0 {
+		exitPrice = aggregated.CloseSummary.ExitPrice
 	} else if aggregated.PositionClose != nil && aggregated.PositionClose.TriggerPrice > 0 {
 		exitPrice = aggregated.PositionClose.TriggerPrice
 	}
 
 	qty := 0.0
-	if aggregated.CloseSummary != nil && aggregated.CloseSummary.Qty > 0 {
-		qty = aggregated.CloseSummary.Qty
-	} else if aggregated.TradeClose != nil && aggregated.TradeClose.Amount > 0 {
+	if aggregated.TradeClose != nil && aggregated.TradeClose.Amount > 0 {
 		qty = aggregated.TradeClose.Amount
+	} else if aggregated.CloseSummary != nil && aggregated.CloseSummary.Qty > 0 {
+		qty = aggregated.CloseSummary.Qty
 	} else if aggregated.PositionClose != nil && aggregated.PositionClose.Qty > 0 {
 		qty = aggregated.PositionClose.Qty
 	}
 
 	pnlAmount := 0.0
 	pnlPct := 0.0
-	if aggregated.CloseSummary != nil && (aggregated.CloseSummary.PnLAmount != 0 || aggregated.CloseSummary.PnLPct != 0) {
-		pnlAmount = aggregated.CloseSummary.PnLAmount
-		pnlPct = aggregated.CloseSummary.PnLPct
-	} else if aggregated.TradeClose != nil {
+	if aggregated.TradeClose != nil {
 		pnlAmount = aggregated.TradeClose.ProfitAbs
 		pnlPct = aggregated.TradeClose.ProfitPct
+	} else if aggregated.CloseSummary != nil && (aggregated.CloseSummary.PnLAmount != 0 || aggregated.CloseSummary.PnLPct != 0) {
+		pnlAmount = aggregated.CloseSummary.PnLAmount
+		pnlPct = aggregated.CloseSummary.PnLPct
 	}
 
 	stopPrice := 0.0
@@ -818,10 +818,10 @@ func (m Manager) sendAggregatedClose(ctx context.Context, aggregated aggregatedC
 	}
 
 	leverage := 0.0
-	if aggregated.CloseSummary != nil && aggregated.CloseSummary.Leverage > 0 {
-		leverage = aggregated.CloseSummary.Leverage
-	} else if aggregated.TradeClose != nil && aggregated.TradeClose.Leverage > 0 {
+	if aggregated.TradeClose != nil && aggregated.TradeClose.Leverage > 0 {
 		leverage = aggregated.TradeClose.Leverage
+	} else if aggregated.CloseSummary != nil && aggregated.CloseSummary.Leverage > 0 {
+		leverage = aggregated.CloseSummary.Leverage
 	} else if aggregated.PositionClose != nil && aggregated.PositionClose.Leverage > 0 {
 		leverage = aggregated.PositionClose.Leverage
 	}
@@ -1007,6 +1007,26 @@ func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string)
 		}
 		successCount++
 	}
+	if successCount > 0 {
+		if acquired {
+			m.dedupe.commit(dedupeKey, time.Now())
+		}
+		if len(errDetails) > 0 {
+			logger.Warn("notify send partially failed",
+				zap.Int("success_count", successCount),
+				zap.Int("failed_count", len(errDetails)),
+				zap.String("title", strings.TrimSpace(msg.Title)),
+				zap.String("dedupe_key", strings.TrimSpace(dedupeKey)),
+				zap.Strings("error_details", errDetails),
+			)
+			return nil
+		}
+		logger.Info("notify sent",
+			zap.Int("channels", len(m.senders)),
+			zap.String("title", strings.TrimSpace(msg.Title)),
+		)
+		return nil
+	}
 	if len(errDetails) > 0 {
 		logger.Warn("notify send partially failed",
 			zap.Int("success_count", successCount),
@@ -1020,9 +1040,7 @@ func (m Manager) sendWithKey(ctx context.Context, msg Message, dedupeKey string)
 		}
 		return fmt.Errorf("notify send failed: %d (%s)", len(errDetails), strings.Join(errDetails, "; "))
 	}
-	if acquired && successCount > 0 {
-		m.dedupe.commit(dedupeKey, time.Now())
-	} else if acquired {
+	if acquired {
 		m.dedupe.release(dedupeKey)
 	}
 	logger.Info("notify sent",

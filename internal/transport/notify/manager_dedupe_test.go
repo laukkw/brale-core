@@ -236,19 +236,22 @@ func TestSendWithKey_ConcurrentDuplicateOnlySendsOnce(t *testing.T) {
 	}
 }
 
-func TestSendWithKey_PartialFailureDoesNotPoisonDedupe(t *testing.T) {
+func TestSendWithKey_PartialFailureCommitsDedupeAfterSuccess(t *testing.T) {
 	okSender := &countSender{}
 	failSender := &alwaysFailSender{}
 	mgr := Manager{senders: []Sender{okSender, failSender}, dedupe: newDedupeGuard(2 * time.Minute)}
 
-	if err := mgr.sendWithKey(context.Background(), Message{Title: "partial"}, "partial-key"); err == nil {
-		t.Fatal("expected first send error")
+	if err := mgr.sendWithKey(context.Background(), Message{Title: "partial"}, "partial-key"); err != nil {
+		t.Fatalf("expected partial success to return nil, got %v", err)
 	}
-	if err := mgr.sendWithKey(context.Background(), Message{Title: "partial"}, "partial-key"); err == nil {
-		t.Fatal("expected second send error")
+	if err := mgr.sendWithKey(context.Background(), Message{Title: "partial"}, "partial-key"); err != nil {
+		t.Fatalf("expected deduped second send to be skipped, got %v", err)
 	}
-	if okSender.callCount() != 2 {
-		t.Fatalf("expected successful sender to be retried, got %d calls", okSender.callCount())
+	if okSender.callCount() != 1 {
+		t.Fatalf("expected successful sender not to be retried, got %d calls", okSender.callCount())
+	}
+	if failSender.calls != 1 {
+		t.Fatalf("expected failed sender not to be retried after dedupe commit, got %d calls", failSender.calls)
 	}
 }
 
@@ -409,5 +412,67 @@ func TestCloseAggregation_MergesCloseNoticesByExecutorTradeID(t *testing.T) {
 	}
 	if !strings.Contains(msg.Markdown, "▸ 交易ID：42") {
 		t.Fatalf("expected trade id in text body, got %q", msg.Markdown)
+	}
+}
+
+func TestCloseAggregation_PrefersTradeExecutionMetrics(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{
+		senders: []Sender{sender},
+		dedupe:  newDedupeGuard(2 * time.Minute),
+	}
+	mgr.closeAgg = newCloseNoticeAggregator(20*time.Millisecond, mgr.sendAggregatedClose)
+
+	if err := mgr.SendPositionCloseSummary(context.Background(), PositionCloseSummaryNotice{
+		Symbol:             "ETHUSDT",
+		Direction:          "long",
+		Qty:                0.5,
+		EntryPrice:         3200,
+		ExitPrice:          3310,
+		StopPrice:          3100,
+		TakeProfits:        []float64{3400},
+		Reason:             "external_missing",
+		PnLAmount:          0,
+		PnLPct:             0,
+		PositionID:         "pos-1",
+		ExecutorPositionID: "42",
+	}); err != nil {
+		t.Fatalf("send close summary: %v", err)
+	}
+	if err := mgr.SendTradeCloseSummary(context.Background(), TradeCloseSummaryNotice{
+		TradeID:        42,
+		Pair:           "ETH/USDT:USDT",
+		OpenRate:       3200,
+		CloseRate:      3312,
+		Amount:         0.45,
+		ProfitAbs:      -1.25,
+		ProfitPct:      -0.0014,
+		TradeDurationS: 75,
+		ExitReason:     "force_exit",
+		ExitType:       "external",
+		Leverage:       2,
+	}); err != nil {
+		t.Fatalf("send trade close summary: %v", err)
+	}
+
+	waitForCondition(t, 300*time.Millisecond, func() bool {
+		return sender.callCount() == 1
+	})
+
+	msg := sender.lastMessage()
+	if !strings.Contains(msg.Markdown, noticeLine("exit", formatFloat(3312))) {
+		t.Fatalf("expected trade close exit price, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("qty", formatFloat(0.45))) {
+		t.Fatalf("expected trade close qty, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("pnl", formatFloat(-1.25))) {
+		t.Fatalf("expected trade close pnl, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("pnl_pct", formatPercent(-0.0014))) {
+		t.Fatalf("expected normalized pnl pct, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("stop", formatFloat(3100))) {
+		t.Fatalf("expected close summary stop metadata, got %q", msg.Markdown)
 	}
 }
