@@ -1,0 +1,85 @@
+#+TITLE: 部署指南 / Deployment Guide
+
+* 中文版
+
+** 系统需求
+
+- Docker 20.10+
+- Docker Compose v2.20+
+- 内存：4 GB+
+- 磁盘：5 GB+
+- 网络：可访问 Binance API 与 LLM 端点
+
+** 数据目录
+
+- =PGDATA_ROOT=（默认 =./data/pgdata=）— TimescaleDB 数据目录
+- =BRALE_DATA_ROOT=（默认 =./data/brale=）— Brale 运行时数据
+- =FREQTRADE_RUNTIME_ROOT=（默认 =./data/freqtrade/user_data=）— Freqtrade 数据
+
+** 代理配置
+
+如需代理访问镜像仓库或外部 API，请在 =STACK_PROXY_ENV_FILE= 指向的文件中设置：
+
+#+begin_src sh
+HTTP_PROXY=http://proxy.example:7890
+HTTPS_PROXY=http://proxy.example:7890
+NO_PROXY=localhost,127.0.0.1,brale,freqtrade,timescaledb
+#+end_src
+
+** 升级流程
+
+#+begin_src bash
+make down
+git pull
+make rebuild
+make start
+#+end_src
+
+** 备份与恢复
+
+#+begin_src bash
+docker compose exec -T timescaledb pg_dump -U brale brale > backup.sql
+cat backup.sql | docker compose exec -T timescaledb psql -U brale -d brale
+#+end_src
+
+* English Version
+
+** System Requirements
+
+- Docker 20.10+
+- Docker Compose v2.20+
+- Memory: 4 GB+
+- Disk: 5 GB+
+- Network access to Binance API and LLM endpoints
+
+** Data Paths
+
+- =PGDATA_ROOT= (default =./data/pgdata=) — TimescaleDB data
+- =BRALE_DATA_ROOT= (default =./data/brale=) — Brale runtime data
+- =FREQTRADE_RUNTIME_ROOT= (default =./data/freqtrade/user_data=) — Freqtrade data
+
+** Proxy Configuration
+
+Put shared proxy settings in the file pointed to by =STACK_PROXY_ENV_FILE=:
+
+#+begin_src sh
+HTTP_PROXY=http://proxy.example:7890
+HTTPS_PROXY=http://proxy.example:7890
+NO_PROXY=localhost,127.0.0.1,brale,freqtrade,timescaledb
+#+end_src
+
+** Upgrade Flow
+
+#+begin_src bash
+make down
+git pull
+make rebuild
+make start
+#+end_src
+
+** Backup and Restore
+
+#+begin_src bash
+docker compose exec -T timescaledb pg_dump -U brale brale > backup.sql
+cat backup.sql | docker compose exec -T timescaledb psql -U brale -d brale
+#+end_src

@@ -1,0 +1,53 @@
+#+TITLE: 故障排查 / Troubleshooting
+
+* 中文版
+
+** make start 卡在 wait-freqtrade
+
+1. 查看 =docker compose logs freqtrade=
+2. 检查 Binance API 凭证与代理
+3. 确认 =data/freqtrade/user_data/config.json= 已生成
+
+** Brale 容器反复重启
+
+1. 查看 =docker compose logs brale=
+2. 检查 =configs/system.toml= 的数据库与执行器配置
+3. 确认 =timescaledb= 与 =freqtrade= 已 healthy
+
+** LLM 调用超时
+
+1. 运行 =bralectl llm probe=
+2. 检查 =llm_models.*.endpoint= 与 =api_key=
+3. 检查代理与模型提供方限流
+
+** 决策不触发
+
+1. 请求 =/api/runtime/schedule/status=
+2. 检查币种调度模式是否为 =trade=
+3. 检查 =enable_scheduled_decision= 与 =[scheduler].backend=
+
+* English Version
+
+** make start stalls in wait-freqtrade
+
+1. Inspect =docker compose logs freqtrade=
+2. Check Binance credentials and proxy settings
+3. Confirm =data/freqtrade/user_data/config.json= was generated
+
+** Brale keeps restarting
+
+1. Inspect =docker compose logs brale=
+2. Verify database and execution settings in =configs/system.toml=
+3. Confirm both =timescaledb= and =freqtrade= are healthy
+
+** LLM calls time out
+
+1. Run =bralectl llm probe=
+2. Check =llm_models.*.endpoint= and =api_key=
+3. Inspect proxy and provider-side rate limiting
+
+** Decisions are not triggering
+
+1. Query =/api/runtime/schedule/status=
+2. Check whether the symbol mode is =trade=
+3. Verify =enable_scheduled_decision= and =[scheduler].backend=
