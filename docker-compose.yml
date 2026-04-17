@@ -15,7 +15,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-brale}
       TZ: Asia/Shanghai
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - type: bind
         source: ${PGDATA_ROOT:-./data/pgdata}
@@ -52,7 +52,7 @@ services:
       - "--strategy"
       - "BraleSharedStrategy"
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${FREQTRADE_HOST_PORT:-8080}:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -94,9 +94,9 @@ services:
       DATABASE_DSN: "postgres://${POSTGRES_USER:-brale}:${POSTGRES_PASSWORD:-brale}@timescaledb:5432/${POSTGRES_DB:-brale}?sslmode=disable"
     command:
       - "-system"
-      - "/app/configs/system.toml"
+      - "${BRALE_SYSTEM_PATH_IN_CONTAINER:-/app/configs/system.toml}"
       - "-symbols"
-      - "/app/configs/symbols-index.toml"
+      - "${BRALE_SYMBOL_INDEX_PATH_IN_CONTAINER:-/app/configs/symbols-index.toml}"
     depends_on:
       freqtrade:
         condition: service_healthy
@@ -105,7 +105,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:9991:9991"
+      - "127.0.0.1:${BRALE_HOST_PORT:-9991}:9991"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9991/healthz"]
       interval: 15s
@@ -121,7 +121,7 @@ services:
         source: ${BRALE_DATA_ROOT:-./data/brale}
         target: /app/data
 
-  mcp-sse:
+  mcp:
     profiles: ["mcp"]
     build:
       context: .
@@ -146,20 +146,20 @@ services:
       - "mcp"
       - "serve"
       - "--mode"
-      - "sse"
+      - "http"
       - "--addr"
       - "0.0.0.0:8765"
       - "--system"
-      - "/app/configs/system.toml"
+      - "${BRALE_SYSTEM_PATH_IN_CONTAINER:-/app/configs/system.toml}"
       - "--index"
-      - "/app/configs/symbols-index.toml"
+      - "${BRALE_SYMBOL_INDEX_PATH_IN_CONTAINER:-/app/configs/symbols-index.toml}"
       - "--audit-log"
       - "/app/data/mcp-audit.jsonl"
     depends_on:
       brale:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8765:8765"
+      - "127.0.0.1:${MCP_HOST_PORT:-8765}:8765"
     volumes:
       - type: bind
         source: ${BRALE_CONFIG_ROOT:-./configs}
