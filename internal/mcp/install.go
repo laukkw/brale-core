@@ -15,11 +15,11 @@ import (
 
 const (
 	defaultInstallTarget = "claude-code"
-	defaultInstallMode   = "sse"
+	defaultInstallMode   = "http"
 	defaultServerName    = "brale-core"
 	defaultEndpoint      = "http://127.0.0.1:9991"
-	defaultSSEPort       = "8765"
-	defaultSSEPath       = "/sse"
+	defaultHTTPPort      = "8765"
+	defaultHTTPPath      = "/mcp"
 )
 
 var supportedInstallTargets = []string{
@@ -57,21 +57,21 @@ type preparedInstall struct {
 	configPath       string
 	args             []string
 	endpoint         string
-	sseURL           string
+	httpURL          string
 	repoRoot         string
 	removeLegacyPath string
 }
 
-var ensureSSEAvailableFunc = ensureSSEAvailable
+var ensureHTTPAvailableFunc = ensureHTTPAvailable
 
 func Install(opts InstallOptions) (InstallResult, error) {
 	prepared, err := prepareInstall(opts)
 	if err != nil {
 		return InstallResult{}, err
 	}
-	if prepared.mode == "sse" && shouldEnsureLocalSSE(prepared.sseURL) {
-		if err := ensureSSEAvailableFunc(prepared); err != nil {
-			return InstallResult{}, fmt.Errorf("ensure MCP SSE endpoint %s: %w\nhint: use --mode stdio if you want a local spawned MCP process instead", prepared.sseURL, err)
+	if prepared.mode == "http" && prepared.repoRoot != "" && shouldEnsureLocalHTTP(prepared.httpURL) {
+		if err := ensureHTTPAvailableFunc(prepared); err != nil {
+			return InstallResult{}, fmt.Errorf("ensure MCP HTTP endpoint %s: %w\nhint: use --mode stdio if you want a local spawned MCP process instead", prepared.httpURL, err)
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(prepared.configPath), 0o755); err != nil {
@@ -171,7 +171,7 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 	if err != nil {
 		return preparedInstall{}, err
 	}
-	if target == "codex" && mode == "sse" {
+	if target == "codex" && mode == "http" {
 		return preparedInstall{}, fmt.Errorf("install target %q does not support --mode %s yet", target, mode)
 	}
 	name := strings.TrimSpace(opts.Name)
@@ -195,9 +195,9 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 	if endpoint == "" {
 		endpoint = defaultEndpoint
 	}
-	sseURL, err := buildSSEURL(endpoint)
+	httpURL, err := buildHTTPURL(endpoint)
 	if err != nil {
-		return preparedInstall{}, fmt.Errorf("resolve SSE URL from endpoint %q: %w", endpoint, err)
+		return preparedInstall{}, fmt.Errorf("resolve HTTP URL from endpoint %q: %w", endpoint, err)
 	}
 	repoRoot := resolveInstallRepoRoot(opts.SystemPath, opts.IndexPath)
 	var args []string
@@ -259,7 +259,7 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 		configPath:       configPath,
 		args:             args,
 		endpoint:         endpoint,
-		sseURL:           sseURL,
+		httpURL:          httpURL,
 		repoRoot:         repoRoot,
 		removeLegacyPath: removeLegacyPath,
 	}, nil
@@ -330,7 +330,7 @@ func normalizeInstallMode(raw string) (string, error) {
 		return defaultInstallMode, nil
 	}
 	switch mode {
-	case "sse", "stdio":
+	case "http", "stdio":
 		return mode, nil
 	default:
 		return "", fmt.Errorf("unsupported install mode %q", raw)
@@ -374,8 +374,8 @@ func buildInstallEntry(prepared preparedInstall) (map[string]any, error) {
 	switch prepared.mode {
 	case "stdio":
 		return buildStdioEntry(prepared), nil
-	case "sse":
-		return buildSSEEntry(prepared)
+	case "http":
+		return buildHTTPEntry(prepared)
 	default:
 		return nil, fmt.Errorf("unsupported install mode %q", prepared.mode)
 	}
@@ -393,17 +393,17 @@ func buildStdioEntry(prepared preparedInstall) map[string]any {
 	return entry
 }
 
-func buildSSEEntry(prepared preparedInstall) (map[string]any, error) {
+func buildHTTPEntry(prepared preparedInstall) (map[string]any, error) {
 	if prepared.target == "codex" {
-		return nil, fmt.Errorf("install target %q does not support --mode sse yet", prepared.target)
+		return nil, fmt.Errorf("install target %q does not support --mode http yet", prepared.target)
 	}
 	return map[string]any{
-		"type": "sse",
-		"url":  prepared.sseURL,
+		"type": "streamable-http",
+		"url":  prepared.httpURL,
 	}, nil
 }
 
-func buildSSEURL(endpoint string) (string, error) {
+func buildHTTPURL(endpoint string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(endpoint))
 	if err != nil {
 		return "", err
@@ -420,13 +420,13 @@ func buildSSEURL(endpoint string) (string, error) {
 	}
 	return (&url.URL{
 		Scheme: parsed.Scheme,
-		Host:   net.JoinHostPort(host, defaultSSEPort),
-		Path:   defaultSSEPath,
+		Host:   net.JoinHostPort(host, defaultHTTPPort),
+		Path:   defaultHTTPPath,
 	}).String(), nil
 }
 
-func shouldEnsureLocalSSE(sseURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(sseURL))
+func shouldEnsureLocalHTTP(httpURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(httpURL))
 	if err != nil {
 		return false
 	}
@@ -449,13 +449,38 @@ func resolveInstallRepoRoot(paths ...string) string {
 		}
 		dir := filepath.Dir(path)
 		if filepath.Base(dir) == "configs" {
-			return filepath.Dir(dir)
+			repoRoot := filepath.Dir(dir)
+			if looksLikeInstallRepoRoot(repoRoot) {
+				return repoRoot
+			}
 		}
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		return cwd
+		if looksLikeInstallRepoRoot(cwd) {
+			return cwd
+		}
 	}
-	return "."
+	return ""
+}
+
+func looksLikeInstallRepoRoot(root string) bool {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return false
+	}
+	required := []string{
+		"docker-compose.yml",
+		filepath.Join("configs", "system.toml"),
+		filepath.Join("configs", "symbols-index.toml"),
+		"go.mod",
+	}
+	for _, rel := range required {
+		info, err := os.Stat(filepath.Join(root, rel))
+		if err != nil || info.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 func runCommand(ctx context.Context, dir string, name string, args ...string) error {

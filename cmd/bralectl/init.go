@@ -721,8 +721,8 @@ func promptMCPConfiguration(stdout io.Writer, current map[string]string) error {
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
-				Title("Enable Docker-backed MCP SSE service for editor integration?").
-				Description("Exposes read-only MCP tools at http://127.0.0.1:8765/sse after startup").
+				Title("Enable Docker-backed MCP service for editor integration?").
+				Description("Exposes read-only MCP tools at http://127.0.0.1:8765/mcp after startup").
 				Value(&enabled).
 				Affirmative("Yes").
 				Negative("No"),
@@ -732,7 +732,7 @@ func promptMCPConfiguration(stdout io.Writer, current map[string]string) error {
 	}
 	current["ENABLE_MCP"] = formatBoolValue(enabled)
 	if enabled {
-		fmt.Fprintln(stdout, "  ✓ MCP SSE will be exposed at http://127.0.0.1:8765/sse after startup.")
+		fmt.Fprintln(stdout, "  ✓ MCP will be exposed at http://127.0.0.1:8765/mcp after startup.")
 	}
 	return nil
 }
@@ -841,7 +841,7 @@ func formatSymbolSummary(symbols []symbolChoice) string {
 
 func mcpSummary(enabled bool) string {
 	if enabled {
-		return "enabled (127.0.0.1:8765/sse)"
+		return "enabled (127.0.0.1:8765/mcp)"
 	}
 	return "disabled"
 }

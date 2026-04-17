@@ -51,14 +51,14 @@ strategy = "strategies/BTCUSDT.toml"
 	}
 }
 
-func TestMCPInstallCommandDefaultsModeToSSE(t *testing.T) {
+func TestMCPInstallCommandDefaultsModeToHTTP(t *testing.T) {
 	cmd := mcpInstallCmd()
 	flag := cmd.Flags().Lookup("mode")
 	if flag == nil {
 		t.Fatal("mode flag is missing")
 	}
-	if got := flag.DefValue; got != "sse" {
-		t.Fatalf("default mode=%q want sse", got)
+	if got := flag.DefValue; got != "http" {
+		t.Fatalf("default mode=%q want http", got)
 	}
 }
 
@@ -108,8 +108,8 @@ func TestNormalizeMCPServeModeAllowsSupportedModes(t *testing.T) {
 		"":      "stdio",
 		"stdio": "stdio",
 		"STDIO": "stdio",
-		"sse":   "sse",
-		"SSE":   "sse",
+		"http":  "http",
+		"HTTP":  "http",
 	}
 	for input, want := range cases {
 		got, err := normalizeMCPServeMode(input)
@@ -123,7 +123,7 @@ func TestNormalizeMCPServeModeAllowsSupportedModes(t *testing.T) {
 }
 
 func TestNormalizeMCPServeModeRejectsUnsupportedMode(t *testing.T) {
-	_, err := normalizeMCPServeMode("http")
+	_, err := normalizeMCPServeMode("grpc")
 	if err == nil || !strings.Contains(err.Error(), "unsupported MCP mode") {
 		t.Fatalf("err=%v", err)
 	}

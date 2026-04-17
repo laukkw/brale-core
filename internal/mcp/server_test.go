@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -500,9 +501,9 @@ func TestServerListsReadsResourcesAndPrompts(t *testing.T) {
 	}
 }
 
-func TestNewSSEHandlerServesToolsResourcesAndPrompts(t *testing.T) {
+func TestNewStreamableHandlerServesToolsResourcesAndPrompts(t *testing.T) {
 	systemPath, indexPath := writeMCPConfigTree(t)
-	handler, err := NewSSEHandler(Options{
+	handler, err := NewStreamableHandler(Options{
 		Name:    "brale-core",
 		Version: "test",
 		Runtime: stubRuntime{
@@ -526,13 +527,13 @@ func TestNewSSEHandlerServesToolsResourcesAndPrompts(t *testing.T) {
 		Audit:  &memoryAuditSink{},
 	})
 	if err != nil {
-		t.Fatalf("NewSSEHandler() error = %v", err)
+		t.Fatalf("NewStreamableHandler() error = %v", err)
 	}
 	httpServer := httptest.NewServer(handler)
 	defer httpServer.Close()
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), &sdkmcp.SSEClientTransport{Endpoint: httpServer.URL}, nil)
+	session, err := client.Connect(t.Context(), &sdkmcp.StreamableClientTransport{Endpoint: httpServer.URL + "/mcp"}, nil)
 	if err != nil {
 		t.Fatalf("client.Connect() error = %v", err)
 	}
@@ -555,6 +556,30 @@ func TestNewSSEHandlerServesToolsResourcesAndPrompts(t *testing.T) {
 	}
 	if len(prompt.Messages) == 0 {
 		t.Fatalf("market_analysis returned no messages")
+	}
+}
+
+func TestNewStreamableHandlerExposesHealthz(t *testing.T) {
+	systemPath, indexPath := writeMCPConfigTree(t)
+	handler, err := NewStreamableHandler(Options{
+		Name:    "brale-core",
+		Version: "test",
+		Runtime: stubRuntime{},
+		Config:  NewLocalConfigSource(systemPath, indexPath),
+		Audit:   &memoryAuditSink{},
+	})
+	if err != nil {
+		t.Fatalf("NewStreamableHandler() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "ok") {
+		t.Fatalf("body=%s", rec.Body.String())
 	}
 }
 

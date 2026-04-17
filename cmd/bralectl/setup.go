@@ -111,7 +111,7 @@ func setupCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.installMCP, "install-mcp", false, "执行 MCP 客户端配置安装")
 	cmd.Flags().BoolVar(&opts.skipMCP, "skip-mcp", false, "跳过 MCP 客户端配置安装")
 	cmd.Flags().StringVar(&opts.mcpTarget, "mcp-target", "", "MCP 安装目标：claude-code、claude-desktop、opencode、codex 或 custom")
-	cmd.Flags().StringVar(&opts.mcpMode, "mcp-mode", "", "MCP 安装模式：sse 或 stdio（默认沿用 install 默认值）")
+	cmd.Flags().StringVar(&opts.mcpMode, "mcp-mode", "", "MCP 安装模式：http 或 stdio（默认沿用 install 默认值）")
 	cmd.Flags().StringVar(&opts.configPath, "config", "", "显式指定 MCP 配置文件路径")
 	cmd.Flags().StringVar(&opts.command, "command", "", "bralectl 可执行文件路径")
 	cmd.Flags().StringVar(&opts.name, "name", "brale-core", "MCP server 名称")

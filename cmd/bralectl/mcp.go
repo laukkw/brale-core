@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultMCPSSEAddr = "127.0.0.1:8765"
+const defaultMCPHTTPAddr = "127.0.0.1:8765"
 
 func mcpCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -61,15 +61,15 @@ func mcpServeCmd() *cobra.Command {
 			switch mode {
 			case "stdio":
 				return mcp.Serve(cmd.Context(), opts)
-			case "sse":
-				return mcp.ServeSSE(cmd.Context(), opts, addr)
+			case "http":
+				return mcp.ServeHTTP(cmd.Context(), opts, addr)
 			default:
 				return fmt.Errorf("unsupported MCP mode %q", mode)
 			}
 		},
 	}
-	cmd.Flags().StringVar(&mode, "mode", "stdio", "MCP 传输模式：stdio 或 sse")
-	cmd.Flags().StringVar(&addr, "addr", defaultMCPSSEAddr, "SSE 模式监听地址")
+	cmd.Flags().StringVar(&mode, "mode", "stdio", "MCP 传输模式：stdio 或 http")
+	cmd.Flags().StringVar(&addr, "addr", defaultMCPHTTPAddr, "HTTP 模式监听地址")
 	cmd.Flags().StringVar(&systemPath, "system", "configs/system.toml", "system.toml 路径")
 	cmd.Flags().StringVar(&indexPath, "index", "configs/symbols-index.toml", "symbols-index.toml 路径")
 	cmd.Flags().StringVar(&auditPath, "audit-log", "", "MCP audit 日志文件路径")
@@ -82,7 +82,7 @@ func normalizeMCPServeMode(raw string) (string, error) {
 		return "stdio", nil
 	}
 	switch mode {
-	case "stdio", "sse":
+	case "stdio", "http":
 		return mode, nil
 	default:
 		return "", fmt.Errorf("unsupported MCP mode %q", raw)
@@ -127,7 +127,7 @@ func mcpInstallCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&target, "target", "claude-code", "安装目标：claude-code、claude-desktop、opencode、codex 或 custom")
-	cmd.Flags().StringVar(&mode, "mode", "sse", "安装模式：sse（默认）或 stdio")
+	cmd.Flags().StringVar(&mode, "mode", "http", "安装模式：http（默认）或 stdio")
 	cmd.Flags().StringVar(&configPath, "config", "", "显式指定 MCP 配置文件路径")
 	cmd.Flags().StringVar(&command, "command", "", "bralectl 可执行文件路径")
 	cmd.Flags().StringVar(&name, "name", "brale-core", "MCP server 名称")
