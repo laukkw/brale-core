@@ -85,6 +85,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	}
 	s.ensureObserveJobs()
 	mux := http.NewServeMux()
+	mux.Handle("/healthz", http.HandlerFunc(s.handleHealthz))
 	mux.Handle("/api/runtime/schedule/enable", http.HandlerFunc(s.handleScheduleEnable))
 	mux.Handle("/api/runtime/schedule/disable", http.HandlerFunc(s.handleScheduleDisable))
 	mux.Handle("/api/runtime/schedule/symbol", http.HandlerFunc(s.handleScheduleSymbol))
@@ -111,4 +112,15 @@ func (s *Server) ensureObserveJobs() {
 	if s.ObserveJobs == nil {
 		s.ObserveJobs = asyncjob.NewManager[observeResponse]()
 	}
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(r.Context(), w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", nil)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"status":     "ok",
+		"request_id": requestIDFromContext(r.Context()),
+	})
 }

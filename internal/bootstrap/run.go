@@ -140,7 +140,9 @@ func Run(baseCtx context.Context, opts Options) error {
 	sendStartupNotify(env.ctx, env.logger, env.sys, env.index, runtimes, scheduler, deps, env.notifier)
 
 	<-env.ctx.Done()
+	env.logger.Info("shutdown signal received")
 	sendShutdownNotify(env.logger, env.notifier, startedAt)
+	env.logger.Info("shutdown flow completed")
 	return nil
 }
 

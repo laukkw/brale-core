@@ -37,6 +37,7 @@ func buildTopMux(viewerHandler http.Handler, dashboardHandler http.Handler, runt
 		topMux.Handle("/dashboard/", dashboardHandler)
 	}
 	if runtimeHandler != nil {
+		topMux.Handle("/healthz", runtimeHandler)
 		topMux.Handle("/", runtimeHandler)
 	}
 	return topMux
@@ -63,7 +64,6 @@ func attachWebhookRoutes(ctx context.Context, logger *zap.Logger, sys config.Sys
 		logger.Warn("webhook mux init failed", zap.Error(err))
 		return
 	}
-	topMux.Handle("/healthz", mux)
 	topMux.Handle("/api/live/freqtrade/webhook", mux)
 }
 

@@ -25,15 +25,15 @@ type RuntimeScheduler struct {
 	Reconciler  Reconciler
 	RiskMonitor RiskMonitor
 
-	SyncOrderInterval time.Duration
-	ReconcileInterval time.Duration
-	PriceTickInterval time.Duration
+	SyncOrderInterval  time.Duration
+	ReconcileInterval  time.Duration
+	PriceTickInterval  time.Duration
 	DisableTickerLoops bool
-	cancel            context.CancelFunc
-	streamCtx         context.Context
-	started           bool
-	startMu           sync.Mutex
-	lifecycleMu       sync.RWMutex
+	cancel             context.CancelFunc
+	streamCtx          context.Context
+	started            bool
+	startMu            sync.Mutex
+	lifecycleMu        sync.RWMutex
 
 	Logger      *zap.Logger
 	PriceStream interface {
@@ -135,6 +135,16 @@ func (s *RuntimeScheduler) Enqueue(task RuntimeTask) error {
 
 func (s *RuntimeScheduler) handleTask(ctx context.Context, task RuntimeTask) {
 	defer s.clearPendingTask(task)
+	defer func() {
+		if r := recover(); r != nil {
+			logging.FromContext(ctx).Named("scheduler").Error("task panic recovered",
+				zap.String("symbol", task.Symbol),
+				zap.String("type", string(task.Type)),
+				zap.Any("panic", r),
+				zap.Stack("stack"),
+			)
+		}
+	}()
 	s.taskExecutor().Execute(ctx, s, task)
 }
 

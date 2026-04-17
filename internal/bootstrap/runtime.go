@@ -66,16 +66,16 @@ func buildRuntimeMap(ctx context.Context, logger *zap.Logger, sys config.SystemC
 
 func startScheduler(ctx context.Context, logger *zap.Logger, sys config.SystemConfig, deps coreDeps, runtimes map[string]runtime.SymbolRuntime) (*runtime.RuntimeScheduler, error) {
 	scheduler := &runtime.RuntimeScheduler{
-		Symbols:           runtimes,
-		Reconciler:        deps.reconcile.reconciler,
-		RiskMonitor:       deps.position.riskMonitor,
-		AccountFetcher:    deps.execution.freqtradeAcct,
-		SyncOrderInterval: time.Duration(sys.Webhook.FallbackOrderPollSec) * time.Second,
-		ReconcileInterval: time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
-		PriceTickInterval: time.Second,
+		Symbols:            runtimes,
+		Reconciler:         deps.reconcile.reconciler,
+		RiskMonitor:        deps.position.riskMonitor,
+		AccountFetcher:     deps.execution.freqtradeAcct,
+		SyncOrderInterval:  time.Duration(sys.Webhook.FallbackOrderPollSec) * time.Second,
+		ReconcileInterval:  time.Duration(sys.Webhook.FallbackReconcileSec) * time.Second,
+		PriceTickInterval:  time.Second,
 		DisableTickerLoops: strings.EqualFold(sys.Scheduler.Backend, "river"),
-		Logger:            logger.Named("scheduler"),
-		PriceStream:       deps.position.priceSource,
+		Logger:             logger.Named("scheduler"),
+		PriceStream:        deps.position.priceSource,
 	}
 	scheduler.SetScheduledDecision(deps.execution.scheduled)
 	if err := scheduler.Start(ctx); err != nil {
@@ -134,4 +134,5 @@ func runFreqtradeBalanceCheck(ctx context.Context, logger *zap.Logger, deps core
 		return
 	}
 	execution.CheckFreqtradeBalance(ctx, logger, deps.execution.executor)
+	execution.CheckFreqtradeStoplossSafetyNet(ctx, logger, deps.execution.executor)
 }
