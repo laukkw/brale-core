@@ -9,7 +9,7 @@ config = "symbols/SOLUSDT.toml"
 strategy = "strategies/SOLUSDT.toml"
 
 
-[[symbols]]
-symbol = "ETHUSDT"
-config = "symbols/ETHUSDT.toml"
-strategy = "strategies/ETHUSDT.toml"
+#[[symbols]]
+#symbol = "ETHUSDT"
+#config = "symbols/ETHUSDT.toml"
+#strategy = "strategies/ETHUSDT.toml"
