@@ -108,12 +108,7 @@ bralectl mcp install --target codex           # 写入 ~/.codex/config.toml
 
 #+begin_src toml
 [mcp_servers.brale-core]
-command = "/path/to/bralectl"
-args = [
-  "mcp", "serve", "--mode", "stdio",
-  "--system", "/path/to/configs/system.toml",
-  "--index", "/path/to/configs/symbols-index.toml",
-]
+url = "http://127.0.0.1:8765/mcp"
 #+end_src
 
 **** HTTP 远程客户端
@@ -143,6 +138,7 @@ args = [
 | =get_kline= | 获取指定交易对的 K 线（Candlestick）数据 |
 | =compute_indicators= | 基于本地 symbol 配置与运行时 K 线计算指标快照 |
 | =get_config= | 读取运行配置（API Key 等敏感信息已脱敏） |
+| =get_episodic_memory= | 获取指定交易对最近的交易反思记录（方向、盈亏、反思文本、经验教训） |
 
 ** 可用资源（Resources）
 
@@ -282,12 +278,7 @@ bralectl mcp install --target codex           # writes ~/.codex/config.toml
 
 #+begin_src toml
 [mcp_servers.brale-core]
-command = "/path/to/bralectl"
-args = [
-  "mcp", "serve", "--mode", "stdio",
-  "--system", "/path/to/configs/system.toml",
-  "--index", "/path/to/configs/symbols-index.toml",
-]
+url = "http://127.0.0.1:8765/mcp"
 #+end_src
 
 **** HTTP Remote Client
@@ -317,6 +308,7 @@ All tools are *read-only* and will never trigger trades.
 | =get_kline= | Candlestick data for a given symbol and interval |
 | =compute_indicators= | Compute indicator snapshot using the configured engine and runtime klines |
 | =get_config= | Runtime configuration (API keys and secrets are redacted) |
+| =get_episodic_memory= | Recent trade reflections for a symbol, including direction, PnL, reflection text, and lessons |
 
 ** Available Resources
 

@@ -133,7 +133,7 @@ func TestSetupCommandRejectsSkipMCPWithMCPMode(t *testing.T) {
 	}
 }
 
-func TestSetupCommandDefaultsCodexToStdio(t *testing.T) {
+func TestSetupCommandDefaultsCodexToHTTP(t *testing.T) {
 	repo := t.TempDir()
 	writeSetupFile(t, filepath.Join(repo, ".env.example"), "EXEC_USERNAME=\nEXEC_SECRET=\n")
 	systemPath := filepath.Join(repo, "configs", "system.toml")
@@ -157,6 +157,7 @@ strategy = "strategies/BTCUSDT.toml"
 
 	_, errOut, err := executeRootCommand(
 		t,
+		"--endpoint", "https://remote.example.com:9991",
 		"setup",
 		"--repo", repo,
 		"--lang", "en",
@@ -174,7 +175,7 @@ strategy = "strategies/BTCUSDT.toml"
 	if readErr != nil {
 		t.Fatalf("read config: %v", readErr)
 	}
-	if !strings.Contains(string(raw), `[mcp_servers.brale-core]`) {
+	if !strings.Contains(string(raw), `[mcp_servers.brale-core]`) || !strings.Contains(string(raw), `url = "https://remote.example.com:8765/mcp"`) {
 		t.Fatalf("config=%s", string(raw))
 	}
 }

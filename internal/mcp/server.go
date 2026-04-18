@@ -12,11 +12,19 @@ import (
 	"brale-core/internal/config"
 	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/decision/features"
+	"brale-core/internal/memory"
+	"brale-core/internal/pgstore"
 	"brale-core/internal/snapshot"
+	"brale-core/internal/store"
 	"brale-core/internal/transport/botruntime"
 	runtimeapi "brale-core/internal/transport/runtimeapi"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+const (
+	defaultEpisodicMemoryToolLimit = 10
+	maxEpisodicMemoryToolLimit     = 50
 )
 
 type Runtime interface {
@@ -30,16 +38,18 @@ type Runtime interface {
 }
 
 type Options struct {
-	Name    string
-	Version string
-	Runtime Runtime
-	Config  *LocalConfigSource
-	Audit   AuditSink
+	Name          string
+	Version       string
+	Runtime       Runtime
+	Config        *LocalConfigSource
+	Audit         AuditSink
+	EpisodicStore store.EpisodicMemoryStore
 }
 
 type service struct {
-	runtime Runtime
-	config  *LocalConfigSource
+	runtime       Runtime
+	config        *LocalConfigSource
+	episodicStore store.EpisodicMemoryStore
 }
 
 type analyzeMarketInput struct {
@@ -66,6 +76,11 @@ type getConfigInput struct {
 	Symbol string `json:"symbol,omitempty" jsonschema:"可选；指定后额外返回 symbol/strategy 配置"`
 }
 
+type episodicMemoryInput struct {
+	Symbol string `json:"symbol" jsonschema:"交易对，例如 BTCUSDT"`
+	Limit  int    `json:"limit,omitempty" jsonschema:"返回条数，默认 10，最大 50"`
+}
+
 func NewServer(opts Options) (*sdkmcp.Server, error) {
 	if opts.Runtime == nil {
 		return nil, fmt.Errorf("runtime is required")
@@ -85,8 +100,9 @@ func NewServer(opts Options) (*sdkmcp.Server, error) {
 		version = "dev"
 	}
 	svc := service{
-		runtime: opts.Runtime,
-		config:  opts.Config,
+		runtime:       opts.Runtime,
+		config:        opts.Config,
+		episodicStore: opts.EpisodicStore,
 	}
 	server := sdkmcp.NewServer(
 		&sdkmcp.Implementation{Name: name, Version: version},
@@ -124,6 +140,10 @@ func NewServer(opts Options) (*sdkmcp.Server, error) {
 		Name:        "get_config",
 		Description: "读取本地配置并返回脱敏后的 system/index/symbol/strategy 内容。",
 	}, audited("get_config", opts.Audit, svc.handleGetConfig))
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "get_episodic_memory",
+		Description: "读取指定交易对最近的交易反思记录（只读）。",
+	}, audited("get_episodic_memory", opts.Audit, svc.handleGetEpisodicMemory))
 	registerResources(server, opts.Audit, svc)
 	registerPrompts(server, opts.Audit, svc)
 	return server, nil
@@ -296,6 +316,57 @@ func (s service) handleGetConfig(_ context.Context, _ *sdkmcp.CallToolRequest, i
 	return nil, buildConfigOutput(out), nil
 }
 
+func (s service) handleGetEpisodicMemory(ctx context.Context, _ *sdkmcp.CallToolRequest, input episodicMemoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+	symbol, err := normalizeSymbol(input.Symbol)
+	if err != nil {
+		return nil, nil, err
+	}
+	limit := input.Limit
+	if limit <= 0 {
+		limit = defaultEpisodicMemoryToolLimit
+	}
+	if limit > maxEpisodicMemoryToolLimit {
+		return nil, nil, fmt.Errorf("limit must be in [1,%d]", maxEpisodicMemoryToolLimit)
+	}
+
+	store, closeStore, err := s.openEpisodicStore(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer closeStore()
+
+	mem := memory.NewEpisodicMemory(store, limit, config.DefaultEpisodicTTLDays)
+	episodes, err := mem.ListEpisodes(symbol, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, map[string]any{
+		"symbol": symbol,
+		"limit":  limit,
+		"count":  len(episodes),
+		"items":  buildEpisodicMemoryItems(episodes),
+	}, nil
+}
+
+func (s service) openEpisodicStore(ctx context.Context) (store.EpisodicMemoryStore, func(), error) {
+	if s.episodicStore != nil {
+		return s.episodicStore, func() {}, nil
+	}
+	if s.config == nil {
+		return nil, nil, fmt.Errorf("config is required")
+	}
+	sys, err := config.LoadSystemConfig(s.config.SystemPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load system config: %w", err)
+	}
+	pool, err := pgstore.OpenPool(ctx, sys.Database)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open memory store: %w", err)
+	}
+	st := pgstore.New(pool, nil)
+	return st, st.Close, nil
+}
+
 func audited[In, Out any](tool string, audit AuditSink, next sdkmcp.ToolHandlerFor[In, Out]) sdkmcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *sdkmcp.CallToolRequest, input In) (*sdkmcp.CallToolResult, Out, error) {
 		var zero Out
@@ -407,6 +478,27 @@ func buildIndexEntries(entries []config.SymbolIndexEntry) []map[string]any {
 			"symbol":   entry.Symbol,
 			"config":   entry.Config,
 			"strategy": entry.Strategy,
+		})
+	}
+	return out
+}
+
+func buildEpisodicMemoryItems(episodes []memory.Episode) []map[string]any {
+	out := make([]map[string]any, 0, len(episodes))
+	for _, episode := range episodes {
+		out = append(out, map[string]any{
+			"id":             episode.ID,
+			"symbol":         episode.Symbol,
+			"position_id":    episode.PositionID,
+			"direction":      episode.Direction,
+			"entry_price":    episode.EntryPrice,
+			"exit_price":     episode.ExitPrice,
+			"pnl_percent":    episode.PnLPercent,
+			"duration":       episode.Duration,
+			"reflection":     episode.Reflection,
+			"key_lessons":    episode.KeyLessons,
+			"market_context": episode.MarketContext,
+			"created_at":     episode.CreatedAt,
 		})
 	}
 	return out

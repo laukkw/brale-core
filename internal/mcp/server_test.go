@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"brale-core/internal/decision/features"
+	"brale-core/internal/store"
 	"brale-core/internal/transport/botruntime"
 	runtimeapi "brale-core/internal/transport/runtimeapi"
 
@@ -94,6 +95,7 @@ func TestServerListsAndCallsReadOnlyTools(t *testing.T) {
 		"get_kline",
 		"compute_indicators",
 		"get_config",
+		"get_episodic_memory",
 	} {
 		if _, ok := gotTools[want]; !ok {
 			t.Fatalf("tool %q not registered", want)
@@ -127,6 +129,99 @@ func TestServerListsAndCallsReadOnlyTools(t *testing.T) {
 
 	if len(audit.events) != 5 {
 		t.Fatalf("audit events=%d want 5", len(audit.events))
+	}
+}
+
+func TestGetEpisodicMemoryReturnsRecentReflections(t *testing.T) {
+	systemPath, indexPath := writeMCPConfigTree(t)
+	server, err := NewServer(Options{
+		Name:    "brale-core",
+		Version: "test",
+		Runtime: stubRuntime{},
+		Config:  NewLocalConfigSource(systemPath, indexPath),
+		Audit:   &memoryAuditSink{},
+		EpisodicStore: stubEpisodicMemoryStore{items: []store.EpisodicMemoryRecord{{
+			ID:            7,
+			Symbol:        "BTCUSDT",
+			PositionID:    "pos-1",
+			Direction:     "long",
+			EntryPrice:    "65000",
+			ExitPrice:     "66250",
+			PnLPercent:    "1.92",
+			Duration:      "2h15m",
+			Reflection:    "突破确认后跟随是有效的，但加仓应更克制。",
+			KeyLessons:    `["等待回踩确认","避免追第二次扩张"]`,
+			MarketContext: "breakout",
+			CreatedAt:     time.Date(2026, 4, 18, 9, 30, 0, 0, time.UTC),
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	session := connectTestSession(t, server)
+	defer session.Close()
+
+	got := callToolMap(t, session, "get_episodic_memory", map[string]any{
+		"symbol": "BTCUSDT",
+		"limit":  5,
+	})
+	if got["symbol"] != "BTCUSDT" {
+		t.Fatalf("symbol=%v want BTCUSDT", got["symbol"])
+	}
+	if got["count"] != float64(1) {
+		t.Fatalf("count=%v want 1", got["count"])
+	}
+	items, ok := got["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items=%T len=%d want 1", got["items"], len(items))
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("item type=%T want map", items[0])
+	}
+	if first["reflection"] != "突破确认后跟随是有效的，但加仓应更克制。" {
+		t.Fatalf("reflection=%v", first["reflection"])
+	}
+	lessons, ok := first["key_lessons"].([]any)
+	if !ok || len(lessons) != 2 {
+		t.Fatalf("key_lessons=%v", first["key_lessons"])
+	}
+}
+
+func TestGetEpisodicMemoryRejectsLargeLimit(t *testing.T) {
+	systemPath, indexPath := writeMCPConfigTree(t)
+	server, err := NewServer(Options{
+		Name:          "brale-core",
+		Version:       "test",
+		Runtime:       stubRuntime{},
+		Config:        NewLocalConfigSource(systemPath, indexPath),
+		Audit:         &memoryAuditSink{},
+		EpisodicStore: stubEpisodicMemoryStore{},
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	session := connectTestSession(t, server)
+	defer session.Close()
+
+	res, err := session.CallTool(t.Context(), &sdkmcp.CallToolParams{
+		Name: "get_episodic_memory",
+		Arguments: map[string]any{
+			"symbol": "BTCUSDT",
+			"limit":  maxEpisodicMemoryToolLimit + 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(get_episodic_memory) error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected tool error for oversized limit")
+	}
+	text := toolErrorText(res)
+	if !strings.Contains(text, "limit must be in") {
+		t.Fatalf("error text=%q", text)
 	}
 }
 
@@ -495,6 +590,9 @@ func TestServerListsReadsResourcesAndPrompts(t *testing.T) {
 	if !strings.Contains(reviewText.Text, "get_decision_history") {
 		t.Fatalf("trade_review text=%q missing get_decision_history guidance", reviewText.Text)
 	}
+	if !strings.Contains(reviewText.Text, "get_episodic_memory") {
+		t.Fatalf("trade_review text=%q missing get_episodic_memory guidance", reviewText.Text)
+	}
 
 	if len(audit.events) != 4 {
 		t.Fatalf("audit events=%d want 4", len(audit.events))
@@ -656,6 +754,39 @@ func (s *memoryAuditSink) Record(_ context.Context, event AuditEvent) error {
 	return nil
 }
 
+type stubEpisodicMemoryStore struct {
+	items []store.EpisodicMemoryRecord
+}
+
+func (s stubEpisodicMemoryStore) SaveEpisodicMemory(context.Context, *store.EpisodicMemoryRecord) error {
+	return errors.New("unexpected SaveEpisodicMemory call")
+}
+
+func (s stubEpisodicMemoryStore) ListEpisodicMemories(_ context.Context, symbol string, limit int) ([]store.EpisodicMemoryRecord, error) {
+	if limit <= 0 || limit > len(s.items) {
+		limit = len(s.items)
+	}
+	out := make([]store.EpisodicMemoryRecord, 0, limit)
+	for _, item := range s.items {
+		if item.Symbol != symbol {
+			continue
+		}
+		out = append(out, item)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (s stubEpisodicMemoryStore) FindEpisodicMemoryByPosition(context.Context, string) (store.EpisodicMemoryRecord, bool, error) {
+	return store.EpisodicMemoryRecord{}, false, errors.New("unexpected FindEpisodicMemoryByPosition call")
+}
+
+func (s stubEpisodicMemoryStore) DeleteEpisodicMemoriesOlderThan(context.Context, string, time.Time) (int64, error) {
+	return 0, errors.New("unexpected DeleteEpisodicMemoriesOlderThan call")
+}
+
 func connectTestSession(t *testing.T, server *sdkmcp.Server) *sdkmcp.ClientSession {
 	t.Helper()
 	ctx := t.Context()
@@ -696,6 +827,18 @@ func callToolMap(t *testing.T, session *sdkmcp.ClientSession, name string, args 
 		t.Fatalf("Unmarshal structured content: %v", err)
 	}
 	return out
+}
+
+func toolErrorText(res *sdkmcp.CallToolResult) string {
+	if res == nil {
+		return ""
+	}
+	for _, item := range res.Content {
+		if content, ok := item.(*sdkmcp.TextContent); ok {
+			return content.Text
+		}
+	}
+	return ""
 }
 
 func listResourceURIs(t *testing.T, session *sdkmcp.ClientSession) []string {

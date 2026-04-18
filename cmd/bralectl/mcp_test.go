@@ -62,34 +62,16 @@ func TestMCPInstallCommandDefaultsModeToHTTP(t *testing.T) {
 	}
 }
 
-func TestMCPInstallCommandDefaultsCodexToStdio(t *testing.T) {
+func TestMCPInstallCommandDefaultsCodexToHTTP(t *testing.T) {
 	dir := t.TempDir()
-	systemPath := filepath.Join(dir, "system.toml")
-	indexPath := filepath.Join(dir, "symbols-index.toml")
 	configPath := filepath.Join(dir, "config.toml")
-	auditPath := filepath.Join(dir, "audit.jsonl")
-	commandPath := filepath.Join(dir, "bralectl")
-	writeTestFile(t, systemPath, `[database]
-dsn = "postgres://brale:brale@localhost:5432/brale?sslmode=disable"`)
-	writeTestFile(t, indexPath, `
-[[symbols]]
-symbol = "BTCUSDT"
-config = "symbols/BTCUSDT.toml"
-strategy = "strategies/BTCUSDT.toml"
-`)
-	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("write command: %v", err)
-	}
 
 	_, errOut, err := executeRootCommand(
 		t,
+		"--endpoint", "https://remote.example.com:9991",
 		"mcp", "install",
 		"--target", "codex",
 		"--config", configPath,
-		"--command", commandPath,
-		"--system", systemPath,
-		"--index", indexPath,
-		"--audit-log", auditPath,
 	)
 	if err != nil {
 		t.Fatalf("execute command: %v\nstderr=%s", err, errOut)
@@ -99,6 +81,9 @@ strategy = "strategies/BTCUSDT.toml"
 		t.Fatalf("read config: %v", readErr)
 	}
 	if !strings.Contains(string(raw), `[mcp_servers.brale-core]`) {
+		t.Fatalf("config=%s", string(raw))
+	}
+	if !strings.Contains(string(raw), `url = "https://remote.example.com:8765/mcp"`) {
 		t.Fatalf("config=%s", string(raw))
 	}
 }

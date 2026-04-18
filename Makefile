@@ -36,6 +36,8 @@ HOST_REPO_ROOT ?= $(CURDIR)
 BRALECTL_BIN ?= $(BRALE_DATA_ROOT)/bin/bralectl
 OUTPUT_ROOT ?= $(CURDIR)/_output
 BRALECTL_OUTPUT_BIN ?= $(OUTPUT_ROOT)/bralectl
+BRALECTL_INSTALL_DIR ?= $(HOME)/.local/bin
+BRALECTL_INSTALL_BIN ?= $(BRALECTL_INSTALL_DIR)/bralectl
 BRALECTL_DOCKER_IMAGE ?= brale-core-go-builder
 TEMPLATE_SYMBOL ?=
 
@@ -72,11 +74,12 @@ COMPOSE = $(STACK_EXPORTS) $(STACK_PROXY_SOURCE) docker compose -f "$(COMPOSE_FI
 # PREPARE_STACK runs the prepare-stack logic locally (via Go) or in Docker.
 PREPARE_STACK_ARGS = -env-file .env -config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" -config-out "$(FREQTRADE_CONFIG_FILE)" -proxy-env-out "$(STACK_PROXY_ENV_FILE)" -system-in "$(BRALE_SYSTEM_IN)"
 
-.PHONY: help env-init setup init check prepare start apply-config start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs build bralectl-build bralectl-builder-image add-symbol llm-probe migrate-up migrate-down e2e-start e2e-stop e2e-reset e2e-status e2e-test e2e-logs
+.PHONY: help env-init setup init check prepare start apply-config start-freqtrade wait-freqtrade start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs build bralectl-build install-bralectl bralectl-builder-image add-symbol llm-probe migrate-up migrate-down e2e-start e2e-stop e2e-reset e2e-status e2e-test e2e-logs
 
 help: ## Show the main make targets and optional component switches
 	@printf '%-22s %s\n' "env-init" "Create .env from .env.example if missing"; \
 	printf '%-22s %s\n' "build" "Build bralectl into _output/bralectl"; \
+	printf '%-22s %s\n' "install-bralectl" "Build and install bralectl into ~/.local/bin (override BRALECTL_INSTALL_DIR)"; \
 	printf '%-22s %s\n' "setup" "Run bralectl setup (env init + optional MCP client config)"; \
 	printf '%-22s %s\n' "init" "Interactive CLI wizard: configure .env + generate runtime configs"; \
 	printf '%-22s %s\n' "start" "Start freqtrade + brale; add ENABLE_MCP=1 for MCP service"; \
@@ -88,7 +91,8 @@ help: ## Show the main make targets and optional component switches
 	echo "Optional switches:"; \
 	printf '  %-18s %s\n' "ENABLE_MCP=1" "Include the mcp service"; \
 	printf '  %-18s %s\n' "SETUP_LANG=zh|en" "Preselect the setup wizard language"; \
-	printf '  %-18s %s\n' "SETUP_ARGS='...'" "Pass extra flags to bralectl setup"
+	printf '  %-18s %s\n' "SETUP_ARGS='...'" "Pass extra flags to bralectl setup"; \
+	printf '  %-18s %s\n' "BRALECTL_INSTALL_DIR=..." "Install bralectl into a custom bin directory"
 
 env-init: ## Create .env from .env.example when missing
 	@set -e; \
@@ -250,6 +254,23 @@ bralectl-build: ## Build the local bralectl binary
 			"$(BRALECTL_DOCKER_IMAGE)" \
 			go build -o "$(BRALECTL_BIN)" ./cmd/bralectl; \
 	fi
+
+install-bralectl: bralectl-build ## Build latest bralectl and install it into a PATH directory
+	@set -e; \
+	mkdir -p "$(BRALECTL_INSTALL_DIR)"; \
+	tmp_bin="$$(mktemp "$(BRALECTL_INSTALL_DIR)/.bralectl.tmp.XXXXXX")"; \
+	trap 'rm -f "$$tmp_bin"' EXIT; \
+	cp -f "$(BRALECTL_BIN)" "$$tmp_bin"; \
+	chmod 755 "$$tmp_bin"; \
+	mv -f "$$tmp_bin" "$(BRALECTL_INSTALL_BIN)"; \
+	echo "[OK] installed bralectl to $(BRALECTL_INSTALL_BIN)"; \
+	case ":$$PATH:" in \
+		*:"$(BRALECTL_INSTALL_DIR)":*) ;; \
+		*) \
+			echo "[WARN] $(BRALECTL_INSTALL_DIR) is not in PATH"; \
+			echo "[WARN] add it to PATH or invoke $(BRALECTL_INSTALL_BIN) directly"; \
+			;; \
+	esac
 
 bralectl-builder-image:
 	@docker build --target bralectl-builder -f "$(CURDIR)/Dockerfile" -t "$(BRALECTL_DOCKER_IMAGE)" "$(CURDIR)"

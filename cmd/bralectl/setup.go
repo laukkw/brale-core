@@ -178,16 +178,12 @@ func runSetup(cmd *cobra.Command, opts setupCommandOptions) error {
 	}
 	systemPath := defaultSetupPath(repoRoot, opts.systemPath, "configs/system.toml")
 	indexPath := defaultSetupPath(repoRoot, opts.indexPath, "configs/symbols-index.toml")
-	installMode := strings.TrimSpace(opts.mcpMode)
-	if installMode == "" && target == "codex" {
-		installMode = "stdio"
-	}
 	installOpts := mcp.InstallOptions{
 		Name:       opts.name,
 		Command:    opts.command,
 		ConfigPath: configPath,
 		Target:     target,
-		Mode:       installMode,
+		Mode:       strings.TrimSpace(opts.mcpMode),
 		Endpoint:   endpoint,
 		SystemPath: systemPath,
 		IndexPath:  indexPath,

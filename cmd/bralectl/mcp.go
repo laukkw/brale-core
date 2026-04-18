@@ -104,16 +104,12 @@ func mcpInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "写入 MCP client 配置",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			installMode := mode
-			if flag := cmd.Flags().Lookup("mode"); flag != nil && !flag.Changed && strings.EqualFold(strings.TrimSpace(target), "codex") {
-				installMode = "stdio"
-			}
 			result, err := mcp.Install(mcp.InstallOptions{
 				Name:       name,
 				Command:    command,
 				ConfigPath: configPath,
 				Target:     target,
-				Mode:       installMode,
+				Mode:       mode,
 				Endpoint:   flagEndpoint,
 				SystemPath: systemPath,
 				IndexPath:  indexPath,

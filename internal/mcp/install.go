@@ -171,9 +171,6 @@ func prepareInstall(opts InstallOptions) (preparedInstall, error) {
 	if err != nil {
 		return preparedInstall{}, err
 	}
-	if target == "codex" && mode == "http" {
-		return preparedInstall{}, fmt.Errorf("install target %q does not support --mode %s yet", target, mode)
-	}
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
 		name = defaultServerName
@@ -394,9 +391,6 @@ func buildStdioEntry(prepared preparedInstall) map[string]any {
 }
 
 func buildHTTPEntry(prepared preparedInstall) (map[string]any, error) {
-	if prepared.target == "codex" {
-		return nil, fmt.Errorf("install target %q does not support --mode http yet", prepared.target)
-	}
 	return map[string]any{
 		"type": "streamable-http",
 		"url":  prepared.httpURL,

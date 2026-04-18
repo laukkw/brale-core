@@ -133,8 +133,8 @@ make add-symbol SYMBOL=XAGUSDT TEMPLATE_SYMBOL=SOLUSDT DRY_RUN=1
 也可以直接使用 CLI：
 
 #+begin_src bash
-go build -o bralectl ./cmd/bralectl
-./bralectl add-symbol XAGUSDT --template-symbol SOLUSDT --repo .
+make install-bralectl
+bralectl add-symbol XAGUSDT --template-symbol SOLUSDT --repo .
 #+end_src
 
 * English Version
@@ -270,6 +270,6 @@ After adding, run =make prepare= to regenerate runtime configs, then =make resta
 You can also use the CLI directly:
 
 #+begin_src bash
-go build -o bralectl ./cmd/bralectl
-./bralectl add-symbol XAGUSDT --template-symbol SOLUSDT --repo .
+make install-bralectl
+bralectl add-symbol XAGUSDT --template-symbol SOLUSDT --repo .
 #+end_src

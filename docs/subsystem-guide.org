@@ -250,6 +250,7 @@ MCP 是 AI 工具协议，允许 LLM 客户端（Claude、Cursor 等）通过标
 | =get_kline= | K 线数据 |
 | =compute_indicators= | 计算技术指标 |
 | =get_config= | 系统/策略配置（脱敏） |
+| =get_episodic_memory= | 最近的交易反思记录 |
 
 ** 暴露的资源
 

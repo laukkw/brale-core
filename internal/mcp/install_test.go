@@ -425,6 +425,78 @@ func TestInstallWritesCodexConfigTOML(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
+	origEnsure := ensureHTTPAvailableFunc
+	t.Cleanup(func() {
+		ensureHTTPAvailableFunc = origEnsure
+	})
+	ensureHTTPAvailableFunc = func(prepared preparedInstall) error {
+		t.Fatal("ensureHTTPAvailable should not run for remote HTTP installs")
+		return nil
+	}
+
+	result, err := Install(InstallOptions{
+		Target:     "codex",
+		Name:       "brale-core",
+		ConfigPath: configPath,
+		Endpoint:   "https://remote.example.com:9991",
+		SystemPath: systemPath,
+		IndexPath:  indexPath,
+		AuditPath:  auditPath,
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if result.ConfigPath != configPath {
+		t.Fatalf("ConfigPath=%s want %s", result.ConfigPath, configPath)
+	}
+
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	doc, err := tomledit.Parse(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := doc.First("model"); got == nil || got.KeyValue == nil || !strings.Contains(got.KeyValue.String(), "\"gpt-5.4\"") {
+		t.Fatalf("top-level model setting missing:\n%s", raw)
+	}
+	section := doc.First("mcp_servers", "brale-core")
+	if section == nil || !section.IsSection() {
+		t.Fatalf("brale-core section missing:\n%s", raw)
+	}
+	url := doc.First("mcp_servers", "brale-core", "url")
+	if url == nil || url.KeyValue == nil || !strings.Contains(url.KeyValue.String(), "https://remote.example.com:8765/mcp") {
+		t.Fatalf("url mapping missing or invalid:\n%s", raw)
+	}
+	if command := doc.First("mcp_servers", "brale-core", "command"); command != nil {
+		t.Fatalf("unexpected command mapping in HTTP config:\n%s", raw)
+	}
+	if args := doc.First("mcp_servers", "brale-core", "args"); args != nil {
+		t.Fatalf("unexpected args mapping in HTTP config:\n%s", raw)
+	}
+}
+
+func TestInstallWritesCodexStdioConfigTOMLWhenRequested(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	systemPath := filepath.Join(dir, "system.toml")
+	indexPath := filepath.Join(dir, "symbols-index.toml")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	commandPath := filepath.Join(dir, "bralectl")
+	if err := os.WriteFile(systemPath, []byte("[database]\ndsn = \"postgres://brale:brale@localhost:5432/brale?sslmode=disable\"\n"), 0o644); err != nil {
+		t.Fatalf("write system: %v", err)
+	}
+	if err := os.WriteFile(indexPath, []byte("[[symbols]]\nsymbol = \"BTCUSDT\"\nconfig = \"symbols/BTCUSDT.toml\"\nstrategy = \"strategies/BTCUSDT.toml\"\n"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write command: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte("model = \"gpt-5.4\"\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
 	result, err := Install(InstallOptions{
 		Target:     "codex",
 		Name:       "brale-core",
@@ -450,13 +522,6 @@ func TestInstallWritesCodexConfigTOML(t *testing.T) {
 	doc, err := tomledit.Parse(bytes.NewReader(raw))
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
-	}
-	if got := doc.First("model"); got == nil || got.KeyValue == nil || !strings.Contains(got.KeyValue.String(), "\"gpt-5.4\"") {
-		t.Fatalf("top-level model setting missing:\n%s", raw)
-	}
-	section := doc.First("mcp_servers", "brale-core")
-	if section == nil || !section.IsSection() {
-		t.Fatalf("brale-core section missing:\n%s", raw)
 	}
 	command := doc.First("mcp_servers", "brale-core", "command")
 	if command == nil || command.KeyValue == nil || !strings.Contains(command.KeyValue.String(), commandPath) {
@@ -520,7 +585,7 @@ func TestInstallRejectsUnsupportedTargetEvenWithExplicitConfigPath(t *testing.T)
 	}
 }
 
-func TestValidateInstallOptionsRejectsCodexHTTPBeforeSideEffects(t *testing.T) {
+func TestValidateInstallOptionsAllowsCodexHTTP(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.toml")
 	indexPath := filepath.Join(dir, "symbols-index.toml")
@@ -538,7 +603,7 @@ func TestValidateInstallOptionsRejectsCodexHTTPBeforeSideEffects(t *testing.T) {
 		SystemPath: systemPath,
 		IndexPath:  indexPath,
 	})
-	if err == nil || !strings.Contains(err.Error(), "does not support --mode http") {
+	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
 }

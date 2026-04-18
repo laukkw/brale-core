@@ -155,7 +155,7 @@ func (s service) handleTradeReviewPrompt(_ context.Context, req *sdkmcp.GetPromp
 			"优先读取以下资源：\n"+
 			"- brale://decision/%s/latest\n"+
 			"- brale://kline/%s/%s\n"+
-			"必要时调用以下只读工具补充：get_decision_history、analyze_market、get_config。\n"+
+			"必要时调用以下只读工具补充：get_decision_history、get_episodic_memory、analyze_market、get_config。\n"+
 			"输出建议结构：\n"+
 			"1. 最近决策是否与当前市场结构匹配\n"+
 			"2. 若判断失真，更接近指标/结构/机制哪一层失真\n"+

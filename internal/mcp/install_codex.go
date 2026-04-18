@@ -11,14 +11,13 @@ import (
 )
 
 func installCodexConfig(prepared preparedInstall) error {
-	if prepared.mode != "stdio" {
-		return fmt.Errorf("install target %q does not support --mode %s yet", prepared.target, prepared.mode)
-	}
 	doc, err := loadCodexInstallDocument(prepared.configPath)
 	if err != nil {
 		return err
 	}
-	upsertCodexServer(doc, prepared.name, prepared.command, prepared.args)
+	if err := upsertCodexServer(doc, prepared); err != nil {
+		return err
+	}
 	var buf bytes.Buffer
 	if err := tomledit.Format(&buf, doc); err != nil {
 		return fmt.Errorf("format codex config: %w", err)
@@ -45,11 +44,11 @@ func loadCodexInstallDocument(path string) (*tomledit.Document, error) {
 	return doc, nil
 }
 
-func upsertCodexServer(doc *tomledit.Document, name, command string, args []string) {
+func upsertCodexServer(doc *tomledit.Document, prepared preparedInstall) error {
 	if doc == nil {
-		return
+		return nil
 	}
-	key := parser.Key{"mcp_servers", name}
+	key := parser.Key{"mcp_servers", prepared.name}
 	filtered := doc.Sections[:0]
 	for _, section := range doc.Sections {
 		if section == nil || !section.TableName().Equals(key) {
@@ -57,19 +56,40 @@ func upsertCodexServer(doc *tomledit.Document, name, command string, args []stri
 		}
 	}
 	doc.Sections = filtered
+	items, err := buildCodexServerItems(prepared)
+	if err != nil {
+		return err
+	}
 	doc.Sections = append(doc.Sections, &tomledit.Section{
 		Heading: &parser.Heading{Name: key},
-		Items: []parser.Item{
+		Items:   items,
+	})
+	return nil
+}
+
+func buildCodexServerItems(prepared preparedInstall) ([]parser.Item, error) {
+	switch prepared.mode {
+	case "stdio":
+		return []parser.Item{
 			&parser.KeyValue{
 				Name:  parser.Key{"command"},
-				Value: parser.MustValue(strconv.Quote(command)),
+				Value: parser.MustValue(strconv.Quote(prepared.command)),
 			},
 			&parser.KeyValue{
 				Name:  parser.Key{"args"},
-				Value: parser.MustValue(renderTOMLStringArray(args)),
+				Value: parser.MustValue(renderTOMLStringArray(prepared.args)),
 			},
-		},
-	})
+		}, nil
+	case "http":
+		return []parser.Item{
+			&parser.KeyValue{
+				Name:  parser.Key{"url"},
+				Value: parser.MustValue(strconv.Quote(prepared.httpURL)),
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported install mode %q", prepared.mode)
+	}
 }
 
 func renderTOMLStringArray(values []string) string {

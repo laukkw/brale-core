@@ -240,7 +240,7 @@ bralectl mcp install --target codex
 | 参数 | 默认值 | 说明 |
 |------+---------+------|
 | =--target= | =claude-code= | 安装目标：=claude-code=、=claude-desktop=、=opencode=、=codex= 或 =custom= |
-| =--mode= | =http= | 安装模式：默认写入 Streamable HTTP 配置；未显式指定时，=codex= 会自动退回 =stdio= |
+| =--mode= | =http= | 安装模式：默认写入 Streamable HTTP 配置；=codex= 默认也使用 HTTP 容器端点 |
 | =--config= | （自动检测） | 显式指定 MCP 配置文件路径 |
 | =--command= | （自动检测） | bralectl 可执行文件路径 |
 | =--name= | =brale-core= | MCP server 名称 |
@@ -582,6 +582,7 @@ bralectl mcp install --target codex
 | Flag | Default | Description |
 |------+---------+-------------|
 | =--target= | =claude-code= | Install target: =claude-code=, =claude-desktop=, =opencode=, =codex=, or =custom= |
+| =--mode= | =http= | Install mode: writes Streamable HTTP config by default; =codex= also defaults to the HTTP container endpoint |
 | =--config= | (auto-detected) | Explicit MCP config file path |
 | =--command= | (auto-detected) | Path to the =bralectl= binary |
 | =--name= | =brale-core= | MCP server name |
