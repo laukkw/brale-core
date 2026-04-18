@@ -26,6 +26,21 @@ func (m *RiskMonitor) handleActivePosition(ctx context.Context, pos store.Positi
 	if skip {
 		return nil
 	}
+
+	// Max drawdown guard: force close if unrealized loss exceeds threshold.
+	if shouldForceCloseMaxDrawdown(pos, quote.Price, m.maxDrawdownPct()) {
+		logger.Error("max drawdown breached — force closing position",
+			zap.Float64("entry", pos.AvgEntry),
+			zap.Float64("mark_price", quote.Price),
+			zap.Float64("max_drawdown_pct", m.maxDrawdownPct()),
+			zap.String("side", pos.Side),
+		)
+		if err := m.submitCloseIntent(ctx, pos, quote, pos.Qty, pos.Qty, "max_drawdown_breach", logger); err != nil {
+			return &riskMonitorOpError{Op: "max drawdown force close", Symbol: pos.Symbol, Err: err}
+		}
+		return nil
+	}
+
 	trigger, ok := risk.EvaluateRisk(plan, pos.Side, quote.Price)
 	if !ok {
 		return nil
@@ -152,4 +167,30 @@ func shouldMoveStopToBreakeven(side string, currentStop float64, breakevenStop f
 		return currentStop > breakevenStop
 	}
 	return currentStop < breakevenStop
+}
+
+const defaultMaxDrawdownPct = 30.0
+
+func (m *RiskMonitor) maxDrawdownPct() float64 {
+	if m.MaxDrawdownPct > 0 {
+		return m.MaxDrawdownPct
+	}
+	return defaultMaxDrawdownPct
+}
+
+func shouldForceCloseMaxDrawdown(pos store.PositionRecord, markPrice float64, maxDrawdownPct float64) bool {
+	if maxDrawdownPct <= 0 || pos.AvgEntry <= 0 || markPrice <= 0 {
+		return false
+	}
+	side := strings.ToLower(strings.TrimSpace(pos.Side))
+	var drawdownPct float64
+	switch side {
+	case "long":
+		drawdownPct = (pos.AvgEntry - markPrice) / pos.AvgEntry * 100
+	case "short":
+		drawdownPct = (markPrice - pos.AvgEntry) / pos.AvgEntry * 100
+	default:
+		return false
+	}
+	return drawdownPct >= maxDrawdownPct
 }

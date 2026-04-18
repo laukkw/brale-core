@@ -72,6 +72,7 @@ type riskMonitorBuildDeps struct {
 	priceSource    *binance.MarkPriceStream
 	positioner     *position.PositionService
 	accountFetcher func(context.Context, string) (execution.AccountState, error)
+	sys            config.SystemConfig
 }
 
 type coreDeps struct {
@@ -113,7 +114,7 @@ func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDep
 	}
 
 	freqtradeAccount := newFreqtradeAccountFetcher(executor)
-	riskMonitor := buildRiskMonitor(riskMonitorBuildDeps{store: st, priceSource: priceSource, positioner: positioner, accountFetcher: freqtradeAccount})
+	riskMonitor := buildRiskMonitor(riskMonitorBuildDeps{store: st, priceSource: priceSource, positioner: positioner, accountFetcher: freqtradeAccount, sys: env.sys})
 
 	return coreDeps{
 		persistence: persistenceDeps{store: st, pool: pool, stateProvider: stateProvider},
@@ -254,10 +255,11 @@ func buildReconcileServices(deps reconcileServiceBuildDeps) (*reconcile.Recovery
 
 func buildRiskMonitor(deps riskMonitorBuildDeps) *position.RiskMonitor {
 	return &position.RiskMonitor{
-		Store:       deps.store,
-		PriceSource: deps.priceSource,
-		Positions:   deps.positioner,
-		PlanCache:   deps.positioner.PlanCache,
+		Store:          deps.store,
+		PriceSource:    deps.priceSource,
+		Positions:      deps.positioner,
+		PlanCache:      deps.positioner.PlanCache,
+		MaxDrawdownPct: deps.sys.RiskGuard.MaxDrawdownPct,
 		AccountFetcher: func(ctx context.Context, symbol string) (execution.AccountState, error) {
 			return deps.accountFetcher(ctx, symbol)
 		},

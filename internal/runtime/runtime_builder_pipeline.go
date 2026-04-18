@@ -102,5 +102,6 @@ func buildPipelineFromRuntimeConfig(sys config.SystemConfig, deps SymbolRuntimeB
 		WorkingMemory:           workingMemory,
 		EpisodicMemory:          episodicMemory,
 		SemanticMemory:          semanticMemory,
+		LLMTokenBudget:          sys.LLM.TokenBudgetPerRound,
 	}, nil
 }

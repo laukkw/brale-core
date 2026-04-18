@@ -48,6 +48,7 @@ type Pipeline struct {
 	WorkingMemory           memory.Store
 	EpisodicMemory          memory.EpisodicStore
 	SemanticMemory          memory.SemanticStore
+	LLMTokenBudget          int
 }
 
 type PipelineCoreDeps struct {

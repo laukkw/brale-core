@@ -33,6 +33,10 @@ type Recorder struct {
 	providerCount int
 	gateAction    string
 	errMessage    string
+
+	tokenBudget  int
+	budgetWarnFn func(roundID string, totalTokens, budget int)
+	budgetExceed bool
 }
 
 // NewRecorder starts tracking a new round.
@@ -47,6 +51,41 @@ func NewRecorder(s store.LLMRoundStore, roundID, symbol, roundType string) *Reco
 	}
 }
 
+// SetTokenBudget configures an optional per-round token budget.
+// If budget > 0, the recorder will call warnFn when total tokens exceed the budget.
+func (r *Recorder) SetTokenBudget(budget int, warnFn func(roundID string, totalTokens, budget int)) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tokenBudget = budget
+	r.budgetWarnFn = warnFn
+}
+
+// BudgetExceeded returns true if the round's token usage exceeded the budget.
+func (r *Recorder) BudgetExceeded() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.budgetExceed
+}
+
+func (r *Recorder) checkBudget() {
+	if r.tokenBudget <= 0 {
+		return
+	}
+	total := r.totalTokenIn + r.totalTokenOut
+	if total > r.tokenBudget && !r.budgetExceed {
+		r.budgetExceed = true
+		if r.budgetWarnFn != nil {
+			r.budgetWarnFn(r.roundID, total, r.tokenBudget)
+		}
+	}
+}
+
 // RecordCall accumulates stats from an individual LLM call.
 func (r *Recorder) RecordCall(tokenIn, tokenOut int, promptVersion string) {
 	r.mu.Lock()
@@ -57,6 +96,7 @@ func (r *Recorder) RecordCall(tokenIn, tokenOut int, promptVersion string) {
 	if promptVersion != "" {
 		r.promptVersion[promptVersion] = struct{}{}
 	}
+	r.checkBudget()
 }
 
 func (r *Recorder) ObserveCall(_ context.Context, stats llm.CallStats) {
@@ -75,6 +115,7 @@ func (r *Recorder) ObserveCall(_ context.Context, stats llm.CallStats) {
 	if stats.Err != nil && r.errMessage == "" {
 		r.errMessage = stats.Err.Error()
 	}
+	r.checkBudget()
 }
 
 func (r *Recorder) SetSnapshotID(snapshotID uint) {

@@ -9,6 +9,9 @@ import (
 	"brale-core/internal/decision/decisionutil"
 	"brale-core/internal/llm"
 	"brale-core/internal/llm/llmround"
+	"brale-core/internal/pkg/logging"
+
+	"go.uber.org/zap"
 )
 
 const detachedRoundRecorderTimeout = 5 * time.Second
@@ -18,6 +21,15 @@ func (p *Pipeline) attachRoundRecorder(ctx context.Context, roundID llm.RoundID,
 		return ctx, nil
 	}
 	recorder := llmround.NewRecorder(p.store(), roundID.String(), summarizeRoundSymbols(symbols), roundType)
+	if p.LLMTokenBudget > 0 {
+		recorder.SetTokenBudget(p.LLMTokenBudget, func(roundID string, totalTokens, budget int) {
+			logging.L().Error("LLM token budget exceeded",
+				zap.String("round_id", roundID),
+				zap.Int("total_tokens", totalTokens),
+				zap.Int("budget", budget),
+			)
+		})
+	}
 	existing, _ := llm.CallObserverFromContext(ctx)
 	return llm.WithCallObserver(ctx, llm.ChainCallObservers(existing, recorder)), recorder
 }

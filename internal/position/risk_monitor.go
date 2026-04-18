@@ -20,6 +20,7 @@ type RiskMonitor struct {
 	Positions      *PositionService
 	PlanCache      *PlanCache
 	AccountFetcher func(ctx context.Context, symbol string) (execution.AccountState, error)
+	MaxDrawdownPct float64
 
 	mu              sync.RWMutex
 	accountBySymbol map[string]cachedAccountState

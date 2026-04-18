@@ -20,6 +20,7 @@ type SystemConfig struct {
 	Telemetry               TelemetryConfig           `mapstructure:"telemetry"`
 	Scheduler               SchedulerConfig           `mapstructure:"scheduler"`
 	Reconcile               ReconcileConfig           `mapstructure:"reconcile"`
+	RiskGuard               RiskGuardConfig           `mapstructure:"risk_guard"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
 }
 
@@ -45,6 +46,12 @@ type ReconcileConfig struct {
 }
 
 type SystemLLMConfig struct {
+	TokenBudgetPerRound int `mapstructure:"token_budget_per_round"`
+	TokenBudgetWarnPct  int `mapstructure:"token_budget_warn_pct"`
+}
+
+type RiskGuardConfig struct {
+	MaxDrawdownPct float64 `mapstructure:"max_drawdown_pct"`
 }
 
 type LLMModelConfig struct {
