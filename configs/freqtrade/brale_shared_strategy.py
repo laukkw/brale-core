@@ -6,7 +6,9 @@ IStrategy = getattr(_strategy_module, "IStrategy")
 
 class BraleSharedStrategy(IStrategy):
     minimal_roi = {"0": 10}
-    stoploss = -0.99
+    # Hard safety net: close a trade once loss reaches 30%.
+    # Reload or restart FreqTrade after changing this value.
+    stoploss = -0.30
     timeframe = "5m"
     startup_candle_count = 50
 

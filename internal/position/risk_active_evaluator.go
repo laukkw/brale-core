@@ -114,10 +114,9 @@ func (m *RiskMonitor) refreshRiskPlanOnTPHit(ctx context.Context, pos store.Posi
 		_, err := svc.ApplyUpdate(runCtx, pos.PositionID, updatedPlan, "risk-tp-hit")
 		return err
 	}); err != nil {
-		logger.Error("risk plan tp hit update failed", zap.Error(err))
-	} else {
-		plan = updatedPlan
+		return store.PositionRecord{}, risk.RiskPlan{}, fmt.Errorf("update risk plan after tp hit: %w", err)
 	}
+	plan = updatedPlan
 	refreshed, ok, err := m.Store.FindPositionByID(ctx, pos.PositionID)
 	if err != nil {
 		logger.Warn("risk plan refresh failed", zap.Error(err))
@@ -181,13 +180,8 @@ func (m *RiskMonitor) breakevenFeePct(symbol string) float64 {
 	return feePct
 }
 
-const defaultMaxDrawdownPct = 30.0
-
 func (m *RiskMonitor) maxDrawdownPct() float64 {
-	if m.MaxDrawdownPct > 0 {
-		return m.MaxDrawdownPct
-	}
-	return defaultMaxDrawdownPct
+	return m.MaxDrawdownPct
 }
 
 func shouldForceCloseMaxDrawdown(pos store.PositionRecord, markPrice float64, maxDrawdownPct float64) bool {

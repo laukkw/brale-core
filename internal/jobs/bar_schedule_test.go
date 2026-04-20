@@ -1,8 +1,13 @@
 package jobs
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
 func TestAlignedBarCloseScheduleNext(t *testing.T) {
@@ -82,5 +87,59 @@ func TestBuildPeriodicJobsUsesIndependentAlignedSchedules(t *testing.T) {
 	want1h := time.Date(2026, 4, 16, 22, 0, 10, 0, loc)
 	if !got1h.Equal(want1h) {
 		t.Fatalf("1h schedule = %v, want %v", got1h, want1h)
+	}
+}
+
+func TestNotifyDeliverArgsInsertOptsDisablesAutomaticRetry(t *testing.T) {
+	t.Parallel()
+
+	opts := (NotifyDeliverArgs{}).InsertOpts()
+	if opts.MaxAttempts != 1 {
+		t.Fatalf("MaxAttempts=%d want 1", opts.MaxAttempts)
+	}
+	if !opts.UniqueOpts.ByArgs {
+		t.Fatalf("UniqueOpts.ByArgs=false want true")
+	}
+	if opts.UniqueOpts.ByPeriod != 2*time.Minute {
+		t.Fatalf("UniqueOpts.ByPeriod=%v want 2m", opts.UniqueOpts.ByPeriod)
+	}
+}
+
+func TestNotifyRenderArgsInsertOptsDedupesShortWindow(t *testing.T) {
+	t.Parallel()
+
+	opts := (NotifyRenderArgs{}).InsertOpts()
+	if !opts.UniqueOpts.ByArgs {
+		t.Fatalf("UniqueOpts.ByArgs=false want true")
+	}
+	if opts.UniqueOpts.ByPeriod != 2*time.Minute {
+		t.Fatalf("UniqueOpts.ByPeriod=%v want 2m", opts.UniqueOpts.ByPeriod)
+	}
+}
+
+func TestNotifyDeliverWorkerSkipsRetryAttempts(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	worker := &NotifyDeliverWorker{
+		Deliver: func(context.Context, string, string, json.RawMessage) error {
+			calls++
+			return nil
+		},
+	}
+
+	err := worker.Work(context.Background(), &river.Job[NotifyDeliverArgs]{
+		JobRow: &rivertype.JobRow{Attempt: 2},
+		Args: NotifyDeliverArgs{
+			EventType: "gate",
+			Symbol:    "ETHUSDT",
+			Rendered:  json.RawMessage(`{"ok":true}`),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Work() error=%v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("Deliver calls=%d want 0", calls)
 	}
 }

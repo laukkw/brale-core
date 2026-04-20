@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"brale-core/internal/decision/direction"
 	"brale-core/internal/decision/features"
 	"brale-core/internal/decision/fsm"
 	"brale-core/internal/decision/fund"
@@ -270,6 +269,11 @@ func (p *Pipeline) evaluateRuleflowHoldGate(ctx context.Context, symbol string, 
 	if err != nil {
 		return ruleflow.Result{}, err
 	}
+	symbolCfg, err := p.Runner.getConfig(symbol)
+	if err != nil {
+		return ruleflow.Result{}, err
+	}
+	scoreThreshold, confidenceThreshold := resolveConsensusThresholds(symbolCfg)
 	rfEngine := p.Runner.ensureRuleflowEngine()
 	inPos := ruleflow.InPositionOutputs{Indicator: ind, Structure: st, Mechanics: mech, Ready: evaluated}
 	exitConfirmCount := 0
@@ -289,8 +293,8 @@ func (p *Pipeline) evaluateRuleflowHoldGate(ctx context.Context, symbol string, 
 		execution.RiskParams{RiskPerTradePct: bind.RiskManagement.RiskPerTradePct},
 		inPos,
 		hardGuardInput,
-		direction.ThresholdScore(),
-		direction.ThresholdConfidence(),
+		scoreThreshold,
+		confidenceThreshold,
 	)
 	rfResult, err := rfEngine.Evaluate(ctx, bind.RuleChainPath, rfInput)
 	if err != nil {

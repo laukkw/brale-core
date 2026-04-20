@@ -16,15 +16,15 @@ func TestPipelineRoundRecorderTimeout_DefaultWhenUnset(t *testing.T) {
 	}
 }
 
-func TestPipelineRoundRecorderTimeout_UsesExplicitZero(t *testing.T) {
+func TestPipelineRoundRecorderTimeout_ExplicitZeroUsesDefault(t *testing.T) {
 	t.Parallel()
 
 	p := &Pipeline{
 		RoundRecorderTimeout:    0,
 		RoundRecorderTimeoutSet: true,
 	}
-	if got := p.roundRecorderTimeout(); got != 0 {
-		t.Fatalf("roundRecorderTimeout()=%v want 0", got)
+	if got := p.roundRecorderTimeout(); got != defaultRoundRecorderTimeout {
+		t.Fatalf("roundRecorderTimeout()=%v want %v", got, defaultRoundRecorderTimeout)
 	}
 }
 
@@ -63,5 +63,25 @@ func TestFinishRoundRecorderWith_ZeroRetriesOnlyAttemptsOnce(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts=%d want 1", attempts)
+	}
+}
+
+func TestFinishRoundRecorderWith_ZeroTimeoutUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var remaining time.Duration
+	err := finishRoundRecorderWith(context.Background(), "ok", 0, 0, func(ctx context.Context, _ string) error {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("expected deadline when timeout is zero")
+		}
+		remaining = time.Until(deadline)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("finishRoundRecorderWith() error=%v", err)
+	}
+	if remaining <= 0 || remaining > defaultRoundRecorderTimeout {
+		t.Fatalf("deadline remaining=%v want within default timeout %v", remaining, defaultRoundRecorderTimeout)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision/decisionfmt"
+	"brale-core/internal/decision/fund"
 	"brale-core/internal/execution"
 	"brale-core/internal/llm"
 	"brale-core/internal/risk"
@@ -111,7 +112,7 @@ func TestBuildTightenPlanUsesLLMWhenRiskModeIsLLM(t *testing.T) {
 		ATR:       2,
 	}
 
-	got, tpTightened, trace, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
+	got, tpTightened, trace, reason, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
 	if err != nil {
 		t.Fatalf("build tighten plan: %v", err)
 	}
@@ -129,6 +130,9 @@ func TestBuildTightenPlanUsesLLMWhenRiskModeIsLLM(t *testing.T) {
 	}
 	if trace == nil || trace.Stage != "risk_tighten" {
 		t.Fatalf("trace=%#v", trace)
+	}
+	if reason != "trail under structure" {
+		t.Fatalf("reason=%q, want llm patch reason", reason)
 	}
 }
 
@@ -289,6 +293,38 @@ func TestRiskPlanUpdateLogFieldsIncludeTightenPatchStops(t *testing.T) {
 	}
 }
 
+func TestComputeDistanceToLiqPctValidatesLiquidationSide(t *testing.T) {
+	gateWithLiq := func(price float64) fund.GateDecision {
+		return fund.GateDecision{
+			Derived: map[string]any{
+				"plan": map[string]any{"liquidation_price": price},
+			},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		side      string
+		liqPrice  float64
+		markPrice float64
+		want      float64
+	}{
+		{name: "long valid below mark", side: "long", liqPrice: 80, markPrice: 100, want: 0.2},
+		{name: "long invalid above mark", side: "long", liqPrice: 120, markPrice: 100, want: 0},
+		{name: "short valid above mark", side: "short", liqPrice: 120, markPrice: 100, want: 0.2},
+		{name: "short invalid below mark", side: "short", liqPrice: 80, markPrice: 100, want: 0},
+		{name: "unknown side", side: "", liqPrice: 80, markPrice: 100, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeDistanceToLiqPct(tt.side, gateWithLiq(tt.liqPrice), tt.markPrice)
+			if got != tt.want {
+				t.Fatalf("computeDistanceToLiqPct()=%v want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildTightenPlanKeepsGoPathForNativeMode(t *testing.T) {
 	p := &Pipeline{}
 	plan := risk.RiskPlan{
@@ -314,7 +350,7 @@ func TestBuildTightenPlanKeepsGoPathForNativeMode(t *testing.T) {
 	}
 	expected, expectedTightened := risk.TightenTPLevels(expected, pos.Side, pos.AvgEntry, updateCtx.ATR, updateCtx.Binding.RiskManagement.TightenATR.TP1ATR, updateCtx.Binding.RiskManagement.TightenATR.TP2ATR, updateCtx.Binding.RiskManagement.TightenATR.MinTPDistancePct, updateCtx.Binding.RiskManagement.TightenATR.MinTPGapPct)
 
-	got, tpTightened, trace, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
+	got, tpTightened, trace, reason, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
 	if err != nil {
 		t.Fatalf("build tighten plan: %v", err)
 	}
@@ -330,6 +366,9 @@ func TestBuildTightenPlanKeepsGoPathForNativeMode(t *testing.T) {
 	}
 	if trace != nil {
 		t.Fatalf("trace=%#v, want nil for native path", trace)
+	}
+	if reason != "" {
+		t.Fatalf("reason=%q, want empty for native path", reason)
 	}
 }
 
@@ -349,7 +388,7 @@ func TestBuildTightenPlanNativeModeSkipsHitTakeProfits(t *testing.T) {
 		ATR:       2,
 	}
 
-	got, tpTightened, trace, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
+	got, tpTightened, trace, reason, err := p.buildTightenPlan(context.Background(), pos, plan, updateCtx, 99)
 	if err != nil {
 		t.Fatalf("build tighten plan: %v", err)
 	}
@@ -361,6 +400,9 @@ func TestBuildTightenPlanNativeModeSkipsHitTakeProfits(t *testing.T) {
 	}
 	if trace != nil {
 		t.Fatalf("trace=%#v, want nil for native path", trace)
+	}
+	if reason != "" {
+		t.Fatalf("reason=%q, want empty for native path", reason)
 	}
 }
 
@@ -459,6 +501,63 @@ func TestLogRiskPlanUpdateCarriesOriginalPlanStopReason(t *testing.T) {
 	}
 	if notifier.notice.StopReason != "monitor-tighten" {
 		t.Fatalf("stop_reason=%q, want monitor-tighten", notifier.notice.StopReason)
+	}
+	if notifier.notice.Reason != "初始止损基于ATR与结构低点" {
+		t.Fatalf("reason=%q, want original plan stop reason", notifier.notice.Reason)
+	}
+}
+
+func TestLogRiskPlanUpdateCarriesLLMTightenReason(t *testing.T) {
+	notifier := &captureRiskPlanNotifier{}
+	p := &Pipeline{Notifier: notifier}
+	pos := store.PositionRecord{
+		Symbol:     "ETHUSDT",
+		Side:       "long",
+		AvgEntry:   2500,
+		RiskPct:    0.01,
+		Leverage:   3,
+		PositionID: "pos-eth-1",
+		StopReason: "初始止损基于ATR与结构低点",
+	}
+	plan := risk.RiskPlan{
+		StopPrice: 2440,
+		TPLevels: []risk.TPLevel{
+			{LevelID: "tp-1", Price: 2560, QtyPct: 0.5},
+			{LevelID: "tp-2", Price: 2620, QtyPct: 0.5},
+		},
+	}
+
+	if err := p.logRiskPlanUpdate(
+		context.Background(),
+		pos,
+		plan,
+		2400,
+		"monitor-tighten",
+		2510,
+		30,
+		0.02,
+		true,
+		3.5,
+		3.0,
+		nil,
+		true,
+		"protect open profit",
+		false,
+	); err != nil {
+		t.Fatalf("log risk plan update: %v", err)
+	}
+
+	if !notifier.called {
+		t.Fatalf("expected SendRiskPlanUpdate to be called")
+	}
+	if notifier.notice.Source != "monitor-tighten" {
+		t.Fatalf("source=%q, want monitor-tighten", notifier.notice.Source)
+	}
+	if notifier.notice.StopReason != "protect open profit" {
+		t.Fatalf("stop_reason=%q, want llm tighten reason", notifier.notice.StopReason)
+	}
+	if notifier.notice.TightenReason != "protect open profit" {
+		t.Fatalf("tighten_reason=%q, want llm tighten reason", notifier.notice.TightenReason)
 	}
 	if notifier.notice.Reason != "初始止损基于ATR与结构低点" {
 		t.Fatalf("reason=%q, want original plan stop reason", notifier.notice.Reason)

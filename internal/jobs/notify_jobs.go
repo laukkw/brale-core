@@ -23,6 +23,15 @@ type NotifyRenderArgs struct {
 
 func (NotifyRenderArgs) Kind() string { return "notify_render" }
 
+func (NotifyRenderArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:   true,
+			ByPeriod: 2 * time.Minute,
+		},
+	}
+}
+
 // NotifyRenderWorker renders a notification payload into a deliverable format.
 type NotifyRenderWorker struct {
 	river.WorkerDefaults[NotifyRenderArgs]
@@ -70,6 +79,16 @@ type NotifyDeliverArgs struct {
 
 func (NotifyDeliverArgs) Kind() string { return "notify_deliver" }
 
+func (NotifyDeliverArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		MaxAttempts: 1,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:   true,
+			ByPeriod: 2 * time.Minute,
+		},
+	}
+}
+
 // NotifyDeliverWorker sends the rendered notification to configured channels.
 type NotifyDeliverWorker struct {
 	river.WorkerDefaults[NotifyDeliverArgs]
@@ -83,6 +102,12 @@ func (w *NotifyDeliverWorker) Work(ctx context.Context, job *river.Job[NotifyDel
 	)
 	start := time.Now()
 
+	if job.Attempt > 1 {
+		logger.Warn("skipping notification deliver retry to avoid duplicate outbound message",
+			zap.Int("attempt", job.Attempt),
+		)
+		return nil
+	}
 	if w.Deliver == nil {
 		return fmt.Errorf("deliver function not configured")
 	}

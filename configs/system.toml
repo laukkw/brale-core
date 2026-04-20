@@ -64,9 +64,10 @@ backend = "river"
 # # 格式：Go duration，例如 "10m"、"5m"、"30s"
 # close_recover_after = "10m"
 
-# 账户级风险熔断（可选）
+# Brale 侧单仓最大浮亏强平保护（可选）
 # [risk_guard]
-# # 最大账户回撤百分比（0 = 禁用）。超过阈值后系统拒绝新开仓
+# # 单仓 entry→mark 最大浮亏百分数（0 = 禁用）。30 表示 30%，不是 0.30。
+# # 这是 Brale 进程侧补充保护；FreqTrade 策略中的 stoploss = -0.30 是独立硬兜底。
 # max_drawdown_pct = 0
 
 # LLM 模型配置 — 每个 Agent 车道独立配置端点、密钥和并发

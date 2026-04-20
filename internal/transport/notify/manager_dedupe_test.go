@@ -367,6 +367,154 @@ func TestSendWithKey_PartialFailureCommitsDedupeAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestSendError_DedupesSameNotice(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{senders: []Sender{sender}, dedupe: newDedupeGuard(2 * time.Minute)}
+	notice := ErrorNotice{
+		Severity:  "error",
+		Component: "decision",
+		Symbol:    "ETHUSDT",
+		Message:   "klines ETHUSDT 1h: EOF",
+	}
+
+	if err := mgr.SendError(context.Background(), notice); err != nil {
+		t.Fatalf("first send error: %v", err)
+	}
+	if err := mgr.SendError(context.Background(), notice); err != nil {
+		t.Fatalf("second send error: %v", err)
+	}
+	if sender.callCount() != 1 {
+		t.Fatalf("expected deduped error send, got %d", sender.callCount())
+	}
+}
+
+func TestSendError_DifferentMessagesNotDeduped(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{senders: []Sender{sender}, dedupe: newDedupeGuard(2 * time.Minute)}
+	base := ErrorNotice{
+		Severity:  "error",
+		Component: "decision",
+		Symbol:    "ETHUSDT",
+		Message:   "klines ETHUSDT 1h: EOF",
+	}
+	next := base
+	next.Message = "llm round save failed"
+
+	if err := mgr.SendError(context.Background(), base); err != nil {
+		t.Fatalf("first send error: %v", err)
+	}
+	if err := mgr.SendError(context.Background(), next); err != nil {
+		t.Fatalf("second send error: %v", err)
+	}
+	if sender.callCount() != 2 {
+		t.Fatalf("expected different error messages to send, got %d", sender.callCount())
+	}
+}
+
+func TestSendErrorAndPositionOpenDedupeScopesAreIndependent(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{senders: []Sender{sender}, dedupe: newDedupeGuard(2 * time.Minute)}
+	errorNotice := ErrorNotice{
+		Severity:  "error",
+		Component: "decision",
+		Symbol:    "ETHUSDT",
+		Message:   "klines ETHUSDT 1h: EOF",
+	}
+	openNotice := PositionOpenNotice{
+		Symbol:      "ETHUSDT",
+		Direction:   "long",
+		Qty:         0.5,
+		EntryPrice:  3200,
+		StopPrice:   3120,
+		TakeProfits: []float64{3300, 3380},
+		StopReason:  "structure_low",
+		PositionID:  "pos-1",
+	}
+
+	if err := mgr.SendError(context.Background(), errorNotice); err != nil {
+		t.Fatalf("send error notice: %v", err)
+	}
+	if err := mgr.SendPositionOpen(context.Background(), openNotice); err != nil {
+		t.Fatalf("send position open: %v", err)
+	}
+	if err := mgr.SendError(context.Background(), errorNotice); err != nil {
+		t.Fatalf("send duplicate error notice: %v", err)
+	}
+	if err := mgr.SendPositionOpen(context.Background(), openNotice); err != nil {
+		t.Fatalf("send duplicate position open: %v", err)
+	}
+
+	msgs := sender.messages()
+	if len(msgs) != 2 {
+		t.Fatalf("expected one error and one position open send, got %d", len(msgs))
+	}
+	if !strings.Contains(msgs[0].Markdown, "错误提醒") {
+		t.Fatalf("expected first message to be error notice, got %q", msgs[0].Markdown)
+	}
+	if !strings.Contains(msgs[1].Markdown, "仓位开启") {
+		t.Fatalf("expected second message to be position open notice, got %q", msgs[1].Markdown)
+	}
+}
+
+func TestPositionOpenDedupesSamePositionIDAndAllowsDistinctPositions(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{senders: []Sender{sender}, dedupe: newDedupeGuard(2 * time.Minute)}
+	notice := PositionOpenNotice{
+		Symbol:      "ETHUSDT",
+		Direction:   "long",
+		Qty:         0.5,
+		EntryPrice:  3200,
+		StopPrice:   3120,
+		TakeProfits: []float64{3300, 3380},
+		StopReason:  "structure_low",
+		PositionID:  "pos-1",
+	}
+
+	if err := mgr.SendPositionOpen(context.Background(), notice); err != nil {
+		t.Fatalf("send first position open: %v", err)
+	}
+	if err := mgr.SendPositionOpen(context.Background(), notice); err != nil {
+		t.Fatalf("send duplicate position open: %v", err)
+	}
+	next := notice
+	next.PositionID = "pos-2"
+	if err := mgr.SendPositionOpen(context.Background(), next); err != nil {
+		t.Fatalf("send next position open: %v", err)
+	}
+
+	msgs := sender.messages()
+	if len(msgs) != 2 {
+		t.Fatalf("expected duplicate position id to be skipped and distinct id to send, got %d", len(msgs))
+	}
+	if !strings.Contains(msgs[0].Markdown, noticeLine("position_id", "pos-1")) {
+		t.Fatalf("expected first position id in body, got %q", msgs[0].Markdown)
+	}
+	if !strings.Contains(msgs[1].Markdown, noticeLine("position_id", "pos-2")) {
+		t.Fatalf("expected second position id in body, got %q", msgs[1].Markdown)
+	}
+}
+
+func TestTelegramSenderSanitizeRequestErrorRedactsToken(t *testing.T) {
+	sender := &TelegramSender{token: "secret-token"}
+	err := sender.sanitizeRequestError(
+		"image send",
+		errors.New(`Post "https://api.telegram.org/botsecret-token/sendDocument": context deadline exceeded`),
+	)
+	if err == nil {
+		t.Fatal("expected sanitized error")
+	}
+	got := err.Error()
+	if strings.Contains(got, "secret-token") {
+		t.Fatalf("sanitized error leaked token: %q", got)
+	}
+	if !strings.Contains(got, "<redacted>") {
+		t.Fatalf("sanitized error missing redaction marker: %q", got)
+	}
+	if !strings.Contains(got, "telegram image send request failed") {
+		t.Fatalf("sanitized error missing action context: %q", got)
+	}
+}
+
 func TestPositionOpen_SendsTextEvenWhenRendererConfigured(t *testing.T) {
 	sender := &countSender{}
 	renderer := &countingRenderer{}

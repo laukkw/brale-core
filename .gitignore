@@ -28,6 +28,7 @@ docs/project_introduction_technical.md
 !internal/decision/ruleflow/node_hard_guard_test.go
 !internal/llm/openai_test.go
 !internal/llm/schema_test.go
+!internal/pgstore/llm_rounds_test.go
 !internal/llmctl/probe_test.go
 !cmd/bralectl/memory_test.go
 !cmd/bralectl/setup_test.go

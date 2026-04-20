@@ -62,8 +62,9 @@ make start
 
 *可能原因：*
 - Mark Price WebSocket 延迟或断连，导致 RiskMonitor 未收到最新价格
-- 交易所侧止损（server-side stoploss）与客户端止损存在执行差异
-- =[risk_guard] max_drawdown_pct= 配置过大，允许了更大回撤
+- FreqTrade 静态止损尚未 reload/restart，运行实例仍使用旧策略值
+- FreqTrade =stoploss_on_exchange= 未启用时，止损由 FreqTrade 进程侧检查，不是交易所预挂单
+- =[risk_guard] max_drawdown_pct= 配置过大或为 0；该项是 Brale 侧单仓浮亏强平补充保护，0 表示禁用
 - RiskMonitor 检查间隔内价格快速穿越止损位（跳空）
 
 *诊断步骤：*
@@ -76,15 +77,21 @@ make start
    #+begin_src bash
    docker compose logs brale | grep "mark price ws"
    #+end_src
-3. 检查策略配置中的风控参数：
+3. 检查 Brale 侧补充强平配置：
    #+begin_src bash
    grep -A 5 'risk_guard' configs/system.toml
+   #+end_src
+4. 检查 FreqTrade 运行策略和 stoploss 配置：
+   #+begin_src bash
+   grep -n 'stoploss' data/freqtrade/user_data/strategies/BraleSharedStrategy.py
+   docker compose exec freqtrade freqtrade show-config --config /freqtrade/user_data/config.json | grep -i stoploss
    #+end_src
 
 *解决方案：*
 - 确认 WebSocket 连接正常；若反复断连，检查网络与代理配置
-- 调低 =[risk_guard] max_drawdown_pct= 以收紧保护
-- 检查 =stop_loss_mode= 配置，确认是否同时启用了服务端止损
+- 修改 FreqTrade 策略后 reload/restart FreqTrade，使 =stoploss = -0.30= 生效
+- 如需 Brale 侧补充强平，显式设置 =[risk_guard] max_drawdown_pct = 30=；单位是百分数，30 表示 30%
+- 如需交易所侧预挂止损，检查 FreqTrade =stoploss_on_exchange= 是否启用
 
 ** 对账异常
 
@@ -209,8 +216,9 @@ If rollback also fails, manually correct the =dirty= flag in =schema_migrations=
 
 *Possible causes:*
 - Mark Price WebSocket delayed or disconnected — RiskMonitor did not receive the latest price
-- Gap between exchange-side (server) stoploss and client-side stoploss execution
-- =[risk_guard] max_drawdown_pct= is set too high, allowing a larger drawdown
+- FreqTrade has not been reloaded/restarted after a static stoploss change, so the running strategy still uses the old value
+- When FreqTrade =stoploss_on_exchange= is disabled, stoploss execution is checked by the FreqTrade process instead of a pre-placed exchange order
+- =[risk_guard] max_drawdown_pct= is too high or 0; this is an optional Brale-side per-position loss guard, and 0 disables it
 - Price gapped through the stop level between RiskMonitor check intervals
 
 *Diagnostic steps:*
@@ -223,15 +231,21 @@ If rollback also fails, manually correct the =dirty= flag in =schema_migrations=
    #+begin_src bash
    docker compose logs brale | grep "mark price ws"
    #+end_src
-3. Review risk-guard config:
+3. Review the Brale-side supplemental force-close config:
    #+begin_src bash
    grep -A 5 'risk_guard' configs/system.toml
+   #+end_src
+4. Review the running FreqTrade strategy and stoploss config:
+   #+begin_src bash
+   grep -n 'stoploss' data/freqtrade/user_data/strategies/BraleSharedStrategy.py
+   docker compose exec freqtrade freqtrade show-config --config /freqtrade/user_data/config.json | grep -i stoploss
    #+end_src
 
 *Resolution:*
 - Ensure the WebSocket connection is stable; check network and proxy settings if it keeps dropping
-- Lower =[risk_guard] max_drawdown_pct= to tighten protection
-- Verify =stop_loss_mode= config and whether server-side stoploss is also enabled
+- Reload/restart FreqTrade after strategy edits so =stoploss = -0.30= is active
+- If you want an additional Brale-side force-close guard, explicitly set =[risk_guard] max_drawdown_pct = 30=; the unit is percentage points, so 30 means 30%
+- If you need a pre-placed exchange-side stop, verify FreqTrade =stoploss_on_exchange=
 
 ** Reconciliation Anomaly
 

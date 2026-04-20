@@ -22,10 +22,12 @@ type countingRuleflowEvaluator struct {
 	result ruleflow.Result
 	err    error
 	calls  int
+	input  ruleflow.Input
 }
 
-func (c *countingRuleflowEvaluator) Evaluate(context.Context, string, ruleflow.Input) (ruleflow.Result, error) {
+func (c *countingRuleflowEvaluator) Evaluate(_ context.Context, _ string, input ruleflow.Input) (ruleflow.Result, error) {
 	c.calls++
+	c.input = input
 	return c.result, c.err
 }
 
@@ -81,6 +83,49 @@ func TestRunnerRunSymbolInPositionStopsBeforeProviderAndRuleflow(t *testing.T) {
 	}
 	if res.RuleflowResult != nil {
 		t.Fatalf("expected no ruleflow result for in-position skip")
+	}
+}
+
+func TestEvaluateRuleflowHoldGateUsesSymbolConsensusThresholds(t *testing.T) {
+	symbol := "BTCUSDT"
+	ruleflowCounter := &countingRuleflowEvaluator{result: ruleflow.Result{
+		Gate: fund.GateDecision{DecisionAction: "HOLD"},
+	}}
+	p := &Pipeline{
+		Runner: &Runner{
+			Ruleflow: ruleflowCounter,
+			Configs: map[string]config.SymbolConfig{
+				symbol: {
+					Symbol: symbol,
+					Consensus: config.ConsensusConfig{
+						ScoreThreshold:      0.77,
+						ConfidenceThreshold: 0.66,
+					},
+				},
+			},
+		},
+		Bindings: map[string]strategy.StrategyBinding{
+			symbol: {
+				Symbol:        symbol,
+				RuleChainPath: "configs/rules/default.json",
+				RiskManagement: config.RiskManagementConfig{
+					RiskPerTradePct: 0.01,
+				},
+			},
+		},
+	}
+	_, err := p.evaluateRuleflowHoldGate(context.Background(), symbol, SymbolResult{Symbol: symbol}, provider.InPositionIndicatorOut{}, provider.InPositionStructureOut{}, provider.InPositionMechanicsOut{}, features.CompressionResult{}, "pos-1", true, ruleflow.HardGuardPosition{})
+	if err != nil {
+		t.Fatalf("evaluateRuleflowHoldGate: %v", err)
+	}
+	if ruleflowCounter.calls != 1 {
+		t.Fatalf("ruleflow calls=%d want 1", ruleflowCounter.calls)
+	}
+	if ruleflowCounter.input.ScoreThreshold != 0.77 {
+		t.Fatalf("score threshold=%v want 0.77", ruleflowCounter.input.ScoreThreshold)
+	}
+	if ruleflowCounter.input.ConfidenceThreshold != 0.66 {
+		t.Fatalf("confidence threshold=%v want 0.66", ruleflowCounter.input.ConfidenceThreshold)
 	}
 }
 

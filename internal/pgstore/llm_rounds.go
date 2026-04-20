@@ -42,7 +42,7 @@ func (s *PGStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) e
 	return s.queryRow(ctx, q,
 		rec.ID, rec.SnapshotID, rec.Symbol, rec.RoundType, rec.StartedAt, finishedAt,
 		nilIfZero(rec.TotalLatencyMS), nilIfZero(rec.TotalTokenIn), nilIfZero(rec.TotalTokenOut), rec.CallCount,
-		nilIfEmpty(rec.Outcome), nilIfEmpty(rec.PromptVersion), nilIfEmpty(rec.Error),
+		nilIfEmpty(rec.Outcome), rec.PromptVersion, nilIfEmpty(rec.Error),
 		rec.AgentCount, rec.ProviderCount, nilIfEmpty(rec.GateAction),
 	).Scan(&rec.CreatedAt)
 }

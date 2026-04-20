@@ -52,6 +52,36 @@ func TestValidateInitialExitStructureInterval(t *testing.T) {
 	}
 }
 
+func TestApplyDecisionDefaultsAndRehashUpdatesHash(t *testing.T) {
+	symbolCfg := testRuntimeSymbolConfig()
+	symbolCfg.KlineLimit = 0
+	symbolCfg.Consensus = config.ConsensusConfig{}
+	symbolCfg.Hash = "stale"
+	defaults := testRuntimeSymbolConfig()
+	defaults.KlineLimit = 300
+	defaults.Consensus = config.ConsensusConfig{
+		ScoreThreshold:      0.45,
+		ConfidenceThreshold: 0.55,
+	}
+
+	if err := applyDecisionDefaultsAndRehash(&symbolCfg, defaults); err != nil {
+		t.Fatalf("applyDecisionDefaultsAndRehash: %v", err)
+	}
+	if symbolCfg.KlineLimit != 300 {
+		t.Fatalf("kline_limit=%d want 300", symbolCfg.KlineLimit)
+	}
+	if symbolCfg.Consensus.ScoreThreshold != 0.45 {
+		t.Fatalf("score_threshold=%v want 0.45", symbolCfg.Consensus.ScoreThreshold)
+	}
+	wantHash, err := config.HashSymbolConfig(symbolCfg)
+	if err != nil {
+		t.Fatalf("HashSymbolConfig: %v", err)
+	}
+	if symbolCfg.Hash != wantHash {
+		t.Fatalf("symbol hash=%q want %q", symbolCfg.Hash, wantHash)
+	}
+}
+
 func TestBuildSymbolRuntimeInjectsCoreDependencies(t *testing.T) {
 	sys := testRuntimeSystemConfig()
 	symbolCfg := testRuntimeSymbolConfig()

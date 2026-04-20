@@ -59,15 +59,12 @@ func loadDefaultRuntimeConfig(sys config.SystemConfig, base, symbol string) (sym
 	if err != nil {
 		return symbolRuntimeConfig{}, err
 	}
-	config.ApplyDecisionDefaults(&symbolCfg, defaults)
+	if err := applyDecisionDefaultsAndRehash(&symbolCfg, defaults); err != nil {
+		return symbolRuntimeConfig{}, err
+	}
 	if err := config.ValidateSymbolLLMModels(sys, symbolCfg); err != nil {
 		return symbolRuntimeConfig{}, err
 	}
-	symbolHash, err := config.HashSymbolConfig(symbolCfg)
-	if err != nil {
-		return symbolRuntimeConfig{}, err
-	}
-	symbolCfg.Hash = symbolHash
 	stratCfg, err := config.LoadStrategyConfigWithSymbol(strategyPath, symbol)
 	if err != nil {
 		return symbolRuntimeConfig{}, err
@@ -110,7 +107,9 @@ func LoadSymbolConfigs(sys config.SystemConfig, indexPath string, item config.Sy
 	if err != nil {
 		return config.SymbolConfig{}, config.StrategyConfig{}, strategy.StrategyBinding{}, err
 	}
-	config.ApplyDecisionDefaults(&symbolCfg, defaults)
+	if err := applyDecisionDefaultsAndRehash(&symbolCfg, defaults); err != nil {
+		return config.SymbolConfig{}, config.StrategyConfig{}, strategy.StrategyBinding{}, err
+	}
 	if err := config.ValidateSymbolLLMModels(sys, symbolCfg); err != nil {
 		return config.SymbolConfig{}, config.StrategyConfig{}, strategy.StrategyBinding{}, err
 	}
@@ -131,6 +130,16 @@ func LoadSymbolConfigs(sys config.SystemConfig, indexPath string, item config.Sy
 	bind.StrategyHash = config.CombineHashes(symbolCfg.Hash, stratCfg.Hash)
 	bind.SystemHash = sys.Hash
 	return symbolCfg, stratCfg, bind, nil
+}
+
+func applyDecisionDefaultsAndRehash(symbolCfg *config.SymbolConfig, defaults config.SymbolConfig) error {
+	config.ApplyDecisionDefaults(symbolCfg, defaults)
+	symbolHash, err := config.HashSymbolConfig(*symbolCfg)
+	if err != nil {
+		return err
+	}
+	symbolCfg.Hash = symbolHash
+	return nil
 }
 
 func resolvePath(base, path string) string {

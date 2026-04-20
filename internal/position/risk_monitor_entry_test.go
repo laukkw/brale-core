@@ -2,6 +2,7 @@ package position
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -9,7 +10,10 @@ import (
 
 	"brale-core/internal/execution"
 	"brale-core/internal/market"
+	"brale-core/internal/risk"
 	"brale-core/internal/store"
+
+	"go.uber.org/zap"
 )
 
 func TestRiskMonitorStopBeyondLiquidationLong(t *testing.T) {
@@ -96,6 +100,106 @@ func TestRiskMonitorLeverageRoundingAndQtyReduction(t *testing.T) {
 	}
 }
 
+func TestRiskMonitorMaxDrawdownPctZeroDisablesGuard(t *testing.T) {
+	monitor := &RiskMonitor{}
+	if got := monitor.maxDrawdownPct(); got != 0 {
+		t.Fatalf("maxDrawdownPct()=%v, want 0", got)
+	}
+	pos := store.PositionRecord{Side: "long", AvgEntry: 100}
+	if shouldForceCloseMaxDrawdown(pos, 1, monitor.maxDrawdownPct()) {
+		t.Fatalf("zero max_drawdown_pct should disable force close")
+	}
+}
+
+func TestShouldForceCloseMaxDrawdownUsesPercentagePoints(t *testing.T) {
+	cases := []struct {
+		name      string
+		pos       store.PositionRecord
+		markPrice float64
+		threshold float64
+		want      bool
+	}{
+		{
+			name:      "long_thirty_percent_loss",
+			pos:       store.PositionRecord{Side: "long", AvgEntry: 100},
+			markPrice: 70,
+			threshold: 30,
+			want:      true,
+		},
+		{
+			name:      "long_below_threshold",
+			pos:       store.PositionRecord{Side: "long", AvgEntry: 100},
+			markPrice: 70.01,
+			threshold: 30,
+			want:      false,
+		},
+		{
+			name:      "short_thirty_percent_loss",
+			pos:       store.PositionRecord{Side: "short", AvgEntry: 100},
+			markPrice: 130,
+			threshold: 30,
+			want:      true,
+		},
+		{
+			name:      "short_below_threshold",
+			pos:       store.PositionRecord{Side: "short", AvgEntry: 100},
+			markPrice: 129.99,
+			threshold: 30,
+			want:      false,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldForceCloseMaxDrawdown(tc.pos, tc.markPrice, tc.threshold)
+			if got != tc.want {
+				t.Fatalf("shouldForceCloseMaxDrawdown(...)= %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRefreshRiskPlanOnTPHitReturnsUpdateError(t *testing.T) {
+	plan := risk.RiskPlan{
+		StopPrice: 95,
+		TPLevels:  []risk.TPLevel{{LevelID: "tp-1", Price: 110, QtyPct: 0.5}},
+	}
+	raw, err := encodeRiskPlan(plan)
+	if err != nil {
+		t.Fatalf("encode risk plan: %v", err)
+	}
+	pos := store.PositionRecord{
+		PositionID: "pos-err",
+		Side:       "long",
+		AvgEntry:   100,
+		Version:    1,
+		RiskJSON:   raw,
+	}
+	st := &tpHitUpdateErrorStore{pos: pos, updateErr: errors.New("write failed")}
+	monitor := &RiskMonitor{Store: st}
+	_, _, err = monitor.refreshRiskPlanOnTPHit(context.Background(), st.pos, plan, risk.RiskTrigger{
+		Type:    "TAKE_PROFIT",
+		LevelID: "tp-1",
+		QtyPct:  0.5,
+	}, zap.NewNop())
+	if err == nil {
+		t.Fatalf("expected update error")
+	}
+	if !strings.Contains(err.Error(), "update risk plan after tp hit") {
+		t.Fatalf("error=%q missing context", err.Error())
+	}
+	if st.historyCount != 0 {
+		t.Fatalf("history count=%d, want 0", st.historyCount)
+	}
+	persisted, decErr := DecodeRiskPlan(st.pos.RiskJSON)
+	if decErr != nil {
+		t.Fatalf("decode persisted risk: %v", decErr)
+	}
+	if persisted.TPLevels[0].Hit {
+		t.Fatalf("tp hit should not be persisted after update failure")
+	}
+}
+
 func baseRiskMonitor(planCache *PlanCache, markPrice float64) *RiskMonitor {
 	return &RiskMonitor{
 		PriceSource: stubPriceSource{price: markPrice},
@@ -113,6 +217,29 @@ func baseRiskMonitor(planCache *PlanCache, markPrice float64) *RiskMonitor {
 
 type stubPriceSource struct {
 	price float64
+}
+
+type tpHitUpdateErrorStore struct {
+	stubStore
+	pos          store.PositionRecord
+	updateErr    error
+	historyCount int
+}
+
+func (s *tpHitUpdateErrorStore) FindPositionByID(ctx context.Context, positionID string) (store.PositionRecord, bool, error) {
+	if positionID != s.pos.PositionID {
+		return store.PositionRecord{}, false, nil
+	}
+	return s.pos, true, nil
+}
+
+func (s *tpHitUpdateErrorStore) UpdatePositionPatch(ctx context.Context, patch store.PositionPatch) (bool, error) {
+	return false, s.updateErr
+}
+
+func (s *tpHitUpdateErrorStore) SaveRiskPlanHistory(ctx context.Context, rec *store.RiskPlanHistoryRecord) error {
+	s.historyCount++
+	return nil
 }
 
 func (s stubPriceSource) MarkPrice(ctx context.Context, symbol string) (market.PriceQuote, error) {

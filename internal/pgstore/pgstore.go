@@ -29,6 +29,9 @@ type PGStore struct {
 	pool    *pgxpool.Pool
 	queries *queries.Queries
 	logger  *zap.Logger
+
+	// dbOverride is a test seam for capturing query args without a live database.
+	dbOverride queryer
 }
 
 var _ store.Store = (*PGStore)(nil)
@@ -132,6 +135,9 @@ type queryer interface {
 func (s *PGStore) db(ctx context.Context) queryer {
 	if tx := notifyport.TxFromContext(ctx); tx != nil {
 		return tx
+	}
+	if s.dbOverride != nil {
+		return s.dbOverride
 	}
 	return s.pool
 }

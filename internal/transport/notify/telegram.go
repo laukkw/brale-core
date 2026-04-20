@@ -61,7 +61,7 @@ func (s *TelegramSender) sendText(ctx context.Context, msg Message) error {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return s.sanitizeRequestError("send", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -107,7 +107,7 @@ func (s *TelegramSender) sendImage(ctx context.Context, msg Message) error {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return s.sanitizeRequestError("image send", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -119,6 +119,20 @@ func (s *TelegramSender) sendImage(ctx context.Context, msg Message) error {
 		return fmt.Errorf("telegram image send failed: %s", strings.TrimSpace(string(body)))
 	}
 	return nil
+}
+
+func (s *TelegramSender) sanitizeRequestError(action string, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.TrimSpace(err.Error())
+	if token := strings.TrimSpace(s.token); token != "" {
+		msg = strings.ReplaceAll(msg, token, "<redacted>")
+	}
+	if msg == "" {
+		msg = "request failed"
+	}
+	return fmt.Errorf("telegram %s request failed: %s", action, msg)
 }
 
 func formatTelegramMessage(msg Message) (string, string) {

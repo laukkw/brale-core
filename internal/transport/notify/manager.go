@@ -3,6 +3,8 @@ package notify
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -1087,7 +1089,22 @@ func (m Manager) SendError(ctx context.Context, notice ErrorNotice) error {
 	body := sb.String()
 
 	msg := Message{Title: title, Markdown: body, Plain: body}
-	return m.send(ctx, msg)
+	return m.sendWithKey(ctx, msg, errorNoticeDedupeKey(notice))
+}
+
+func errorNoticeDedupeKey(notice ErrorNotice) string {
+	msg := strings.TrimSpace(notice.Message)
+	if msg == "" {
+		return ""
+	}
+	severity := strings.ToLower(strings.TrimSpace(notice.Severity))
+	if severity == "" {
+		severity = "error"
+	}
+	component := strings.ToLower(strings.TrimSpace(notice.Component))
+	symbol := strings.ToUpper(strings.TrimSpace(notice.Symbol))
+	sum := sha256.Sum256([]byte(msg))
+	return fmt.Sprintf("error:%s:%s:%s:%s", severity, component, symbol, hex.EncodeToString(sum[:8]))
 }
 
 func buildNoticeBody(header string, lines []string) string {

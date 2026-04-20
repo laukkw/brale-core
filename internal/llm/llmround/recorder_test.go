@@ -81,6 +81,9 @@ func TestRecorderFieldValues(t *testing.T) {
 	if ms.saved.Symbol != "BTCUSDT" || ms.saved.RoundType != "risk" || ms.saved.Outcome != "tighten" {
 		t.Fatalf("unexpected field values: %+v", ms.saved)
 	}
+	if ms.saved.PromptVersion != "" {
+		t.Fatalf("prompt_version=%q want empty string", ms.saved.PromptVersion)
+	}
 	if ms.saved.CreatedAt.Before(time.Now().Add(-time.Minute)) {
 		t.Fatal("created_at should be recent")
 	}
