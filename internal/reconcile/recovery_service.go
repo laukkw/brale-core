@@ -445,10 +445,16 @@ func (s *RecoveryService) findLatestMatchingRiskPosition(ctx context.Context, ex
 	if err != nil {
 		return store.PositionRecord{}, false, fmt.Errorf("find latest risk position %s: %w", strings.TrimSpace(extPos.Symbol), err)
 	}
-	if !ok || !matchesExternalPosition(latestPos, extPos) {
+	if !ok || !matchesExactExternalPositionID(latestPos, extPos) {
 		return store.PositionRecord{}, false, nil
 	}
 	return latestPos, true, nil
+}
+
+func matchesExactExternalPositionID(pos store.PositionRecord, extPos execution.ExternalPosition) bool {
+	localID := strings.TrimSpace(pos.ExecutorPositionID)
+	externalID := strings.TrimSpace(extPos.PositionID)
+	return localID != "" && externalID != "" && localID == externalID
 }
 
 func planEntryMatchesExternal(entry position.PlanEntry, extPos execution.ExternalPosition) bool {
