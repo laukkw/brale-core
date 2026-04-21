@@ -126,7 +126,10 @@ func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDep
 	}
 
 	freqtradeAccount := newFreqtradeAccountFetcher(executor)
-	riskMonitor := buildRiskMonitor(riskMonitorBuildDeps{store: st, priceSource: priceSource, positioner: positioner, accountFetcher: freqtradeAccount, sys: env.sys, index: env.index, symbolIndexPath: env.symbolIndexPath})
+	riskMonitor, err := buildRiskMonitor(riskMonitorBuildDeps{store: st, priceSource: priceSource, positioner: positioner, accountFetcher: freqtradeAccount, sys: env.sys, index: env.index, symbolIndexPath: env.symbolIndexPath})
+	if err != nil {
+		return coreDeps{}, fmt.Errorf("build risk monitor: %w", err)
+	}
 
 	deps := coreDeps{
 		persistence: persistenceDeps{store: st, pool: pool, stateProvider: stateProvider},
@@ -240,6 +243,8 @@ func buildReconcileServices(deps reconcileServiceBuildDeps) (*reconcile.Recovery
 		Executor:    deps.executor,
 		Notifier:    deps.notifier,
 		Cache:       deps.positionCache,
+		PlanCache:   deps.planCache,
+		RiskPlans:   deps.riskPlanSvc,
 		AllowSymbol: deps.allowSymbol,
 	}
 	reconciler := &reconcile.ReconcileService{
@@ -268,21 +273,25 @@ func buildReconcileServices(deps reconcileServiceBuildDeps) (*reconcile.Recovery
 	return recovery, reconciler, nil
 }
 
-func buildRiskMonitor(deps riskMonitorBuildDeps) *position.RiskMonitor {
+func buildRiskMonitor(deps riskMonitorBuildDeps) (*position.RiskMonitor, error) {
+	breakevenFeePct, err := buildBreakevenFeePctResolver(deps.sys, deps.symbolIndexPath, deps.index)
+	if err != nil {
+		return nil, err
+	}
 	return &position.RiskMonitor{
 		Store:                   deps.store,
 		PriceSource:             deps.priceSource,
 		Positions:               deps.positioner,
 		PlanCache:               deps.positioner.PlanCache,
 		MaxDrawdownPct:          deps.sys.RiskGuard.MaxDrawdownPct,
-		BreakevenFeePctBySymbol: buildBreakevenFeePctResolver(deps.sys, deps.symbolIndexPath, deps.index),
+		BreakevenFeePctBySymbol: breakevenFeePct,
 		AccountFetcher: func(ctx context.Context, symbol string) (execution.AccountState, error) {
 			return deps.accountFetcher(ctx, symbol)
 		},
-	}
+	}, nil
 }
 
-func buildBreakevenFeePctResolver(sys config.SystemConfig, symbolIndexPath string, index config.SymbolIndexConfig) func(string) float64 {
+func buildBreakevenFeePctResolver(sys config.SystemConfig, symbolIndexPath string, index config.SymbolIndexConfig) (func(string) float64, error) {
 	fees := make(map[string]float64, len(index.Symbols))
 	for _, item := range index.Symbols {
 		symbolKey := canonicalSymbolFromIndexEntry(item)
@@ -291,7 +300,7 @@ func buildBreakevenFeePctResolver(sys config.SystemConfig, symbolIndexPath strin
 		}
 		_, strategyCfg, _, err := runtime.LoadSymbolConfigs(sys, symbolIndexPath, item)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("load %s breakeven fee config: %w", symbolKey, err)
 		}
 		if strategyCfg.RiskManagement.BreakevenFeePct > 0 {
 			fees[symbolKey] = strategyCfg.RiskManagement.BreakevenFeePct
@@ -299,7 +308,7 @@ func buildBreakevenFeePctResolver(sys config.SystemConfig, symbolIndexPath strin
 	}
 	return func(symbol string) float64 {
 		return fees[canonicalSymbol(symbol)]
-	}
+	}, nil
 }
 
 func resolveScheduledDecision(sys config.SystemConfig) bool {

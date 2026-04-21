@@ -150,7 +150,7 @@ func BuildPositionRiskSummary(summary PositionSummary, liquidationPrice float64)
 	status := strings.ToLower(strings.TrimSpace(summary.PositionStatus))
 
 	unrealizedPnlPct := computeDirectionalPnlPct(summary.Side, summary.EntryFillPrice, summary.CurrentPrice)
-	distanceToLiqPct := computeDistanceToLiqPct(summary.CurrentPrice, liquidationPrice)
+	distanceToLiqPct := computeDistanceToLiqPct(summary.Side, summary.CurrentPrice, liquidationPrice)
 
 	return PositionRiskSummary{
 		Side:                  summary.Side,
@@ -185,8 +185,20 @@ func computeDirectionalPnlPct(side string, entryPrice float64, currentPrice floa
 	}
 }
 
-func computeDistanceToLiqPct(currentPrice float64, liquidationPrice float64) float64 {
+func computeDistanceToLiqPct(side string, currentPrice float64, liquidationPrice float64) float64 {
 	if currentPrice <= 0 || liquidationPrice <= 0 {
+		return 0
+	}
+	switch strings.ToLower(strings.TrimSpace(side)) {
+	case "long":
+		if liquidationPrice >= currentPrice {
+			return 0
+		}
+	case "short":
+		if liquidationPrice <= currentPrice {
+			return 0
+		}
+	default:
 		return 0
 	}
 	return math.Abs(currentPrice-liquidationPrice) / currentPrice

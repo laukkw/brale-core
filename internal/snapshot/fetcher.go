@@ -24,6 +24,8 @@ type Fetcher struct {
 	RequireFearGreed    bool
 	RequireLiquidations bool
 
+	MinKlineBars int
+
 	Now func() time.Time
 }
 
@@ -97,7 +99,8 @@ func (f *Fetcher) loadKlines(ctx context.Context, out *MarketSnapshot, symbols, 
 			out.Klines[sym] = map[string][]Candle{}
 		}
 		for _, iv := range intervals {
-			candles, err := f.Klines.Klines(ctx, sym, iv, limit)
+			fetchLimit := klineFetchLimit(limit, f.MinKlineBars)
+			candles, err := f.Klines.Klines(ctx, sym, iv, fetchLimit)
 			if err != nil {
 				return fmt.Errorf("klines %s %s: %w", sym, iv, err)
 			}
@@ -105,14 +108,32 @@ func (f *Fetcher) loadKlines(ctx context.Context, out *MarketSnapshot, symbols, 
 			if err != nil {
 				return fmt.Errorf("klines %s %s: %w", sym, iv, err)
 			}
+			candles = trimKlinesToLimit(candles, limit)
 			if len(candles) == 0 {
 				return fmt.Errorf("klines %s %s is empty", sym, iv)
+			}
+			if f.MinKlineBars > 0 && len(candles) < f.MinKlineBars {
+				return fmt.Errorf("klines %s %s has %d closed candles, need at least %d", sym, iv, len(candles), f.MinKlineBars)
 			}
 			out.Klines[sym][iv] = candles
 			setDataAge(out, "kline", sym, iv, candles[len(candles)-1].OpenTime)
 		}
 	}
 	return nil
+}
+
+func klineFetchLimit(limit int, minBars int) int {
+	if limit <= 0 || minBars <= 0 {
+		return limit
+	}
+	return limit + 1
+}
+
+func trimKlinesToLimit(candles []Candle, limit int) []Candle {
+	if limit <= 0 || len(candles) <= limit {
+		return candles
+	}
+	return candles[len(candles)-limit:]
 }
 
 func (f *Fetcher) loadDerivatives(ctx context.Context, out *MarketSnapshot, symbols []string, intervals []string) error {

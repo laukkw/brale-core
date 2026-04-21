@@ -28,7 +28,8 @@ func (a *ReconcileReflectorAdapter) ReflectOnClose(ctx context.Context, pos stor
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	logger := logging.FromContext(ctx).Named("reflector")
+	baseCtx := context.WithoutCancel(ctx)
+	logger := logging.FromContext(baseCtx).Named("reflector")
 	if a.TradeFinder == nil {
 		logger.Warn("position reflection skipped: trade finder unavailable", zap.String("position_id", pos.PositionID))
 		return
@@ -44,7 +45,7 @@ func (a *ReconcileReflectorAdapter) ReflectOnClose(ctx context.Context, pos stor
 	}
 
 	runCtx, cancel := context.WithTimeout(
-		logging.WithLogger(ctx, logging.FromContext(ctx)),
+		logging.WithLogger(baseCtx, logger),
 		reflectionLookupTimeout(a.retryAttempts(), a.retryDelay()),
 	)
 	defer cancel()

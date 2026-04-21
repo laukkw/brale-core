@@ -18,6 +18,7 @@ func buildSnapshotFetcher(symbolCfg config.SymbolConfig, requireMechanics bool) 
 		RequireFearGreed:    requireMechanics && symbolCfg.Require.FearGreed,
 		RequireLiquidations: requireMechanics && symbolCfg.Require.Liquidations,
 	})
+	fetcher.MinKlineBars = config.RequiredKlineLimit(symbolCfg)
 	if requireMechanics {
 		return fetcher
 	}

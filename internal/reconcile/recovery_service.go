@@ -3,6 +3,8 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 	"brale-core/internal/pkg/logging"
 	symbolpkg "brale-core/internal/pkg/symbol"
 	"brale-core/internal/position"
+	"brale-core/internal/risk"
 	"brale-core/internal/store"
 
 	"go.uber.org/zap"
@@ -20,6 +23,8 @@ type RecoveryService struct {
 	Executor    execution.Executor
 	Notifier    Notifier
 	Cache       *position.PositionCache
+	PlanCache   *position.PlanCache
+	RiskPlans   *position.RiskPlanService
 	AllowSymbol func(symbol string) bool
 }
 
@@ -153,6 +158,7 @@ func (s *RecoveryService) updateActivePosition(ctx context.Context, logger *zap.
 		AvgEntry:           store.PtrFloat64(extPos.AvgEntry),
 	}
 	updates := patch.Updates()
+	var recoveredRisk recoveredRiskPlan
 	if pos.InitialStake == 0 && extPos.InitialStake > 0 {
 		patch.InitialStake = store.PtrFloat64(extPos.InitialStake)
 		updates["initial_stake"] = extPos.InitialStake
@@ -161,9 +167,31 @@ func (s *RecoveryService) updateActivePosition(ctx context.Context, logger *zap.
 		patch.Source = store.PtrString("freqtrade")
 		updates["source"] = "freqtrade"
 	}
+	if len(pos.RiskJSON) == 0 {
+		nextRisk, err := s.resolveRecoveredRiskPlan(ctx, pos, extPos)
+		if err != nil {
+			return s.reportPositionError(ctx, logger, "recover active position risk plan failed", err, pos)
+		}
+		if nextRisk.OK {
+			recoveredRisk = nextRisk
+			patch.RiskJSON = store.PtrBytes(recoveredRisk.Raw)
+			updates["risk_json"] = recoveredRisk.Raw
+		} else {
+			logger.Warn("recovery active position has no local risk plan",
+				zap.String("position_id", pos.PositionID),
+				zap.String("symbol", pos.Symbol),
+				zap.String("executor_position_id", extPos.PositionID),
+			)
+		}
+	}
 	_, err := s.Store.UpdatePositionPatch(ctx, patch)
 	if err != nil {
 		return s.reportPositionError(ctx, logger, "update active position failed", err, pos)
+	}
+	if patch.RiskJSON != nil {
+		if err := s.saveRecoveredRiskPlanHistory(ctx, pos.PositionID, recoveredRisk, "recovery_active"); err != nil {
+			return s.reportPositionError(ctx, logger, "save recovered active risk plan failed", err, pos)
+		}
 	}
 	s.logRecoveryPosition(logger, pos, extPos, updates, "external_present")
 	return nil
@@ -240,11 +268,30 @@ func (s *RecoveryService) restoreMissingPositions(ctx context.Context, logger *z
 			Source:             "freqtrade-restore",
 			Version:            1,
 		}
+		recoveredRisk, err := s.resolveRecoveredRiskPlan(ctx, store.PositionRecord{}, extPos)
+		if err != nil {
+			return s.reportError(ctx, logger, "recover restored position risk plan failed", err)
+		}
+		if recoveredRisk.OK {
+			pos.RiskJSON = recoveredRisk.Raw
+			pos.RiskPct = recoveredRisk.RiskPct
+			pos.Leverage = recoveredRisk.Leverage
+			pos.StopReason = recoveredRisk.StopReason
+		} else {
+			logger.Warn("restored external position has no local risk plan",
+				zap.String("symbol", extPos.Symbol),
+				zap.String("executor_position_id", extPos.PositionID),
+			)
+		}
 		if err := s.Store.SavePosition(ctx, &pos); err != nil {
 			return s.reportError(ctx, logger, "restore position failed", err)
 		}
+		if recoveredRisk.OK {
+			if err := s.saveRecoveredRiskPlanHistory(ctx, pos.PositionID, recoveredRisk, "external_restore"); err != nil {
+				return s.reportError(ctx, logger, "save restored position risk plan failed", err)
+			}
+		}
 		if s.Cache != nil {
-
 			s.Cache.UpdateFromExternal(extPos)
 		}
 		s.logRecoveryPosition(logger, pos, extPos, map[string]any{"source": pos.Source}, "external_restore")
@@ -283,6 +330,182 @@ func (s *RecoveryService) shouldSkipResidualRestore(ctx context.Context, extPos 
 		return false, nil
 	}
 	return isClosedResidualExternalPosition(latestPos, extPos), nil
+}
+
+type recoveredRiskPlan struct {
+	Raw        []byte
+	Plan       risk.RiskPlan
+	RiskPct    float64
+	Leverage   float64
+	StopReason string
+	Source     string
+	OK         bool
+}
+
+var errRecoveredRiskPlanNoControls = errors.New("risk plan has no stop or take-profit levels")
+
+func (s *RecoveryService) resolveRecoveredRiskPlan(ctx context.Context, pos store.PositionRecord, extPos execution.ExternalPosition) (recoveredRiskPlan, error) {
+	if plan, ok, err := s.recoveredRiskFromPosition(ctx, pos, extPos); err != nil || ok {
+		return plan, err
+	}
+	if plan, ok, err := s.recoveredRiskFromPlanCache(extPos); err != nil || ok {
+		return plan, err
+	}
+	latestPos, ok, err := s.findLatestMatchingRiskPosition(ctx, extPos)
+	if err != nil || !ok {
+		return recoveredRiskPlan{}, err
+	}
+	plan, _, err := s.recoveredRiskFromPosition(ctx, latestPos, extPos)
+	return plan, err
+}
+
+func (s *RecoveryService) recoveredRiskFromPosition(ctx context.Context, pos store.PositionRecord, extPos execution.ExternalPosition) (recoveredRiskPlan, bool, error) {
+	if strings.TrimSpace(pos.PositionID) == "" {
+		return recoveredRiskPlan{}, false, nil
+	}
+	if strings.TrimSpace(extPos.PositionID) != "" && !matchesExternalPosition(pos, extPos) {
+		return recoveredRiskPlan{}, false, nil
+	}
+	if len(pos.RiskJSON) > 0 {
+		recovered, err := recoveredRiskFromRaw(pos.RiskJSON)
+		if err != nil {
+			if errors.Is(err, errRecoveredRiskPlanNoControls) {
+				return recoveredRiskPlan{}, false, nil
+			}
+			return recoveredRiskPlan{}, false, fmt.Errorf("decode local risk plan %s: %w", pos.PositionID, err)
+		}
+		recovered.RiskPct = pos.RiskPct
+		recovered.Leverage = pos.Leverage
+		recovered.StopReason = strings.TrimSpace(pos.StopReason)
+		recovered.Source = "position"
+		return recovered, true, nil
+	}
+	if s == nil || s.Store == nil {
+		return recoveredRiskPlan{}, false, nil
+	}
+	history, ok, err := s.Store.FindLatestRiskPlanHistory(ctx, pos.PositionID)
+	if err != nil {
+		return recoveredRiskPlan{}, false, fmt.Errorf("find latest risk plan history %s: %w", pos.PositionID, err)
+	}
+	if !ok || len(history.PayloadJSON) == 0 {
+		return recoveredRiskPlan{}, false, nil
+	}
+	recovered, err := recoveredRiskFromRaw(history.PayloadJSON)
+	if err != nil {
+		if errors.Is(err, errRecoveredRiskPlanNoControls) {
+			return recoveredRiskPlan{}, false, nil
+		}
+		return recoveredRiskPlan{}, false, fmt.Errorf("decode risk plan history %s: %w", pos.PositionID, err)
+	}
+	recovered.RiskPct = pos.RiskPct
+	recovered.Leverage = pos.Leverage
+	recovered.StopReason = strings.TrimSpace(pos.StopReason)
+	recovered.Source = "risk_plan_history"
+	return recovered, true, nil
+}
+
+func (s *RecoveryService) recoveredRiskFromPlanCache(extPos execution.ExternalPosition) (recoveredRiskPlan, bool, error) {
+	if s == nil || s.PlanCache == nil {
+		return recoveredRiskPlan{}, false, nil
+	}
+	entry, ok := s.PlanCache.GetEntry(extPos.Symbol)
+	if !ok || entry == nil {
+		return recoveredRiskPlan{}, false, nil
+	}
+	if !planEntryMatchesExternal(*entry, extPos) {
+		return recoveredRiskPlan{}, false, nil
+	}
+	plan := entry.Plan
+	riskPlan := risk.BuildRiskPlan(risk.RiskPlanInput{
+		Entry:            plan.Entry,
+		StopLoss:         plan.StopLoss,
+		PositionSize:     plan.PositionSize,
+		TakeProfits:      plan.TakeProfits,
+		TakeProfitRatios: plan.TakeProfitRatios,
+	})
+	recovered, err := recoveredRiskFromPlan(riskPlan)
+	if err != nil {
+		if errors.Is(err, errRecoveredRiskPlanNoControls) {
+			return recoveredRiskPlan{}, false, nil
+		}
+		return recoveredRiskPlan{}, false, err
+	}
+	recovered.RiskPct = plan.RiskPct
+	recovered.Leverage = plan.Leverage
+	recovered.StopReason = strings.TrimSpace(plan.RiskAnnotations.StopReason)
+	recovered.Source = "plan_cache"
+	return recovered, true, nil
+}
+
+func (s *RecoveryService) findLatestMatchingRiskPosition(ctx context.Context, extPos execution.ExternalPosition) (store.PositionRecord, bool, error) {
+	if s == nil || s.Store == nil {
+		return store.PositionRecord{}, false, nil
+	}
+	latestPos, ok, err := s.Store.FindPositionBySymbol(ctx, extPos.Symbol, nil)
+	if err != nil {
+		return store.PositionRecord{}, false, fmt.Errorf("find latest risk position %s: %w", strings.TrimSpace(extPos.Symbol), err)
+	}
+	if !ok || !matchesExternalPosition(latestPos, extPos) {
+		return store.PositionRecord{}, false, nil
+	}
+	return latestPos, true, nil
+}
+
+func planEntryMatchesExternal(entry position.PlanEntry, extPos execution.ExternalPosition) bool {
+	if !strings.EqualFold(strings.TrimSpace(entry.Plan.Symbol), strings.TrimSpace(extPos.Symbol)) {
+		return false
+	}
+	externalID := strings.TrimSpace(entry.ExternalID)
+	if externalID == "" {
+		return false
+	}
+	return externalID == strings.TrimSpace(extPos.PositionID)
+}
+
+func recoveredRiskFromRaw(raw []byte) (recoveredRiskPlan, error) {
+	plan, err := position.DecodeRiskPlan(raw)
+	if err != nil {
+		return recoveredRiskPlan{}, err
+	}
+	if !riskPlanHasControls(plan) {
+		return recoveredRiskPlan{}, errRecoveredRiskPlanNoControls
+	}
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return recoveredRiskPlan{Raw: out, Plan: plan, OK: true}, nil
+}
+
+func recoveredRiskFromPlan(plan risk.RiskPlan) (recoveredRiskPlan, error) {
+	if !riskPlanHasControls(plan) {
+		return recoveredRiskPlan{}, errRecoveredRiskPlanNoControls
+	}
+	raw, err := json.Marshal(risk.CompactRiskPlan(plan))
+	if err != nil {
+		return recoveredRiskPlan{}, err
+	}
+	return recoveredRiskPlan{Raw: raw, Plan: plan, OK: true}, nil
+}
+
+func riskPlanHasControls(plan risk.RiskPlan) bool {
+	if plan.StopPrice > 0 {
+		return true
+	}
+	for _, level := range plan.TPLevels {
+		if level.Price > 0 && level.QtyPct > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *RecoveryService) saveRecoveredRiskPlanHistory(ctx context.Context, positionID string, recovered recoveredRiskPlan, source string) error {
+	if s == nil || s.RiskPlans == nil || !recovered.OK {
+		return nil
+	}
+	if _, err := s.RiskPlans.SaveHistory(ctx, positionID, recovered.Plan, source); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *RecoveryService) logRecoveryPosition(logger *zap.Logger, pos store.PositionRecord, extPos execution.ExternalPosition, updates map[string]any, reason string) {

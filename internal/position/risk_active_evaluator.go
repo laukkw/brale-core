@@ -79,7 +79,7 @@ func (m *RiskMonitor) loadActiveRiskContext(ctx context.Context, pos store.Posit
 		pos = m.Positions.Cache.HydratePosition(pos)
 	}
 	if len(pos.RiskJSON) == 0 {
-		return store.PositionRecord{}, risk.RiskPlan{}, market.PriceQuote{}, true, nil
+		return store.PositionRecord{}, risk.RiskPlan{}, market.PriceQuote{}, false, fmt.Errorf("risk plan missing for active position %s", pos.PositionID)
 	}
 	plan, err := DecodeRiskPlan(pos.RiskJSON)
 	if err != nil {

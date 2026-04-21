@@ -217,6 +217,12 @@ func ValidateSymbolLLMModels(sys SystemConfig, cfg SymbolConfig) error {
 	return nil
 }
 
+// RequiredKlineLimit returns the minimum closed candles required by the
+// configured indicator and trend warmup windows.
+func RequiredKlineLimit(cfg SymbolConfig) int {
+	return requiredKlineLimit(cfg)
+}
+
 func requiredKlineLimit(cfg SymbolConfig) int {
 	trendRequired := TrendPresetRequiredBars(cfg.Intervals)
 	stcRequired := 0
