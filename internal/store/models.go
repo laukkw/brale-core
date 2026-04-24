@@ -173,6 +173,7 @@ type PromptRegistryEntry struct {
 	ID           uint
 	Role         string
 	Stage        string
+	Locale       string
 	Version      string
 	SystemPrompt string
 	Description  string

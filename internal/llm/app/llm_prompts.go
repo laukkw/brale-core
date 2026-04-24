@@ -42,6 +42,7 @@ type LLMPromptBuilder struct {
 	RiskTightenSystem         string
 	RiskTightenVersion        string
 	UserFormat                UserPromptFormat
+	Locale                    string
 }
 
 type FlatRiskPromptInput struct {
@@ -99,14 +100,15 @@ func (b LLMPromptBuilder) FlatRiskInitPrompt(input FlatRiskPromptInput) (string,
 	indicatorRaw, _ := json.Marshal(input.AgentIndicator)
 	structureRaw, _ := json.Marshal(input.AgentStructure)
 	mechanicsRaw, _ := json.Marshal(input.AgentMechanics)
+	loc := localizerFor(b.Locale)
 	user := formatPayloads(
 		b.UserFormat,
-		payloadBlock{label: "交易上下文(必填):", payload: string(contextRaw)},
-		payloadBlock{label: "计划摘要(必填):", payload: string(planRaw)},
-		payloadBlock{label: "结构锚点摘要(必填):", payload: string(anchorsRaw)},
-		payloadBlock{label: "Indicator Agent 摘要(必填):", payload: string(indicatorRaw)},
-		payloadBlock{label: "Structure Agent 摘要(必填):", payload: string(structureRaw)},
-		payloadBlock{label: "Mechanics Agent 摘要(必填):", payload: string(mechanicsRaw)},
+		payloadBlock{label: loc.flatRiskContextLabel, payload: string(contextRaw)},
+		payloadBlock{label: loc.planSummaryLabel, payload: string(planRaw)},
+		payloadBlock{label: loc.structureAnchorLabel, payload: string(anchorsRaw)},
+		payloadBlock{label: loc.indicatorAgentSummaryLabel, payload: string(indicatorRaw)},
+		payloadBlock{label: loc.structureAgentSummaryLabel, payload: string(structureRaw)},
+		payloadBlock{label: loc.mechanicsAgentSummaryLabel, payload: string(mechanicsRaw)},
 	)
 	return system, user, nil
 }
@@ -142,17 +144,18 @@ func (b LLMPromptBuilder) TightenRiskUpdatePrompt(input TightenRiskPromptInput) 
 	inPosIndicatorRaw, _ := json.Marshal(input.InPositionIndicator)
 	inPosStructureRaw, _ := json.Marshal(input.InPositionStructure)
 	inPosMechanicsRaw, _ := json.Marshal(input.InPositionMechanics)
+	loc := localizerFor(b.Locale)
 	user := formatPayloads(
 		b.UserFormat,
-		payloadBlock{label: "仓位风控上下文(必填):", payload: string(contextRaw)},
-		payloadBlock{label: "结构锚点摘要(必填):", payload: string(anchorsRaw)},
-		payloadBlock{label: "Indicator Agent 摘要(必填):", payload: string(indicatorRaw)},
-		payloadBlock{label: "Structure Agent 摘要(必填):", payload: string(structureRaw)},
-		payloadBlock{label: "Mechanics Agent 摘要(必填):", payload: string(mechanicsRaw)},
-		payloadBlock{label: "持仓态 Indicator Provider 摘要(必填):", payload: string(inPosIndicatorRaw)},
-		payloadBlock{label: "持仓态 Structure Provider 摘要(必填):", payload: string(inPosStructureRaw)},
-		payloadBlock{label: "持仓态 Mechanics Provider 摘要(必填):", payload: string(inPosMechanicsRaw)},
-		payloadBlock{label: "输出要求:", payload: `{"action":"adjust|hold","stop_loss":0.0,"take_profits":[0.0],"reason":"..."}`},
+		payloadBlock{label: loc.tightenRiskContextLabel, payload: string(contextRaw)},
+		payloadBlock{label: loc.structureAnchorLabel, payload: string(anchorsRaw)},
+		payloadBlock{label: loc.indicatorAgentSummaryLabel, payload: string(indicatorRaw)},
+		payloadBlock{label: loc.structureAgentSummaryLabel, payload: string(structureRaw)},
+		payloadBlock{label: loc.mechanicsAgentSummaryLabel, payload: string(mechanicsRaw)},
+		payloadBlock{label: loc.inPosIndicatorSummaryLabel, payload: string(inPosIndicatorRaw)},
+		payloadBlock{label: loc.inPosStructureSummaryLabel, payload: string(inPosStructureRaw)},
+		payloadBlock{label: loc.inPosMechanicsSummaryLabel, payload: string(inPosMechanicsRaw)},
+		payloadBlock{label: loc.outputRequirementLabel, payload: `{"action":"adjust|hold","stop_loss":0.0,"take_profits":[0.0],"reason":"..."}`},
 	)
 	return system, user, nil
 }
@@ -162,9 +165,11 @@ func (b LLMPromptBuilder) AgentIndicatorPrompt(ind features.IndicatorJSON, decis
 	if err != nil {
 		return "", "", err
 	}
-	blocks := []payloadBlock{{label: "Indicator 输入", payload: string(ind.RawJSON)}}
+	system = assemblePromptWithFeatures(system, b.Locale, promptStageAgentIndicator, indicatorFeatureFragments(ind.RawJSON, b.Locale))
+	loc := localizerFor(b.Locale)
+	blocks := []payloadBlock{{label: loc.indicatorInputLabel, payload: string(ind.RawJSON)}}
 	if interval := strings.TrimSpace(decisionInterval); interval != "" {
-		blocks = append(blocks, payloadBlock{label: "决策窗口:", payload: interval})
+		blocks = append(blocks, payloadBlock{label: loc.decisionWindowLabel, payload: interval})
 	}
 	user := formatPayloads(b.UserFormat, blocks...)
 	return system, user, nil
@@ -175,9 +180,11 @@ func (b LLMPromptBuilder) AgentStructurePrompt(tr features.TrendJSON, decisionIn
 	if err != nil {
 		return "", "", err
 	}
-	blocks := []payloadBlock{{label: "Trend 输入", payload: string(tr.RawJSON)}}
+	system = assemblePromptWithFeatures(system, b.Locale, promptStageAgentStructure, structureFeatureFragments(tr.RawJSON, b.Locale))
+	loc := localizerFor(b.Locale)
+	blocks := []payloadBlock{{label: loc.trendInputLabel, payload: string(tr.RawJSON)}}
 	if interval := strings.TrimSpace(decisionInterval); interval != "" {
-		blocks = append(blocks, payloadBlock{label: "决策窗口:", payload: interval})
+		blocks = append(blocks, payloadBlock{label: loc.decisionWindowLabel, payload: interval})
 	}
 	user := formatPayloads(b.UserFormat, blocks...)
 	return system, user, nil
@@ -188,9 +195,11 @@ func (b LLMPromptBuilder) AgentMechanicsPrompt(mech features.MechanicsSnapshot, 
 	if err != nil {
 		return "", "", err
 	}
-	blocks := []payloadBlock{{label: "Mechanics 输入", payload: string(mech.RawJSON)}}
+	system = assemblePromptWithFeatures(system, b.Locale, promptStageAgentMechanics, mechanicsFeatureFragments(mech.RawJSON, b.Locale))
+	loc := localizerFor(b.Locale)
+	blocks := []payloadBlock{{label: loc.mechanicsInputLabel, payload: string(mech.RawJSON)}}
 	if interval := strings.TrimSpace(decisionInterval); interval != "" {
-		blocks = append(blocks, payloadBlock{label: "决策窗口:", payload: interval})
+		blocks = append(blocks, payloadBlock{label: loc.decisionWindowLabel, payload: interval})
 	}
 	user := formatPayloads(b.UserFormat, blocks...)
 	return system, user, nil
@@ -218,6 +227,7 @@ func (b LLMPromptBuilder) ProviderPrompts(ind agent.IndicatorSummary, st agent.S
 	if err != nil {
 		return ProviderPromptSet{}, err
 	}
+	mechanicsSys = assemblePromptWithFeatures(mechanicsSys, b.Locale, promptStageProviderMechanics, mechanicsProviderFragments(dataCtx.MechanicsCtx, b.Locale, false))
 	indSummary := toProviderIndicatorSummary(ind)
 	stSummary := toProviderStructureSummary(st)
 	mechSummary := toProviderMechanicsSummary(mech)
@@ -225,9 +235,9 @@ func (b LLMPromptBuilder) ProviderPrompts(ind agent.IndicatorSummary, st agent.S
 		IndicatorSys:  indicatorSys,
 		StructureSys:  structureSys,
 		MechanicsSys:  mechanicsSys,
-		IndicatorUser: providerUserPrompt(enabled.Indicator, b.UserFormat, providerSummary{Indicator: &indSummary}, dataCtx.IndicatorCrossTF, providerExampleIndicator()),
-		StructureUser: providerUserPrompt(enabled.Structure, b.UserFormat, providerSummary{Structure: &stSummary}, dataCtx.StructureAnchorCtx, providerExampleStructure()),
-		MechanicsUser: providerUserPrompt(enabled.Mechanics, b.UserFormat, providerSummary{Mechanics: &mechSummary}, dataCtx.MechanicsCtx, providerExampleMechanics()),
+		IndicatorUser: providerUserPrompt(enabled.Indicator, b.UserFormat, b.Locale, providerSummary{Indicator: &indSummary}, dataCtx.IndicatorCrossTF, providerExampleIndicator(b.Locale)),
+		StructureUser: providerUserPrompt(enabled.Structure, b.UserFormat, b.Locale, providerSummary{Structure: &stSummary}, dataCtx.StructureAnchorCtx, providerExampleStructure(b.Locale)),
+		MechanicsUser: providerUserPrompt(enabled.Mechanics, b.UserFormat, b.Locale, providerSummary{Mechanics: &mechSummary}, dataCtx.MechanicsCtx, providerExampleMechanics(b.Locale)),
 	}, nil
 }
 
@@ -253,6 +263,7 @@ func (b LLMPromptBuilder) InPositionProviderPrompts(ind agent.IndicatorSummary, 
 	if err != nil {
 		return InPositionPromptSet{}, err
 	}
+	mechanicsSys = assemblePromptWithFeatures(mechanicsSys, b.Locale, promptStageInPosMechanics, mechanicsProviderFragments(dataCtx.MechanicsCtx, b.Locale, true))
 	indSummary := toProviderIndicatorSummary(ind)
 	stSummary := toProviderStructureSummary(st)
 	mechSummary := toProviderMechanicsSummary(mech)
@@ -260,9 +271,9 @@ func (b LLMPromptBuilder) InPositionProviderPrompts(ind agent.IndicatorSummary, 
 		IndicatorSys:  indicatorSys,
 		StructureSys:  structureSys,
 		MechanicsSys:  mechanicsSys,
-		IndicatorUser: inPositionProviderUserPrompt(enabled.Indicator, b.UserFormat, providerSummary{Indicator: &indSummary}, summary, dataCtx.IndicatorCrossTF, providerExampleInPositionIndicator()),
-		StructureUser: inPositionProviderUserPrompt(enabled.Structure, b.UserFormat, providerSummary{Structure: &stSummary}, summary, dataCtx.StructureAnchorCtx, providerExampleInPositionStructure()),
-		MechanicsUser: inPositionProviderUserPrompt(enabled.Mechanics, b.UserFormat, providerSummary{Mechanics: &mechSummary}, summary, dataCtx.MechanicsCtx, providerExampleInPositionMechanics()),
+		IndicatorUser: inPositionProviderUserPrompt(enabled.Indicator, b.UserFormat, b.Locale, providerSummary{Indicator: &indSummary}, summary, dataCtx.IndicatorCrossTF, providerExampleInPositionIndicator(b.Locale)),
+		StructureUser: inPositionProviderUserPrompt(enabled.Structure, b.UserFormat, b.Locale, providerSummary{Structure: &stSummary}, summary, dataCtx.StructureAnchorCtx, providerExampleInPositionStructure(b.Locale)),
+		MechanicsUser: inPositionProviderUserPrompt(enabled.Mechanics, b.UserFormat, b.Locale, providerSummary{Mechanics: &mechSummary}, summary, dataCtx.MechanicsCtx, providerExampleInPositionMechanics(b.Locale)),
 	}, nil
 }
 
@@ -277,18 +288,18 @@ func providerSystemPrompt(enabled bool, name string, value string) (string, erro
 	return requirePrompt(name, value)
 }
 
-func providerUserPrompt(enabled bool, format UserPromptFormat, summary providerSummary, dataCtx any, example string) string {
+func providerUserPrompt(enabled bool, format UserPromptFormat, locale string, summary providerSummary, dataCtx any, example string) string {
 	if !enabled {
 		return ""
 	}
-	return buildProviderUserWithData(format, summary, dataCtx, example)
+	return buildProviderUserWithData(format, locale, summary, dataCtx, example)
 }
 
-func inPositionProviderUserPrompt(enabled bool, format UserPromptFormat, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
+func inPositionProviderUserPrompt(enabled bool, format UserPromptFormat, locale string, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
 	if !enabled {
 		return ""
 	}
-	return buildInPositionProviderUserWithData(format, summary, pos, dataCtx, example)
+	return buildInPositionProviderUserWithData(format, locale, summary, pos, dataCtx, example)
 }
 
 type providerSummary struct {
@@ -365,9 +376,7 @@ func toProviderMechanicsSummary(mech agent.MechanicsSummary) providerMechanicsSu
 	}
 }
 
-const providerDataAnchorLabel = "代码计算数据锚点(仅供交叉验证):"
-
-func appendProviderDataAnchor(blocks []payloadBlock, dataCtx any) []payloadBlock {
+func appendProviderDataAnchor(blocks []payloadBlock, locale string, dataCtx any) []payloadBlock {
 	if dataCtx == nil {
 		return blocks
 	}
@@ -375,43 +384,46 @@ func appendProviderDataAnchor(blocks []payloadBlock, dataCtx any) []payloadBlock
 	if len(dataRaw) <= 2 { // not just "{}" or "null"
 		return blocks
 	}
-	return append(blocks, payloadBlock{label: providerDataAnchorLabel, payload: string(dataRaw)})
+	return append(blocks, payloadBlock{label: localizerFor(locale).providerDataAnchorLabel, payload: string(dataRaw)})
 }
 
-func providerConstraintPayload(inPosition bool) string {
+func providerConstraintPayload(locale string, inPosition bool) string {
+	loc := localizerFor(locale)
 	if inPosition {
-		return "仅输出固定字段 JSON；禁止编造/新增字段或阈值；允许原样引用输入中已有的 field=value 作为审计依据。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。最终输出必须完全基于本轮输入独立生成。"
+		return loc.inPosProviderConstraint
 	}
-	return "输出示例 JSON 仅用于展示固定字段结构、字段类型与引用格式；禁止直接引用、复制、改写或沿用示例中的任何结论、reason、tag、阈值、布尔值、置信度或措辞。最终输出必须完全基于本轮输入独立生成。数据锚点仅用于交叉验证Agent摘要的一致性，不作为独立判断依据。"
+	return loc.providerConstraint
 }
 
-func buildProviderUserWithData(format UserPromptFormat, summary providerSummary, dataCtx any, example string) string {
+func buildProviderUserWithData(format UserPromptFormat, locale string, summary providerSummary, dataCtx any, example string) string {
 	raw, _ := json.Marshal(summary)
-	blocks := []payloadBlock{{label: "摘要输入:", payload: string(raw)}}
-	blocks = appendProviderDataAnchor(blocks, dataCtx)
+	loc := localizerFor(locale)
+	blocks := []payloadBlock{{label: loc.summaryInputLabel, payload: string(raw)}}
+	blocks = appendProviderDataAnchor(blocks, locale, dataCtx)
 	blocks = append(blocks,
-		payloadBlock{label: "约束:", payload: providerConstraintPayload(false)},
-		payloadBlock{label: "输出示例(JSON):", payload: example},
+		payloadBlock{label: loc.constraintLabel, payload: providerConstraintPayload(locale, false)},
+		payloadBlock{label: loc.outputExampleLabel, payload: example},
 	)
 	return formatPayloads(format, blocks...)
 }
 
-func buildInPositionProviderUserWithData(format UserPromptFormat, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
+func buildInPositionProviderUserWithData(format UserPromptFormat, locale string, summary providerSummary, pos positionprompt.Summary, dataCtx any, example string) string {
 	raw, _ := json.Marshal(summary)
 	posRaw, _ := json.Marshal(pos)
+	loc := localizerFor(locale)
 	blocks := []payloadBlock{
-		{label: "摘要输入:", payload: string(raw)},
-		{label: "仓位摘要:", payload: string(posRaw)},
+		{label: loc.summaryInputLabel, payload: string(raw)},
+		{label: loc.positionSummaryLabel, payload: string(posRaw)},
 	}
-	blocks = appendProviderDataAnchor(blocks, dataCtx)
+	blocks = appendProviderDataAnchor(blocks, locale, dataCtx)
 	blocks = append(blocks,
-		payloadBlock{label: "约束:", payload: providerConstraintPayload(true)},
-		payloadBlock{label: "输出示例(JSON):", payload: example},
+		payloadBlock{label: loc.constraintLabel, payload: providerConstraintPayload(locale, true)},
+		payloadBlock{label: loc.outputExampleLabel, payload: example},
 	)
 	return formatPayloads(format, blocks...)
 }
 
-func providerExampleIndicator() string {
+func providerExampleIndicator(locale string) string {
 	ex := provider.IndicatorProviderOut{
 		MomentumExpansion: false,
 		Alignment:         false,
@@ -421,53 +433,57 @@ func providerExampleIndicator() string {
 	return marshalExample(ex)
 }
 
-func providerExampleStructure() string {
+func providerExampleStructure(locale string) string {
+	loc := localizerFor(locale)
 	ex := provider.StructureProviderOut{
 		ClearStructure: true,
 		Integrity:      true,
-		Reason:         "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		Reason:         loc.examplePlaceholderReason,
 		SignalTag:      "support_retest",
 	}
 	return marshalExample(ex)
 }
 
-func providerExampleMechanics() string {
+func providerExampleMechanics(locale string) string {
+	loc := localizerFor(locale)
 	ex := provider.MechanicsProviderOut{
 		LiquidationStress: provider.SemanticSignal{
 			Value:      true,
 			Confidence: provider.ConfidenceLow,
-			Reason:     "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+			Reason:     loc.examplePlaceholderReason,
 		},
 		SignalTag: "neutral",
 	}
 	return marshalExample(ex)
 }
 
-func providerExampleInPositionIndicator() string {
+func providerExampleInPositionIndicator(locale string) string {
+	loc := localizerFor(locale)
 	ex := provider.InPositionIndicatorOut{
 		MomentumSustaining: true,
 		DivergenceDetected: false,
-		Reason:             "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		Reason:             loc.examplePlaceholderReason,
 		MonitorTag:         "keep",
 	}
 	return marshalExample(ex)
 }
 
-func providerExampleInPositionStructure() string {
+func providerExampleInPositionStructure(locale string) string {
+	loc := localizerFor(locale)
 	ex := provider.InPositionStructureOut{
 		Integrity:   true,
 		ThreatLevel: provider.ThreatLevelNone,
-		Reason:      "引用本轮输入中的关键字段作为依据并说明判断逻辑（示例占位，禁止直接引用）",
+		Reason:      loc.examplePlaceholderReason,
 		MonitorTag:  "keep",
 	}
 	return marshalExample(ex)
 }
 
-func providerExampleInPositionMechanics() string {
+func providerExampleInPositionMechanics(locale string) string {
 	ex := provider.InPositionMechanicsOut{
 		AdverseLiquidation: false,
 		CrowdingReversal:   false,
-		Reason:             "ok",
+		Reason:             localizerFor(locale).examplePlaceholderReason,
 		MonitorTag:         "keep",
 	}
 	return marshalExample(ex)

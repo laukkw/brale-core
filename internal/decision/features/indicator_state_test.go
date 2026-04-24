@@ -13,7 +13,7 @@ func TestClassifyPriceVsEMA(t *testing.T) {
 		atr   float64
 		want  string
 	}{
-		{name: "zero price treated as near", price: 0, ema: 100, atr: 10, want: "near"},
+		{name: "zero price treated as unknown", price: 0, ema: 100, atr: 10, want: "unknown"},
 		{name: "within atr threshold treated as near", price: 102.5, ema: 100, atr: 10, want: "near"},
 		{name: "above beyond threshold", price: 103, ema: 100, atr: 10, want: "above"},
 		{name: "below beyond threshold", price: 97, ema: 100, atr: 10, want: "below"},
@@ -77,8 +77,8 @@ func TestClassifyRSISlope(t *testing.T) {
 		rsi  *rsiSnapshot
 		want string
 	}{
-		{name: "nil snapshot", rsi: nil, want: "flat"},
-		{name: "nil norm slope", rsi: &rsiSnapshot{}, want: "flat"},
+		{name: "nil snapshot", rsi: nil, want: "unknown"},
+		{name: "nil norm slope", rsi: &rsiSnapshot{}, want: "unknown"},
 		{name: "rising boundary", rsi: &rsiSnapshot{NormalizedSlope: floatPtr(0.15)}, want: "rising"},
 		{name: "falling boundary", rsi: &rsiSnapshot{NormalizedSlope: floatPtr(-0.15)}, want: "falling"},
 		{name: "inside flat band", rsi: &rsiSnapshot{NormalizedSlope: floatPtr(0.1499)}, want: "flat"},
@@ -99,8 +99,8 @@ func TestClassifySTCState(t *testing.T) {
 		stc  *stcSnapshot
 		want string
 	}{
-		{name: "nil snapshot", stc: nil, want: "flat"},
-		{name: "blank state", stc: &stcSnapshot{}, want: "flat"},
+		{name: "nil snapshot", stc: nil, want: "unknown"},
+		{name: "blank state", stc: &stcSnapshot{}, want: "unknown"},
 		{name: "normalizes casing and spaces", stc: &stcSnapshot{State: " Rising "}, want: "rising"},
 	}
 
@@ -119,7 +119,7 @@ func TestClassifyOBVSlope(t *testing.T) {
 		obv  *obvSnapshot
 		want string
 	}{
-		{name: "nil snapshot", obv: nil, want: "flat"},
+		{name: "nil snapshot", obv: nil, want: "unknown"},
 		{name: "up boundary", obv: &obvSnapshot{ChangeRate: floatPtr(0.02)}, want: "up"},
 		{name: "down boundary", obv: &obvSnapshot{ChangeRate: floatPtr(-0.02)}, want: "down"},
 		{name: "inside flat band", obv: &obvSnapshot{ChangeRate: floatPtr(0.0199)}, want: "flat"},
@@ -140,7 +140,7 @@ func TestClassifyATRExpansion(t *testing.T) {
 		atr  *atrSnapshot
 		want string
 	}{
-		{name: "nil snapshot", atr: nil, want: "stable"},
+		{name: "nil snapshot", atr: nil, want: "unknown"},
 		{name: "expanding boundary", atr: &atrSnapshot{ChangePct: floatPtr(5)}, want: "expanding"},
 		{name: "contracting boundary", atr: &atrSnapshot{ChangePct: floatPtr(-5)}, want: "contracting"},
 		{name: "inside stable band", atr: &atrSnapshot{ChangePct: floatPtr(4.99)}, want: "stable"},

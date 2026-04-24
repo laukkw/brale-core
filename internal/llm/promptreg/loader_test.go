@@ -14,7 +14,7 @@ func (errPromptStore) SavePromptEntry(context.Context, *store.PromptRegistryEntr
 	return nil
 }
 
-func (errPromptStore) FindActivePrompt(context.Context, string, string) (store.PromptRegistryEntry, bool, error) {
+func (errPromptStore) FindActivePrompt(context.Context, string, string, string) (store.PromptRegistryEntry, bool, error) {
 	return store.PromptRegistryEntry{}, false, errors.New("boom")
 }
 
@@ -28,7 +28,7 @@ func TestLoaderFallsBackToDefaults(t *testing.T) {
 	}
 	loader := NewLoader(nil, defaults, nil)
 
-	text, version, err := loader.Resolve(context.Background(), "agent", "indicator")
+	text, version, err := loader.Resolve(context.Background(), "agent", "indicator", "zh")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,10 +47,10 @@ func TestLoaderCachesResult(t *testing.T) {
 	loader := NewLoader(nil, defaults, nil)
 
 	// First call
-	_, _, _ = loader.Resolve(context.Background(), "agent", "structure")
+	_, _, _ = loader.Resolve(context.Background(), "agent", "structure", "zh")
 
 	// Second call should come from cache
-	text, version, err := loader.Resolve(context.Background(), "agent", "structure")
+	text, version, err := loader.Resolve(context.Background(), "agent", "structure", "zh")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestLoaderCachesResult(t *testing.T) {
 
 func TestLoaderMissingPromptReturnsError(t *testing.T) {
 	loader := NewLoader(nil, map[string]string{}, nil)
-	_, _, err := loader.Resolve(context.Background(), "agent", "missing")
+	_, _, err := loader.Resolve(context.Background(), "agent", "missing", "zh")
 	if err == nil {
 		t.Fatal("expected error for missing prompt")
 	}
@@ -73,11 +73,11 @@ func TestLoaderInvalidateCache(t *testing.T) {
 	}
 	loader := NewLoader(nil, defaults, nil)
 
-	_, _, _ = loader.Resolve(context.Background(), "agent", "indicator")
+	_, _, _ = loader.Resolve(context.Background(), "agent", "indicator", "zh")
 	loader.InvalidateCache()
 
 	// Should re-resolve from defaults
-	text, _, err := loader.Resolve(context.Background(), "agent", "indicator")
+	text, _, err := loader.Resolve(context.Background(), "agent", "indicator", "zh")
 	if err != nil {
 		t.Fatalf("unexpected error after cache invalidation: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestLoaderResolveWithNilLoggerAndStoreErrorFallsBack(t *testing.T) {
 		"agent/indicator": "fallback prompt",
 	}, nil)
 
-	text, version, err := loader.Resolve(context.Background(), "agent", "indicator")
+	text, version, err := loader.Resolve(context.Background(), "agent", "indicator", "zh")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

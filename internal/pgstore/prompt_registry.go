@@ -15,25 +15,25 @@ func (s *PGStore) SavePromptEntry(ctx context.Context, rec *store.PromptRegistry
 	if rec == nil {
 		return fmt.Errorf("record is nil")
 	}
-	const q = `INSERT INTO prompt_registry (role, stage, version, system_prompt, description, active)
-	VALUES ($1,$2,$3,$4,$5,$6)
-	ON CONFLICT (role, stage, version) DO UPDATE SET
+	const q = `INSERT INTO prompt_registry (role, stage, locale, version, system_prompt, description, active)
+	VALUES ($1,$2,$3,$4,$5,$6,$7)
+	ON CONFLICT (role, stage, locale, version) DO UPDATE SET
 		system_prompt = EXCLUDED.system_prompt,
 		description = EXCLUDED.description,
 		active = EXCLUDED.active,
 		updated_at = now()
 	RETURNING id, created_at, updated_at`
 	return s.queryRow(ctx, q,
-		rec.Role, rec.Stage, rec.Version, rec.SystemPrompt, rec.Description, rec.Active,
+		rec.Role, rec.Stage, rec.Locale, rec.Version, rec.SystemPrompt, rec.Description, rec.Active,
 	).Scan(&rec.ID, &rec.CreatedAt, &rec.UpdatedAt)
 }
 
-func (s *PGStore) FindActivePrompt(ctx context.Context, role, stage string) (store.PromptRegistryEntry, bool, error) {
+func (s *PGStore) FindActivePrompt(ctx context.Context, role, stage, locale string) (store.PromptRegistryEntry, bool, error) {
 	row := s.queryRow(ctx,
-		`SELECT id, role, stage, version, system_prompt, description, active, created_at, updated_at
+		`SELECT id, role, stage, locale, version, system_prompt, description, active, created_at, updated_at
 		 FROM prompt_registry
-		 WHERE role = $1 AND stage = $2 AND active = true
-		 ORDER BY created_at DESC LIMIT 1`, role, stage)
+		 WHERE role = $1 AND stage = $2 AND locale = $3 AND active = true
+		 ORDER BY created_at DESC LIMIT 1`, role, stage, locale)
 	rec, err := scanPromptRow(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -45,7 +45,7 @@ func (s *PGStore) FindActivePrompt(ctx context.Context, role, stage string) (sto
 }
 
 func (s *PGStore) ListPromptEntries(ctx context.Context, role string, activeOnly bool) ([]store.PromptRegistryEntry, error) {
-	q := `SELECT id, role, stage, version, system_prompt, description, active, created_at, updated_at
+	q := `SELECT id, role, stage, locale, version, system_prompt, description, active, created_at, updated_at
 	      FROM prompt_registry WHERE 1=1`
 	args := []any{}
 	idx := 1
@@ -59,7 +59,7 @@ func (s *PGStore) ListPromptEntries(ctx context.Context, role string, activeOnly
 		args = append(args, true)
 		idx++
 	}
-	q += " ORDER BY role, stage, created_at DESC"
+	q += " ORDER BY role, stage, locale, created_at DESC"
 	rows, err := s.query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (s *PGStore) ListPromptEntries(ctx context.Context, role string, activeOnly
 func scanPromptRow(row scannable) (store.PromptRegistryEntry, error) {
 	var r store.PromptRegistryEntry
 	if err := row.Scan(
-		&r.ID, &r.Role, &r.Stage, &r.Version,
+		&r.ID, &r.Role, &r.Stage, &r.Locale, &r.Version,
 		&r.SystemPrompt, &r.Description, &r.Active,
 		&r.CreatedAt, &r.UpdatedAt,
 	); err != nil {

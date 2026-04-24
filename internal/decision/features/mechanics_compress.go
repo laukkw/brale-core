@@ -13,10 +13,18 @@ import (
 )
 
 type MechanicsCompressOptions struct {
-	Pretty    bool
-	Metrics   *market.MetricsService
-	Sentiment *market.SentimentService
-	FearGreed *market.FearGreedService
+	Pretty             bool
+	Metrics            *market.MetricsService
+	Sentiment          *market.SentimentService
+	FearGreed          *market.FearGreedService
+	EnableOI           bool
+	EnableFunding      bool
+	EnableLongShort    bool
+	EnableFearGreed    bool
+	EnableLiquidations bool
+	EnableCVD          bool
+	EnableSentiment    bool
+	EnableFutSentiment bool
 }
 
 type MechanicsCompressedInput struct {
@@ -180,33 +188,33 @@ func BuildMechanicsCompressed(ctx context.Context, symbol string, snap snapshot.
 		Symbol:    key,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
-	applySnapshotFields(&out, snap, symbol)
-	applyMetricsSnapshot(&out, symbol, snap, opts.Metrics)
+	applySnapshotFields(&out, snap, symbol, opts)
+	applyMetricsSnapshot(&out, symbol, snap, opts)
 	applyCurrentOIPrice(&out, snap, symbol)
-	applyKlineDerived(ctx, &out, symbol, snap, opts.Sentiment)
-	applyFearGreed(ctx, &out, snap, opts.FearGreed)
-	applyFuturesSentiment(&out, snap)
+	applyKlineDerived(ctx, &out, symbol, snap, opts)
+	applyFearGreed(ctx, &out, snap, opts)
+	applyFuturesSentiment(&out, snap, opts)
 	if !hasMechanicsData(out) {
 		return out, fmt.Errorf("mechanics: no data for symbol %s", symbol)
 	}
 	return out, nil
 }
 
-func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, symbol string) {
+func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, symbol string, opts MechanicsCompressOptions) {
 	if out == nil {
 		return
 	}
-	if snap.OI != nil {
+	if opts.EnableOI && snap.OI != nil {
 		if oi, ok := snap.OI[symbol]; ok {
 			out.OI = &oiPayload{Value: roundFloat(oi.Value, 4), Timestamp: formatUnixTimestamp(oi.Timestamp)}
 		}
 	}
-	if snap.Funding != nil {
+	if opts.EnableFunding && snap.Funding != nil {
 		if f, ok := snap.Funding[symbol]; ok {
 			out.Funding = &fundingPayload{Rate: roundFloat(f.Rate, 6), Timestamp: formatUnixTimestamp(f.Timestamp)}
 		}
 	}
-	if snap.LongShort != nil {
+	if opts.EnableLongShort && snap.LongShort != nil {
 		if byInterval, ok := snap.LongShort[symbol]; ok {
 			longShortByInterval := make(map[string]longShortPayload, len(byInterval))
 			for iv, ls := range byInterval {
@@ -217,7 +225,7 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 			}
 		}
 	}
-	if snap.Liquidations != nil {
+	if opts.EnableLiquidations && snap.Liquidations != nil {
 		if l, ok := snap.Liquidations[symbol]; ok {
 			out.Liquidations = &liqPayload{
 				Volume:    roundFloat(l.Volume, 4),
@@ -225,7 +233,7 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 			}
 		}
 	}
-	if snap.LiquidationsByWindow != nil {
+	if opts.EnableLiquidations && snap.LiquidationsByWindow != nil {
 		if byWindow, ok := snap.LiquidationsByWindow[symbol]; ok {
 			payload := buildLiquidationsByWindowPayloads(byWindow)
 			if len(payload) > 0 {
@@ -233,7 +241,7 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 			}
 		}
 	}
-	if snap.LiquidationSource != nil {
+	if opts.EnableLiquidations && snap.LiquidationSource != nil {
 		if src, ok := snap.LiquidationSource[symbol]; ok {
 			out.LiquidationSource = &liqSourcePayload{
 				Source:          strings.TrimSpace(src.Source),
@@ -247,7 +255,7 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 			}
 		}
 	}
-	if out.FearGreed == nil && snap.FearGreed != nil {
+	if opts.EnableFearGreed && out.FearGreed == nil && snap.FearGreed != nil {
 		out.FearGreed = &fearGreedPayload{
 			Value:     snap.FearGreed.Value,
 			Timestamp: formatUnixTimestamp(snap.FearGreed.Timestamp),
@@ -255,11 +263,11 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 	}
 }
 
-func applyMetricsSnapshot(out *MechanicsCompressedInput, symbol string, snap snapshot.MarketSnapshot, metrics *market.MetricsService) {
-	if out == nil || metrics == nil {
+func applyMetricsSnapshot(out *MechanicsCompressedInput, symbol string, snap snapshot.MarketSnapshot, opts MechanicsCompressOptions) {
+	if out == nil || opts.Metrics == nil || !opts.EnableOI {
 		return
 	}
-	data, ok := metrics.Get(symbol)
+	data, ok := opts.Metrics.Get(symbol)
 	if !ok {
 		return
 	}
@@ -385,7 +393,7 @@ func latestCloseAcrossIntervals(byInterval map[string][]snapshot.Candle) (float6
 	return best.Close, best.OpenTime, true
 }
 
-func applyKlineDerived(ctx context.Context, out *MechanicsCompressedInput, symbol string, snap snapshot.MarketSnapshot, sentiment *market.SentimentService) {
+func applyKlineDerived(ctx context.Context, out *MechanicsCompressedInput, symbol string, snap snapshot.MarketSnapshot, opts MechanicsCompressOptions) {
 	if out == nil {
 		return
 	}
@@ -393,14 +401,16 @@ func applyKlineDerived(ctx context.Context, out *MechanicsCompressedInput, symbo
 	if !ok {
 		return
 	}
-	cvdByInterval := buildCVDByInterval(byInterval)
-	if len(cvdByInterval) > 0 {
-		out.CVDByInterval = cvdByInterval
+	if opts.EnableCVD {
+		cvdByInterval := buildCVDByInterval(byInterval)
+		if len(cvdByInterval) > 0 {
+			out.CVDByInterval = cvdByInterval
+		}
 	}
-	if sentiment == nil {
+	if !opts.EnableSentiment || opts.Sentiment == nil {
 		return
 	}
-	sentimentByInterval := buildSentimentByInterval(ctx, symbol, byInterval, sentiment)
+	sentimentByInterval := buildSentimentByInterval(ctx, symbol, byInterval, opts.Sentiment)
 	if len(sentimentByInterval) > 0 {
 		out.SentimentByInterval = sentimentByInterval
 	}
@@ -451,14 +461,14 @@ func buildSentimentByInterval(ctx context.Context, symbol string, byInterval map
 	return sentimentByInterval
 }
 
-func applyFearGreed(ctx context.Context, out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, svc *market.FearGreedService) {
-	if out == nil || svc == nil {
+func applyFearGreed(ctx context.Context, out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, opts MechanicsCompressOptions) {
+	if out == nil || !opts.EnableFearGreed || opts.FearGreed == nil {
 		return
 	}
-	data, ok := svc.Get()
+	data, ok := opts.FearGreed.Get()
 	if !ok {
-		svc.RefreshIfStale(ctx)
-		data, ok = svc.Get()
+		opts.FearGreed.RefreshIfStale(ctx)
+		data, ok = opts.FearGreed.Get()
 	}
 	if !ok {
 		return
@@ -496,8 +506,8 @@ func applyFearGreed(ctx context.Context, out *MechanicsCompressedInput, snap sna
 	}
 }
 
-func applyFuturesSentiment(out *MechanicsCompressedInput, snap snapshot.MarketSnapshot) {
-	if out == nil {
+func applyFuturesSentiment(out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, opts MechanicsCompressOptions) {
+	if out == nil || !opts.EnableFutSentiment {
 		return
 	}
 	fs := futuresSentimentPayload{}

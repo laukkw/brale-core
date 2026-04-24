@@ -90,7 +90,7 @@ type TxRunner interface {
 
 type PromptRegistryStore interface {
 	SavePromptEntry(ctx context.Context, rec *PromptRegistryEntry) error
-	FindActivePrompt(ctx context.Context, role, stage string) (PromptRegistryEntry, bool, error)
+	FindActivePrompt(ctx context.Context, role, stage, locale string) (PromptRegistryEntry, bool, error)
 	ListPromptEntries(ctx context.Context, role string, activeOnly bool) ([]PromptRegistryEntry, error)
 }
 

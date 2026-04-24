@@ -15,6 +15,36 @@ type ConditionalMechanicsBuilder struct {
 	EnabledBuilder features.MechanicsBuilder
 }
 
+type ConditionalIndicatorBuilder struct {
+	Enabled        map[string]AgentEnabled
+	EnabledBuilder features.IndicatorBuilder
+}
+
+func (b ConditionalIndicatorBuilder) BuildIndicator(ctx context.Context, snap snapshot.MarketSnapshot, symbol, interval string) (features.IndicatorJSON, error) {
+	if enabled, ok := lookupEnabled(b.Enabled, symbol); ok && !enabled.Indicator {
+		return features.IndicatorJSON{Symbol: symbol, Interval: interval}, nil
+	}
+	if b.EnabledBuilder == nil {
+		return features.IndicatorJSON{}, fmt.Errorf("indicator builder is required")
+	}
+	return b.EnabledBuilder.BuildIndicator(ctx, snap, symbol, interval)
+}
+
+type ConditionalTrendBuilder struct {
+	Enabled        map[string]AgentEnabled
+	EnabledBuilder features.TrendBuilder
+}
+
+func (b ConditionalTrendBuilder) BuildTrend(ctx context.Context, snap snapshot.MarketSnapshot, symbol, interval string) (features.TrendJSON, error) {
+	if enabled, ok := lookupEnabled(b.Enabled, symbol); ok && !enabled.Structure {
+		return features.TrendJSON{Symbol: symbol, Interval: interval}, nil
+	}
+	if b.EnabledBuilder == nil {
+		return features.TrendJSON{}, fmt.Errorf("trend builder is required")
+	}
+	return b.EnabledBuilder.BuildTrend(ctx, snap, symbol, interval)
+}
+
 func (b ConditionalMechanicsBuilder) BuildMechanics(ctx context.Context, snap snapshot.MarketSnapshot, symbol string) (features.MechanicsSnapshot, error) {
 	if enabled, ok := lookupEnabled(b.Enabled, symbol); ok && !enabled.Mechanics {
 		return features.MechanicsSnapshot{Symbol: symbol}, nil

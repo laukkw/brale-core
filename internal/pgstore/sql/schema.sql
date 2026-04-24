@@ -44,6 +44,7 @@ CREATE TABLE prompt_registry (
     id            BIGSERIAL PRIMARY KEY,
     role          TEXT         NOT NULL,
     stage         TEXT         NOT NULL,
+    locale        TEXT         NOT NULL DEFAULT 'zh',
     version       TEXT         NOT NULL,
     system_prompt TEXT         NOT NULL,
     description   TEXT,

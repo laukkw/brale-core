@@ -9,6 +9,9 @@ func ValidateSystemConfig(cfg SystemConfig) error {
 	if strings.TrimSpace(cfg.Database.DSN) == "" {
 		return validationErrorf("database.dsn is required")
 	}
+	if !IsSupportedPromptLocale(cfg.Prompt.Locale) {
+		return validationErrorf("prompt.locale must be one of zh/en")
+	}
 	if strings.TrimSpace(cfg.ExecutionSystem) == "" {
 		return validationErrorf("execution_system is required")
 	}

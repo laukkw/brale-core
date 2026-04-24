@@ -49,6 +49,7 @@ type systemHashInput struct {
 	LogFormat                  string          `json:"log_format,omitempty"`
 	LogLevel                   string          `json:"log_level,omitempty"`
 	LogPath                    string          `json:"log_path,omitempty"`
+	PromptLocale               string          `json:"prompt_locale,omitempty"`
 	Database                   DatabaseConfig  `json:"database"`
 	ExecutionSystem            string          `json:"execution_system,omitempty"`
 	ExecEndpoint               string          `json:"exec_endpoint,omitempty"`
@@ -94,6 +95,7 @@ type symbolHashInput struct {
 	KlineLimit int                   `json:"kline_limit,omitempty"`
 	Agent      symbolAgentHash       `json:"agent,omitempty"`
 	Require    SymbolRequire         `json:"require,omitempty"`
+	Features   symbolFeaturesHash    `json:"features,omitempty"`
 	Indicators IndicatorConfig       `json:"indicators,omitempty"`
 	Memory     MemoryConfig          `json:"memory,omitempty"`
 	Consensus  ConsensusConfig       `json:"consensus,omitempty"`
@@ -110,6 +112,44 @@ type symbolAgentHash struct {
 	Indicator bool `json:"indicator"`
 	Structure bool `json:"structure"`
 	Mechanics bool `json:"mechanics"`
+}
+
+type symbolFeaturesHash struct {
+	Indicator indicatorFeaturesHash `json:"indicator,omitempty"`
+	Structure structureFeaturesHash `json:"structure,omitempty"`
+	Mechanics mechanicsFeaturesHash `json:"mechanics,omitempty"`
+}
+
+type indicatorFeaturesHash struct {
+	EMA          bool `json:"ema,omitempty"`
+	RSI          bool `json:"rsi,omitempty"`
+	ATR          bool `json:"atr,omitempty"`
+	OBV          bool `json:"obv,omitempty"`
+	STC          bool `json:"stc,omitempty"`
+	BB           bool `json:"bb,omitempty"`
+	CHOP         bool `json:"chop,omitempty"`
+	StochRSI     bool `json:"stoch_rsi,omitempty"`
+	Aroon        bool `json:"aroon,omitempty"`
+	TDSequential bool `json:"td_sequential,omitempty"`
+}
+
+type structureFeaturesHash struct {
+	Supertrend bool `json:"supertrend,omitempty"`
+	EMAContext bool `json:"ema_context,omitempty"`
+	RSIContext bool `json:"rsi_context,omitempty"`
+	Patterns   bool `json:"patterns,omitempty"`
+	SMC        bool `json:"smc,omitempty"`
+}
+
+type mechanicsFeaturesHash struct {
+	OI               bool `json:"oi,omitempty"`
+	Funding          bool `json:"funding,omitempty"`
+	LongShort        bool `json:"long_short,omitempty"`
+	FearGreed        bool `json:"fear_greed,omitempty"`
+	Liquidations     bool `json:"liquidations,omitempty"`
+	CVD              bool `json:"cvd,omitempty"`
+	Sentiment        bool `json:"sentiment,omitempty"`
+	FuturesSentiment bool `json:"futures_sentiment,omitempty"`
 }
 
 type llmRoleSetHash struct {
@@ -135,6 +175,7 @@ func buildSystemHashInput(cfg SystemConfig) systemHashInput {
 		LogFormat:                  cfg.LogFormat,
 		LogLevel:                   cfg.LogLevel,
 		LogPath:                    cfg.LogPath,
+		PromptLocale:               NormalizePromptLocale(cfg.Prompt.Locale),
 		Database:                   cfg.Database,
 		ExecutionSystem:            cfg.ExecutionSystem,
 		ExecEndpoint:               cfg.ExecEndpoint,
@@ -170,6 +211,7 @@ func buildSymbolHashInput(cfg SymbolConfig) symbolHashInput {
 		KlineLimit: cfg.KlineLimit,
 		Agent:      buildSymbolAgentHash(cfg.Agent),
 		Require:    cfg.Require,
+		Features:   buildSymbolFeaturesHash(cfg.Features),
 		Indicators: cfg.Indicators,
 		Memory:     cfg.Memory,
 		Consensus:  cfg.Consensus,
@@ -209,6 +251,40 @@ func buildRoleHash(cfg LLMRoleConfig) llmRoleHash {
 	return llmRoleHash{
 		Model:       cfg.Model,
 		Temperature: val,
+	}
+}
+
+func buildSymbolFeaturesHash(cfg SymbolFeatures) symbolFeaturesHash {
+	return symbolFeaturesHash{
+		Indicator: indicatorFeaturesHash{
+			EMA:          boolValue(cfg.Indicator.EMA),
+			RSI:          boolValue(cfg.Indicator.RSI),
+			ATR:          boolValue(cfg.Indicator.ATR),
+			OBV:          boolValue(cfg.Indicator.OBV),
+			STC:          boolValue(cfg.Indicator.STC),
+			BB:           boolValue(cfg.Indicator.BB),
+			CHOP:         boolValue(cfg.Indicator.CHOP),
+			StochRSI:     boolValue(cfg.Indicator.StochRSI),
+			Aroon:        boolValue(cfg.Indicator.Aroon),
+			TDSequential: boolValue(cfg.Indicator.TDSequential),
+		},
+		Structure: structureFeaturesHash{
+			Supertrend: boolValue(cfg.Structure.Supertrend),
+			EMAContext: boolValue(cfg.Structure.EMAContext),
+			RSIContext: boolValue(cfg.Structure.RSIContext),
+			Patterns:   boolValue(cfg.Structure.Patterns),
+			SMC:        boolValue(cfg.Structure.SMC),
+		},
+		Mechanics: mechanicsFeaturesHash{
+			OI:               boolValue(cfg.Mechanics.OI),
+			Funding:          boolValue(cfg.Mechanics.Funding),
+			LongShort:        boolValue(cfg.Mechanics.LongShort),
+			FearGreed:        boolValue(cfg.Mechanics.FearGreed),
+			Liquidations:     boolValue(cfg.Mechanics.Liquidations),
+			CVD:              boolValue(cfg.Mechanics.CVD),
+			Sentiment:        boolValue(cfg.Mechanics.Sentiment),
+			FuturesSentiment: boolValue(cfg.Mechanics.FuturesSentiment),
+		},
 	}
 }
 

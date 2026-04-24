@@ -143,10 +143,6 @@ const defaultAgentMechanicsPrompt = "" +
 	"- leverage_state/crowding/risk_level：只允许取枚举值。\n" +
 	"- open_interest_context：用中文概述你依赖的 OI/资金费率/拥挤等事实依据（引用输入字段）。\n" +
 	"- anomaly_detail：用中文概述异常/压力/拥挤反转等迹象（引用输入字段）。\n" +
-	"- 若输入包含 liquidations_by_window / liquidation_source，可作为异常或压力证据；在有意义时请在 anomaly_detail 或 open_interest_context 中引用这些字段。\n" +
-	"- liquidation_source.source=binance_force_order_snapshot_ws 表示数据来自 Binance `/market` liquidation snapshot WebSocket，不是旧 REST forceOrders。\n" +
-	"- liquidation_source.coverage=largest_order_per_symbol_per_1000ms 表示每个 symbol 每 1000ms 只会收到该时间片里最大的 liquidation snapshot；它不是完整逐笔市场总量。\n" +
-	"- 读取清算质量时重点关注 liquidation_source.status 与 liquidations_by_window.*.sample_count / coverage_sec / complete；status=warming_up/stale/unavailable 时，不能把缺少清算样本当成低风险结论。\n" +
 	"- movement_score：数值范围 [-1, 1]，表示在当前决策窗口（参见用户输入中的“决策窗口”字段）内“机制层面对上行/下行的偏向”。证据不足时分数应靠近 0。\n" +
 	"- movement_confidence：数值范围 [0, 1]，表示你对该偏向的可靠度；当风险高、信息弱或矛盾时应偏低。\n" +
 	"\n" +
@@ -164,7 +160,6 @@ const defaultProviderMechanicsPrompt = "" +
 	"判断原则：\n" +
 	"- liquidation_stress.value=true 表示从 mechanics 视角看，清算/挤压风险已经显著影响当前入场条件、容错空间或追价赔率；它不等同于全局必须 veto。若只是一般性拥挤、杠杆偏热、局部清算可能或风险折扣，不要轻易设为 true。\n" +
 	"- confidence 表示你对“清算/挤压风险已显著影响入场条件”的把握程度：多个直接证据相互印证时可为 high；若证据有限、解释空间较大、或只是一般性偏热/预警，应为 low。\n" +
-	"- 若上下文包含 liquidation_source.status=warming_up/stale/unavailable，说明清算数据质量不足；此时不要把样本少、事件少或字段缺失直接解释成风险低。\n" +
 	"- reason 需要简要说明依据与交易影响；只要 open_interest_context 或 anomaly_detail 不是空/“数据不足”，reason 就必须引用至少 2 个输入字段名或 field=value，并说明更像缩仓、等待确认、避免追价还是极端危险。仅当两者都为空或为“数据不足”时，reason 才可写“数据不足”。\n" +
 	"- signal_tag 需要综合机制状态判断：若连锁清算/踩踏或挤压已经明显主导盘面，才输出 liquidation_cascade；若多头拥挤、杠杆偏热、上方风险更突出但更像风险折扣，应输出 crowded_long；若空头拥挤、杠杆偏热、下方风险更突出但更像风险折扣，应输出 crowded_short；若风险不高、杠杆未明显失衡且更像仍有推动空间，可输出 fuel_ready；其余不明确或中性状态输出 neutral。\n" +
 	"- 不要因为一般拥挤或单一字段极端就升级为 liquidation_cascade；若信号冲突，保持保守。"
@@ -176,7 +171,6 @@ const defaultInPosMechanicsPrompt = "" +
 	"输出要求：只输出一个 JSON 对象，且仅包含字段（禁止新增/缺失）：adverse_liquidation(bool), crowding_reversal(bool), monitor_tag(keep/tighten/exit), reason(string<=1句)。\n" +
 	"约束：禁止生成新的连续数值/阈值；reason 尽量引用输入字段名或 field=value；两份输入都无法引用时才写“数据不足”。\n" +
 	"判断原则：若出现明显对当前持仓不利的清算、挤压或机制性压力，可将 adverse_liquidation 判断为 true；若原本有利的拥挤结构开始反转，或 crowding 不再支持当前持仓方向，可将 crowding_reversal 判断为 true。\n" +
-	"- 若输入包含 liquidations_by_window / liquidation_source 等清算证据，可在判断中重点参考，并在 reason 中引用对应字段；若 liquidation_source.status 不是 ok，不能把缺失样本当成低风险。\n" +
 	"monitor_tag 需要综合判断：机制层面仍支持持仓、未见明显不利压力时输出 keep；出现一定机制性逆风但尚未到必须退出的程度时输出 tighten；不利清算压力或拥挤反转已经明显威胁持仓时输出 exit。\n" +
 	"不要因为单一异常点就直接判定 exit；只有在机制性风险足够明确时才这样做。"
 
@@ -272,24 +266,50 @@ type PromptDefaults struct {
 }
 
 func DefaultPromptDefaults() PromptDefaults {
-	return PromptDefaults{
-		AgentIndicator:              defaultAgentIndicatorPrompt,
-		AgentStructure:              defaultAgentStructurePrompt,
-		AgentMechanics:              defaultAgentMechanicsPrompt,
-		ProviderIndicator:           defaultProviderIndicatorPrompt,
-		ProviderStructure:           defaultProviderStructurePrompt,
-		ProviderMechanics:           defaultProviderMechanicsPrompt,
-		ProviderInPositionIndicator: defaultInPosIndicatorPrompt,
-		ProviderInPositionStructure: defaultInPosStructurePrompt,
-		ProviderInPositionMechanics: defaultInPosMechanicsPrompt,
-		RiskFlatInit:                defaultRiskFlatInitPrompt,
-		RiskTightenUpdate:           defaultRiskTightenUpdatePrompt,
-		ReflectorAnalysis:           defaultReflectorAnalysisPrompt,
+	return DefaultPromptDefaultsForLocale(PromptLocaleZH)
+}
+
+func DefaultPromptDefaultsForLocale(locale string) PromptDefaults {
+	switch NormalizePromptLocale(locale) {
+	case PromptLocaleEN:
+		return PromptDefaults{
+			AgentIndicator:              defaultAgentIndicatorPromptEN,
+			AgentStructure:              defaultAgentStructurePromptEN,
+			AgentMechanics:              defaultAgentMechanicsPromptEN,
+			ProviderIndicator:           defaultProviderIndicatorPromptEN,
+			ProviderStructure:           defaultProviderStructurePromptEN,
+			ProviderMechanics:           defaultProviderMechanicsPromptEN,
+			ProviderInPositionIndicator: defaultInPosIndicatorPromptEN,
+			ProviderInPositionStructure: defaultInPosStructurePromptEN,
+			ProviderInPositionMechanics: defaultInPosMechanicsPromptEN,
+			RiskFlatInit:                defaultRiskFlatInitPromptEN,
+			RiskTightenUpdate:           defaultRiskTightenUpdatePromptEN,
+			ReflectorAnalysis:           defaultReflectorAnalysisPromptEN,
+		}
+	default:
+		return PromptDefaults{
+			AgentIndicator:              defaultAgentIndicatorPrompt,
+			AgentStructure:              defaultAgentStructurePrompt,
+			AgentMechanics:              defaultAgentMechanicsPrompt,
+			ProviderIndicator:           defaultProviderIndicatorPrompt,
+			ProviderStructure:           defaultProviderStructurePrompt,
+			ProviderMechanics:           defaultProviderMechanicsPrompt,
+			ProviderInPositionIndicator: defaultInPosIndicatorPrompt,
+			ProviderInPositionStructure: defaultInPosStructurePrompt,
+			ProviderInPositionMechanics: defaultInPosMechanicsPrompt,
+			RiskFlatInit:                defaultRiskFlatInitPrompt,
+			RiskTightenUpdate:           defaultRiskTightenUpdatePrompt,
+			ReflectorAnalysis:           defaultReflectorAnalysisPrompt,
+		}
 	}
 }
 
 func PromptRegistryDefaults() map[string]string {
-	defaults := DefaultPromptDefaults()
+	return PromptRegistryDefaultsForLocale(PromptLocaleZH)
+}
+
+func PromptRegistryDefaultsForLocale(locale string) map[string]string {
+	defaults := DefaultPromptDefaultsForLocale(locale)
 	return map[string]string{
 		"agent/indicator":                defaults.AgentIndicator,
 		"agent/structure":                defaults.AgentStructure,

@@ -40,12 +40,12 @@ func NewLoader(s store.PromptRegistryStore, defaults map[string]string, logger *
 
 // Resolve returns the prompt text and version for a (role, stage) pair.
 // If a DB-stored active prompt exists, it takes priority over defaults.
-func (l *Loader) Resolve(ctx context.Context, role, stage string) (text string, version string, err error) {
+func (l *Loader) Resolve(ctx context.Context, role, stage, locale string) (text string, version string, err error) {
 	key := role + "/" + stage
 
 	// Check cache first
 	l.mu.RLock()
-	if cached, ok := l.cache[key]; ok {
+	if cached, ok := l.cache[key+"@"+locale]; ok {
 		l.mu.RUnlock()
 		return cached.text, cached.version, nil
 	}
@@ -53,15 +53,15 @@ func (l *Loader) Resolve(ctx context.Context, role, stage string) (text string, 
 
 	// Try DB
 	if l.store != nil {
-		entry, found, dbErr := l.store.FindActivePrompt(ctx, role, stage)
+		entry, found, dbErr := l.store.FindActivePrompt(ctx, role, stage, locale)
 		if dbErr != nil {
 			if l.logger != nil {
 				l.logger.Warn("prompt registry query failed, using default",
-					zap.String("role", role), zap.String("stage", stage), zap.Error(dbErr))
+					zap.String("role", role), zap.String("stage", stage), zap.String("locale", locale), zap.Error(dbErr))
 			}
 		} else if found {
 			l.mu.Lock()
-			l.cache[key] = cachedPrompt{text: entry.SystemPrompt, version: entry.Version}
+			l.cache[key+"@"+locale] = cachedPrompt{text: entry.SystemPrompt, version: entry.Version}
 			l.mu.Unlock()
 			return entry.SystemPrompt, entry.Version, nil
 		}
@@ -74,7 +74,7 @@ func (l *Loader) Resolve(ctx context.Context, role, stage string) (text string, 
 	}
 
 	l.mu.Lock()
-	l.cache[key] = cachedPrompt{text: def, version: "builtin"}
+	l.cache[key+"@"+locale] = cachedPrompt{text: def, version: "builtin"}
 	l.mu.Unlock()
 	return def, "builtin", nil
 }

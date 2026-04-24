@@ -185,27 +185,30 @@ func seedPromptRegistryDefaults(ctx context.Context, st store.PromptRegistryStor
 	if st == nil {
 		return nil
 	}
-	defaults := config.PromptRegistryDefaults()
-	keys := make([]string, 0, len(defaults))
-	for key := range defaults {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		role, stage, ok := strings.Cut(key, "/")
-		if !ok || strings.TrimSpace(role) == "" || strings.TrimSpace(stage) == "" {
-			return fmt.Errorf("invalid prompt registry key %q", key)
+	for _, locale := range []string{config.PromptLocaleZH, config.PromptLocaleEN} {
+		defaults := config.PromptRegistryDefaultsForLocale(locale)
+		keys := make([]string, 0, len(defaults))
+		for key := range defaults {
+			keys = append(keys, key)
 		}
-		entry := store.PromptRegistryEntry{
-			Role:         role,
-			Stage:        stage,
-			Version:      "builtin",
-			SystemPrompt: defaults[key],
-			Description:  "Seeded from compiled-in prompt defaults.",
-			Active:       true,
-		}
-		if err := st.SavePromptEntry(ctx, &entry); err != nil {
-			return fmt.Errorf("save prompt %s: %w", key, err)
+		sort.Strings(keys)
+		for _, key := range keys {
+			role, stage, ok := strings.Cut(key, "/")
+			if !ok || strings.TrimSpace(role) == "" || strings.TrimSpace(stage) == "" {
+				return fmt.Errorf("invalid prompt registry key %q", key)
+			}
+			entry := store.PromptRegistryEntry{
+				Role:         role,
+				Stage:        stage,
+				Locale:       locale,
+				Version:      "builtin",
+				SystemPrompt: defaults[key],
+				Description:  "Seeded from compiled-in prompt defaults.",
+				Active:       true,
+			}
+			if err := st.SavePromptEntry(ctx, &entry); err != nil {
+				return fmt.Errorf("save prompt %s[%s]: %w", key, locale, err)
+			}
 		}
 	}
 	return nil

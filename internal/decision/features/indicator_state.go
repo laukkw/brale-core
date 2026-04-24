@@ -196,6 +196,7 @@ func summarizeIndicatorPayload(payload IndicatorCompressedInput) indicatorTFStat
 	state := indicatorTFState{
 		Interval:     payload.Market.Interval,
 		FreshnessSec: payload.Meta.DataAgeSec["indicator"],
+		Missing:      detectIndicatorMissing(payload),
 		Trend: indicatorTrendState{
 			PriceVsEMAFast:     classifyPriceVsEMA(payload.Market.CurrentPrice, emaLatest(payload.Data.EMAFast), atr),
 			PriceVsEMAMid:      classifyPriceVsEMA(payload.Market.CurrentPrice, emaLatest(payload.Data.EMAMid), atr),
@@ -289,7 +290,7 @@ func buildIndicatorCrossTFSummary(results []indicatorTFState, decisionInterval s
 
 func classifyPriceVsEMA(price, ema, atr float64) string {
 	if price == 0 || ema == 0 {
-		return "near"
+		return "unknown"
 	}
 	diff := price - ema
 	if atr > 0 && absFloat(diff)/atr <= priceVsEMANearATRRatio {
@@ -302,6 +303,9 @@ func classifyPriceVsEMA(price, ema, atr float64) string {
 }
 
 func classifyEMAStack(fast, mid, slow float64) string {
+	if fast == 0 || mid == 0 || slow == 0 {
+		return "unknown"
+	}
 	switch {
 	case fast > mid && mid > slow:
 		return "bull"
@@ -313,6 +317,9 @@ func classifyEMAStack(fast, mid, slow float64) string {
 }
 
 func classifyRSIZone(value float64) string {
+	if value <= 0 {
+		return "unknown"
+	}
 	switch {
 	case value < rsiZoneLowThreshold:
 		return "<35"
@@ -329,7 +336,7 @@ func classifyRSIZone(value float64) string {
 
 func classifyRSISlope(rsi *rsiSnapshot) string {
 	if rsi == nil || rsi.NormalizedSlope == nil {
-		return "flat"
+		return "unknown"
 	}
 	switch {
 	case *rsi.NormalizedSlope >= rsiSlopeTrendThreshold:
@@ -343,14 +350,14 @@ func classifyRSISlope(rsi *rsiSnapshot) string {
 
 func classifySTCState(stc *stcSnapshot) string {
 	if stc == nil || strings.TrimSpace(stc.State) == "" {
-		return "flat"
+		return "unknown"
 	}
 	return strings.ToLower(strings.TrimSpace(stc.State))
 }
 
 func classifyOBVSlope(obv *obvSnapshot) string {
 	if obv == nil || obv.ChangeRate == nil {
-		return "flat"
+		return "unknown"
 	}
 	switch {
 	case *obv.ChangeRate >= obvSlopeTrendThreshold:
@@ -364,7 +371,7 @@ func classifyOBVSlope(obv *obvSnapshot) string {
 
 func classifyATRExpansion(atr *atrSnapshot) string {
 	if atr == nil || atr.ChangePct == nil {
-		return "stable"
+		return "unknown"
 	}
 	switch {
 	case *atr.ChangePct >= atrExpansionThresholdPct:
@@ -491,7 +498,7 @@ func emaLatest(ema *emaSnapshot) float64 {
 
 func rsiCurrent(rsi *rsiSnapshot) float64 {
 	if rsi == nil {
-		return 50
+		return 0
 	}
 	return rsi.Current
 }
@@ -604,6 +611,41 @@ func absFloat(value float64) float64 {
 		return -value
 	}
 	return value
+}
+
+func detectIndicatorMissing(payload IndicatorCompressedInput) []string {
+	missing := make([]string, 0, 10)
+	if payload.Data.EMAFast == nil || payload.Data.EMAMid == nil || payload.Data.EMASlow == nil {
+		missing = append(missing, "ema")
+	}
+	if payload.Data.RSI == nil {
+		missing = append(missing, "rsi")
+	}
+	if payload.Data.ATR == nil {
+		missing = append(missing, "atr")
+	}
+	if payload.Data.OBV == nil {
+		missing = append(missing, "obv")
+	}
+	if payload.Data.STC == nil {
+		missing = append(missing, "stc")
+	}
+	if payload.Data.BB == nil {
+		missing = append(missing, "bb")
+	}
+	if payload.Data.CHOP == nil {
+		missing = append(missing, "chop")
+	}
+	if payload.Data.StochRSI == nil {
+		missing = append(missing, "stoch_rsi")
+	}
+	if payload.Data.Aroon == nil {
+		missing = append(missing, "aroon")
+	}
+	if payload.Data.TDSequential == nil {
+		missing = append(missing, "td_sequential")
+	}
+	return missing
 }
 
 func minInt(a, b int) int {

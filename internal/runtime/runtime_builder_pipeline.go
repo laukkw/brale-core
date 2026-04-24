@@ -21,9 +21,10 @@ import (
 )
 
 func buildRunner(ctx context.Context, sys config.SystemConfig, promptStore store.PromptRegistryStore, fetcher *snapshot.Fetcher, compressor decision.Compressor, agentSvc decision.AgentService, providerSvc decision.ProviderService, runtimeCfg symbolRuntimeConfig, workingMemory memory.Store, episodicMemory memory.EpisodicStore, semanticMemory memory.SemanticStore) decision.Runner {
-	riskPrompts, err := loadPromptBuilder(ctx, promptStore, zap.NewNop())
+	locale := config.NormalizePromptLocale(sys.Prompt.Locale)
+	riskPrompts, err := loadPromptBuilder(ctx, promptStore, locale, zap.NewNop())
 	if err != nil {
-		riskPrompts = fallbackPromptBuilder()
+		riskPrompts = fallbackPromptBuilder(locale)
 	}
 	riskSvc := llmapp.LLMRiskService{
 		Provider: newLLMClient(sys, runtimeCfg.Symbol.LLM.Provider.Structure),

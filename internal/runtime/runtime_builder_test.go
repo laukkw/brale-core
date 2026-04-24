@@ -242,11 +242,12 @@ func TestBuildMetricsServiceRequiresMechanicsAndIntervals(t *testing.T) {
 		Intervals: []string{"1h"},
 	}
 	enabled := config.AgentEnabled{Mechanics: true}
+	plan := config.ResolveFeaturePlan(symbolCfg)
 
-	if svc := buildMetricsService(symbolCfg, enabled); svc == nil {
+	if svc := buildMetricsService(symbolCfg, enabled, plan); svc == nil {
 		t.Fatalf("buildMetricsService(...) = nil, want service")
 	}
-	if svc := buildMetricsService(symbolCfg, config.AgentEnabled{}); svc != nil {
+	if svc := buildMetricsService(symbolCfg, config.AgentEnabled{}, plan); svc != nil {
 		t.Fatalf("buildMetricsService with mechanics disabled = %v, want nil", svc)
 	}
 }

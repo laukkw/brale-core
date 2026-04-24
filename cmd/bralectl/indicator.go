@@ -275,6 +275,9 @@ func trendOptionsFromPreset(preset config.TrendPreset) features.TrendCompressOpt
 		Pretty:               preset.Pretty,
 		IncludeCurrentRSI:    preset.IncludeCurrentRSI,
 		IncludeStructureRSI:  preset.IncludeStructureRSI,
+		EmitEMAContext:       true,
+		EmitPatterns:         true,
+		EmitSMC:              true,
 	}
 }
 

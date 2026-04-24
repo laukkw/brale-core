@@ -225,20 +225,20 @@ func TestAgentPromptOmitsDecisionIntervalWhenEmpty(t *testing.T) {
 }
 
 func TestProviderExamplesUseSafeDefaultTags(t *testing.T) {
-	if !strings.Contains(providerExampleIndicator(), `"signal_tag":"noise"`) {
-		t.Fatalf("unexpected indicator example: %s", providerExampleIndicator())
+	if !strings.Contains(providerExampleIndicator("zh"), `"signal_tag":"noise"`) {
+		t.Fatalf("unexpected indicator example: %s", providerExampleIndicator("zh"))
 	}
-	if !strings.Contains(providerExampleStructure(), `"signal_tag":"support_retest"`) {
-		t.Fatalf("unexpected structure example: %s", providerExampleStructure())
+	if !strings.Contains(providerExampleStructure("zh"), `"signal_tag":"support_retest"`) {
+		t.Fatalf("unexpected structure example: %s", providerExampleStructure("zh"))
 	}
-	if !strings.Contains(providerExampleMechanics(), `"signal_tag":"neutral"`) {
-		t.Fatalf("unexpected mechanics example: %s", providerExampleMechanics())
+	if !strings.Contains(providerExampleMechanics("zh"), `"signal_tag":"neutral"`) {
+		t.Fatalf("unexpected mechanics example: %s", providerExampleMechanics("zh"))
 	}
-	if !strings.Contains(providerExampleInPositionIndicator(), `"monitor_tag":"keep"`) {
-		t.Fatalf("unexpected in-position indicator example: %s", providerExampleInPositionIndicator())
+	if !strings.Contains(providerExampleInPositionIndicator("zh"), `"monitor_tag":"keep"`) {
+		t.Fatalf("unexpected in-position indicator example: %s", providerExampleInPositionIndicator("zh"))
 	}
-	if !strings.Contains(providerExampleInPositionStructure(), `"monitor_tag":"keep"`) {
-		t.Fatalf("unexpected in-position structure example: %s", providerExampleInPositionStructure())
+	if !strings.Contains(providerExampleInPositionStructure("zh"), `"monitor_tag":"keep"`) {
+		t.Fatalf("unexpected in-position structure example: %s", providerExampleInPositionStructure("zh"))
 	}
 }
 

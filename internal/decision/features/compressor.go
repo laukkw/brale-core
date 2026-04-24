@@ -76,6 +76,9 @@ func (c *Compressor) buildIndicator(ctx context.Context, snap snapshot.MarketSna
 		*errs = append(*errs, FeatureError{Symbol: sym, Stage: "indicator", Err: err})
 		return
 	}
+	if len(ind.RawJSON) == 0 {
+		return
+	}
 	out.Indicators[sym][iv] = ind
 }
 
@@ -85,6 +88,9 @@ func (c *Compressor) buildTrend(ctx context.Context, snap snapshot.MarketSnapsho
 		*errs = append(*errs, FeatureError{Symbol: sym, Stage: "trend", Err: err})
 		return
 	}
+	if len(tr.RawJSON) == 0 {
+		return
+	}
 	out.Trends[sym][iv] = tr
 }
 
@@ -92,6 +98,9 @@ func (c *Compressor) buildMechanics(ctx context.Context, snap snapshot.MarketSna
 	mech, err := c.Mechanics.BuildMechanics(ctx, snap, sym)
 	if err != nil {
 		*errs = append(*errs, FeatureError{Symbol: sym, Stage: "mechanics", Err: err})
+		return
+	}
+	if len(mech.RawJSON) == 0 {
 		return
 	}
 	out.Mechanics[sym] = mech

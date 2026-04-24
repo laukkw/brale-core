@@ -52,12 +52,41 @@ func ValidateSymbolConfig(cfg SymbolConfig) error {
 	if err := validateCooldownConfig(cfg.Cooldown); err != nil {
 		return err
 	}
+	if err := validateFeatureConfig(cfg); err != nil {
+		return err
+	}
 	if err := validateLLMConfig(cfg.LLM, enabled); err != nil {
 		return err
 	}
 	requiredLimit := requiredKlineLimit(cfg)
 	if cfg.KlineLimit < requiredLimit {
 		return validationErrorf("kline_limit must be >= %d", requiredLimit)
+	}
+	return nil
+}
+
+func validateFeatureConfig(cfg SymbolConfig) error {
+	plan := ResolveFeaturePlan(cfg)
+	if cfg.Indicators.SkipSTC && plan.Indicator.STC {
+		return validationErrorf("features.indicator.stc cannot be true when indicators.skip_stc=true")
+	}
+	if cfg.Require.OI && !plan.Mechanics.OI {
+		return validationErrorf("require.oi=true requires features.mechanics.oi=true")
+	}
+	if cfg.Require.Funding && !plan.Mechanics.Funding {
+		return validationErrorf("require.funding=true requires features.mechanics.funding=true")
+	}
+	if cfg.Require.LongShort && !plan.Mechanics.LongShort {
+		return validationErrorf("require.long_short=true requires features.mechanics.long_short=true")
+	}
+	if cfg.Require.FearGreed && !plan.Mechanics.FearGreed {
+		return validationErrorf("require.fear_greed=true requires features.mechanics.fear_greed=true")
+	}
+	if cfg.Require.Liquidations && !plan.Mechanics.Liquidations {
+		return validationErrorf("require.liquidations=true requires features.mechanics.liquidations=true")
+	}
+	if plan.Indicator.StochRSI && !plan.Indicator.RSI {
+		return validationErrorf("features.indicator.stoch_rsi=true requires features.indicator.rsi=true")
 	}
 	return nil
 }
@@ -224,23 +253,104 @@ func RequiredKlineLimit(cfg SymbolConfig) int {
 }
 
 func requiredKlineLimit(cfg SymbolConfig) int {
-	trendRequired := TrendPresetRequiredBars(cfg.Intervals)
-	stcRequired := 0
-	if !cfg.Indicators.SkipSTC && cfg.Indicators.STCFast > 0 && cfg.Indicators.STCSlow > 0 {
-		stcRequired = STCRequiredBars(cfg.Indicators.STCFast, cfg.Indicators.STCSlow)
+	enabled, err := ResolveAgentEnabled(cfg.Agent)
+	if err != nil {
+		enabled = resolveAgentEnabledForKlineLimit(cfg)
 	}
-	required := max(
-		EMARequiredBars(cfg.Indicators.EMAFast),
-		EMARequiredBars(cfg.Indicators.EMAMid),
-		EMARequiredBars(cfg.Indicators.EMASlow),
-		RSIRequiredBars(cfg.Indicators.RSIPeriod),
-		ATRRequiredBars(cfg.Indicators.ATRPeriod),
-		BBRequiredBars(cfg.Indicators.BBPeriod),
-		CHOPRequiredBars(cfg.Indicators.CHOPPeriod),
-		StochRSIRequiredBars(cfg.Indicators.RSIPeriod, cfg.Indicators.StochRSIPeriod),
-		AroonRequiredBars(cfg.Indicators.AroonPeriod),
-		stcRequired,
-		trendRequired,
+	return RequiredKlineLimitForFeatures(cfg, enabled, ResolveFeaturePlan(cfg))
+}
+
+func resolveAgentEnabledForKlineLimit(cfg SymbolConfig) AgentEnabled {
+	return AgentEnabled{
+		Indicator: defaultAgentEnabled(cfg.Agent.Indicator, hasIndicatorWarmupConfig(cfg)),
+		Structure: defaultAgentEnabled(cfg.Agent.Structure, hasStructureWarmupConfig(cfg)),
+		Mechanics: defaultAgentEnabled(cfg.Agent.Mechanics, hasMechanicsWarmupConfig(cfg)),
+	}
+}
+
+func defaultAgentEnabled(value *bool, defaultValue bool) bool {
+	if value == nil {
+		return defaultValue
+	}
+	return *value
+}
+
+func hasIndicatorWarmupConfig(cfg SymbolConfig) bool {
+	if cfg.Indicators.EMAFast > 0 || cfg.Indicators.EMAMid > 0 || cfg.Indicators.EMASlow > 0 {
+		return true
+	}
+	if cfg.Indicators.RSIPeriod > 0 || cfg.Indicators.ATRPeriod > 0 {
+		return true
+	}
+	if cfg.Indicators.STCFast > 0 || cfg.Indicators.STCSlow > 0 {
+		return true
+	}
+	if cfg.Indicators.BBPeriod > 0 || cfg.Indicators.BBMultiplier > 0 {
+		return true
+	}
+	if cfg.Indicators.CHOPPeriod > 0 || cfg.Indicators.StochRSIPeriod > 0 || cfg.Indicators.AroonPeriod > 0 {
+		return true
+	}
+	if cfg.Indicators.LastN > 0 {
+		return true
+	}
+	return hasAnyFeaturePointer(
+		cfg.Features.Indicator.EMA,
+		cfg.Features.Indicator.RSI,
+		cfg.Features.Indicator.ATR,
+		cfg.Features.Indicator.OBV,
+		cfg.Features.Indicator.STC,
+		cfg.Features.Indicator.BB,
+		cfg.Features.Indicator.CHOP,
+		cfg.Features.Indicator.StochRSI,
+		cfg.Features.Indicator.Aroon,
+		cfg.Features.Indicator.TDSequential,
 	)
-	return max(1, required)
+}
+
+func hasStructureWarmupConfig(cfg SymbolConfig) bool {
+	if len(cfg.Intervals) > 0 {
+		return true
+	}
+	return hasAnyFeaturePointer(
+		cfg.Features.Structure.Supertrend,
+		cfg.Features.Structure.EMAContext,
+		cfg.Features.Structure.RSIContext,
+		cfg.Features.Structure.Patterns,
+		cfg.Features.Structure.SMC,
+	)
+}
+
+func hasMechanicsWarmupConfig(cfg SymbolConfig) bool {
+	if cfg.Require.OI || cfg.Require.Funding || cfg.Require.LongShort || cfg.Require.FearGreed || cfg.Require.Liquidations {
+		return true
+	}
+	return hasAnyTruePointer(
+		cfg.Features.Mechanics.OI,
+		cfg.Features.Mechanics.Funding,
+		cfg.Features.Mechanics.LongShort,
+		cfg.Features.Mechanics.FearGreed,
+		cfg.Features.Mechanics.Liquidations,
+		cfg.Features.Mechanics.CVD,
+		cfg.Features.Mechanics.Sentiment,
+		cfg.Features.Mechanics.FuturesSentiment,
+	)
+}
+
+func hasAnyFeaturePointer(values ...*bool) bool {
+	for _, value := range values {
+		if value != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAnyTruePointer(values ...*bool) bool {
+	for _, value := range values {
+		if value != nil && *value {
+			return true
+		}
+	}
+	return false
 }

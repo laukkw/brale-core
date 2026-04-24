@@ -86,7 +86,9 @@ func buildStructureAnchorSummary(comp features.CompressionResult, symbol string,
 			}
 		}
 		candidates = append(candidates, candidatesFromStructure(key, block.StructureCandidates)...)
-		candidates = append(candidates, candidatesFromOrderBlock(key, block.SMC.OrderBlock)...)
+		if block.SMC != nil {
+			candidates = append(candidates, candidatesFromOrderBlock(key, block.SMC.OrderBlock)...)
+		}
 		if shortestSuperTrend == nil && block.SuperTrend != nil {
 			shortestSuperTrend = block.SuperTrend
 		}

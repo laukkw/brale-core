@@ -23,6 +23,37 @@ func DefaultSymbolConfig(sys SystemConfig, symbol string) (SymbolConfig, error) 
 			FearGreed:    true,
 			Liquidations: false,
 		},
+		Features: SymbolFeatures{
+			Indicator: IndicatorFeatureConfig{
+				EMA:          boolPtr(true),
+				RSI:          boolPtr(true),
+				ATR:          boolPtr(true),
+				OBV:          boolPtr(true),
+				STC:          boolPtr(true),
+				BB:           boolPtr(true),
+				CHOP:         boolPtr(true),
+				StochRSI:     boolPtr(true),
+				Aroon:        boolPtr(true),
+				TDSequential: boolPtr(true),
+			},
+			Structure: StructureFeatureConfig{
+				Supertrend: boolPtr(true),
+				EMAContext: boolPtr(true),
+				RSIContext: boolPtr(true),
+				Patterns:   boolPtr(true),
+				SMC:        boolPtr(true),
+			},
+			Mechanics: MechanicsFeatureConfig{
+				OI:               boolPtr(true),
+				Funding:          boolPtr(true),
+				LongShort:        boolPtr(true),
+				FearGreed:        boolPtr(true),
+				Liquidations:     boolPtr(false),
+				CVD:              boolPtr(true),
+				Sentiment:        boolPtr(true),
+				FuturesSentiment: boolPtr(true),
+			},
+		},
 		Indicators: IndicatorConfig{
 			Engine:         IndicatorEngineTA,
 			EMAFast:        21,
@@ -86,6 +117,7 @@ func ApplyDecisionDefaults(cfg *SymbolConfig, defaults SymbolConfig) {
 		cfg.Consensus.ConfidenceThreshold = defaults.Consensus.ConfidenceThreshold
 	}
 	applyIndicatorDefaults(&cfg.Indicators, defaults.Indicators)
+	applyFeatureDefaults(&cfg.Features, defaults.Features, cfg.Require, cfg.Indicators.SkipSTC)
 	applyMemoryDefaults(&cfg.Memory, defaults.Memory)
 	applyCooldownDefaults(&cfg.Cooldown, defaults.Cooldown)
 }
@@ -139,6 +171,7 @@ func applySystemDefaults(cfg *SystemConfig) {
 	if cfg == nil {
 		return
 	}
+	cfg.Prompt.Locale = NormalizePromptLocale(cfg.Prompt.Locale)
 	if cfg.Database.MaxOpenConns == 0 {
 		cfg.Database.MaxOpenConns = 20
 	}
@@ -157,8 +190,107 @@ func applySystemDefaults(cfg *SystemConfig) {
 }
 
 func applyMemoryDefaults(cfg *MemoryConfig, defaults MemoryConfig) {
+	if cfg == nil {
+		return
+	}
 	if cfg.WorkingMemorySize == 0 {
 		cfg.WorkingMemorySize = defaults.WorkingMemorySize
+	}
+}
+
+func applyFeatureDefaults(cfg *SymbolFeatures, defaults SymbolFeatures, require SymbolRequire, skipSTC bool) {
+	if cfg == nil {
+		return
+	}
+	applyIndicatorFeatureDefaults(&cfg.Indicator, defaults.Indicator, skipSTC)
+	applyStructureFeatureDefaults(&cfg.Structure, defaults.Structure)
+	applyMechanicsFeatureDefaults(&cfg.Mechanics, defaults.Mechanics, require)
+}
+
+func applyIndicatorFeatureDefaults(cfg *IndicatorFeatureConfig, defaults IndicatorFeatureConfig, skipSTC bool) {
+	if cfg == nil {
+		return
+	}
+	if cfg.EMA == nil {
+		cfg.EMA = cloneBoolPtr(defaults.EMA)
+	}
+	if cfg.RSI == nil {
+		cfg.RSI = cloneBoolPtr(defaults.RSI)
+	}
+	if cfg.ATR == nil {
+		cfg.ATR = cloneBoolPtr(defaults.ATR)
+	}
+	if cfg.OBV == nil {
+		cfg.OBV = cloneBoolPtr(defaults.OBV)
+	}
+	if cfg.STC == nil {
+		cfg.STC = boolPtr(!skipSTC)
+	}
+	if cfg.BB == nil {
+		cfg.BB = cloneBoolPtr(defaults.BB)
+	}
+	if cfg.CHOP == nil {
+		cfg.CHOP = cloneBoolPtr(defaults.CHOP)
+	}
+	if cfg.StochRSI == nil {
+		cfg.StochRSI = cloneBoolPtr(defaults.StochRSI)
+	}
+	if cfg.Aroon == nil {
+		cfg.Aroon = cloneBoolPtr(defaults.Aroon)
+	}
+	if cfg.TDSequential == nil {
+		cfg.TDSequential = cloneBoolPtr(defaults.TDSequential)
+	}
+}
+
+func applyStructureFeatureDefaults(cfg *StructureFeatureConfig, defaults StructureFeatureConfig) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Supertrend == nil {
+		cfg.Supertrend = cloneBoolPtr(defaults.Supertrend)
+	}
+	if cfg.EMAContext == nil {
+		cfg.EMAContext = cloneBoolPtr(defaults.EMAContext)
+	}
+	if cfg.RSIContext == nil {
+		cfg.RSIContext = cloneBoolPtr(defaults.RSIContext)
+	}
+	if cfg.Patterns == nil {
+		cfg.Patterns = cloneBoolPtr(defaults.Patterns)
+	}
+	if cfg.SMC == nil {
+		cfg.SMC = cloneBoolPtr(defaults.SMC)
+	}
+}
+
+func applyMechanicsFeatureDefaults(cfg *MechanicsFeatureConfig, defaults MechanicsFeatureConfig, require SymbolRequire) {
+	if cfg == nil {
+		return
+	}
+	if cfg.OI == nil {
+		cfg.OI = boolPtr(require.OI)
+	}
+	if cfg.Funding == nil {
+		cfg.Funding = boolPtr(require.Funding)
+	}
+	if cfg.LongShort == nil {
+		cfg.LongShort = boolPtr(require.LongShort)
+	}
+	if cfg.FearGreed == nil {
+		cfg.FearGreed = boolPtr(require.FearGreed)
+	}
+	if cfg.Liquidations == nil {
+		cfg.Liquidations = boolPtr(require.Liquidations)
+	}
+	if cfg.CVD == nil {
+		cfg.CVD = cloneBoolPtr(defaults.CVD)
+	}
+	if cfg.Sentiment == nil {
+		cfg.Sentiment = cloneBoolPtr(defaults.Sentiment)
+	}
+	if cfg.FuturesSentiment == nil {
+		cfg.FuturesSentiment = cloneBoolPtr(defaults.FuturesSentiment)
 	}
 }
 

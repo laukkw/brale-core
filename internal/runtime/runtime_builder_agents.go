@@ -18,9 +18,10 @@ import (
 func buildSymbolAgents(ctx context.Context, sys config.SystemConfig, symbolCfg config.SymbolConfig, promptStore store.PromptRegistryStore) (decision.AgentService, decision.ProviderService, *llmapp.LLMRunTracker) {
 	cache := llmapp.NewLLMStageCache()
 	tracker := llmapp.NewLLMRunTracker()
-	builder, err := loadPromptBuilder(ctx, promptStore, zap.NewNop())
+	locale := config.NormalizePromptLocale(sys.Prompt.Locale)
+	builder, err := loadPromptBuilder(ctx, promptStore, locale, zap.NewNop())
 	if err != nil {
-		builder = fallbackPromptBuilder()
+		builder = fallbackPromptBuilder(locale)
 	}
 	agentRunner := &decision.AgentRunner{
 		Indicator: newLLMClient(sys, symbolCfg.LLM.Agent.Indicator),
@@ -39,13 +40,14 @@ func buildSymbolAgents(ctx context.Context, sys config.SystemConfig, symbolCfg c
 	return llmapp.LLMAgentService{Runner: agentRunner, Prompts: builder, Cache: cache, Tracker: tracker, DecisionInterval: decisionInterval}, llmapp.LLMProviderService{Runner: providerRunner, Prompts: builder, Cache: cache, Tracker: tracker}, tracker
 }
 
-func loadPromptBuilder(ctx context.Context, promptStore store.PromptRegistryStore, logger *zap.Logger) (llmapp.LLMPromptBuilder, error) {
+func loadPromptBuilder(ctx context.Context, promptStore store.PromptRegistryStore, locale string, logger *zap.Logger) (llmapp.LLMPromptBuilder, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	loader := promptreg.NewLoader(promptStore, config.PromptRegistryDefaults(), logger)
+	locale = config.NormalizePromptLocale(locale)
+	loader := promptreg.NewLoader(promptStore, config.PromptRegistryDefaultsForLocale(locale), logger)
 	resolve := func(role, stage string) (string, string, error) {
-		return loader.Resolve(ctx, role, stage)
+		return loader.Resolve(ctx, role, stage, locale)
 	}
 	agentIndicator, agentIndicatorVersion, err := resolve("agent", "indicator")
 	if err != nil {
@@ -115,11 +117,13 @@ func loadPromptBuilder(ctx context.Context, promptStore store.PromptRegistryStor
 		RiskTightenSystem:         riskTighten,
 		RiskTightenVersion:        riskTightenVersion,
 		UserFormat:                llmapp.UserPromptFormatBullet,
+		Locale:                    locale,
 	}, nil
 }
 
-func fallbackPromptBuilder() llmapp.LLMPromptBuilder {
-	defaults := config.DefaultPromptDefaults()
+func fallbackPromptBuilder(locale string) llmapp.LLMPromptBuilder {
+	locale = config.NormalizePromptLocale(locale)
+	defaults := config.DefaultPromptDefaultsForLocale(locale)
 	return llmapp.LLMPromptBuilder{
 		AgentIndicatorSystem:      defaults.AgentIndicator,
 		AgentIndicatorVersion:     "builtin",
@@ -144,6 +148,7 @@ func fallbackPromptBuilder() llmapp.LLMPromptBuilder {
 		RiskTightenSystem:         defaults.RiskTightenUpdate,
 		RiskTightenVersion:        "builtin",
 		UserFormat:                llmapp.UserPromptFormatBullet,
+		Locale:                    locale,
 	}
 }
 

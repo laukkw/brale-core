@@ -17,23 +17,30 @@ const indicatorCompressVersion = "indicator_compress_v1"
 // A fully zero-value struct means "use defaults"; partially specified options
 // are validated and missing fields are not auto-filled.
 type IndicatorCompressOptions struct {
-	EMAFast        int
-	EMAMid         int
-	EMASlow        int
-	RSIPeriod      int
-	ATRPeriod      int
-	STCFast        int
-	STCSlow        int
-	BBPeriod       int
-	BBMultiplier   float64
-	CHOPPeriod     int
-	StochRSIPeriod int
-	AroonPeriod    int
-	LastN          int
-	Pretty         bool
-	SkipEMA        bool
-	SkipRSI        bool
-	SkipSTC        bool
+	EMAFast          int
+	EMAMid           int
+	EMASlow          int
+	RSIPeriod        int
+	ATRPeriod        int
+	STCFast          int
+	STCSlow          int
+	BBPeriod         int
+	BBMultiplier     float64
+	CHOPPeriod       int
+	StochRSIPeriod   int
+	AroonPeriod      int
+	LastN            int
+	Pretty           bool
+	SkipEMA          bool
+	SkipRSI          bool
+	SkipATR          bool
+	SkipOBV          bool
+	SkipSTC          bool
+	SkipBB           bool
+	SkipCHOP         bool
+	SkipStochRSI     bool
+	SkipAroon        bool
+	SkipTDSequential bool
 }
 
 func DefaultIndicatorCompressOptions() IndicatorCompressOptions {
@@ -256,7 +263,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 				data.RSI = rsi
 			}
 			// StochRSI is computed from the RSI series
-			if opts.StochRSIPeriod > 0 && len(rsiSeries) >= opts.StochRSIPeriod {
+			if !opts.SkipStochRSI && opts.StochRSIPeriod > 0 && len(rsiSeries) >= opts.StochRSIPeriod {
 				stochSeries, err := computer.ComputeStochRSI(rsiSeries, opts.StochRSIPeriod)
 				if err != nil {
 					return indicatorData{}, err
@@ -267,7 +274,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 			}
 		}
 	}
-	if opts.ATRPeriod > 0 && len(closes) >= config.ATRRequiredBars(opts.ATRPeriod) {
+	if !opts.SkipATR && opts.ATRPeriod > 0 && len(closes) >= config.ATRRequiredBars(opts.ATRPeriod) {
 		series, err := computer.ComputeATR(highs, lows, closes, opts.ATRPeriod)
 		if err != nil {
 			return indicatorData{}, err
@@ -276,12 +283,14 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 			data.ATR = atr
 		}
 	}
-	obvSeries, err := computer.ComputeOBV(closes, volumes)
-	if err != nil {
-		return indicatorData{}, err
-	}
-	if obv := buildOBVSnapshot(obvSeries); obv != nil {
-		data.OBV = obv
+	if !opts.SkipOBV {
+		obvSeries, err := computer.ComputeOBV(closes, volumes)
+		if err != nil {
+			return indicatorData{}, err
+		}
+		if obv := buildOBVSnapshot(obvSeries); obv != nil {
+			data.OBV = obv
+		}
 	}
 	if !opts.SkipSTC {
 		requiredBars := config.STCRequiredBars(opts.STCFast, opts.STCSlow)
@@ -302,7 +311,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 		}
 	}
 	// Bollinger Bands
-	if opts.BBPeriod > 0 && len(closes) >= config.BBRequiredBars(opts.BBPeriod) {
+	if !opts.SkipBB && opts.BBPeriod > 0 && len(closes) >= config.BBRequiredBars(opts.BBPeriod) {
 		upper, middle, lower, err := computer.ComputeBB(closes, opts.BBPeriod, opts.BBMultiplier, opts.BBMultiplier)
 		if err != nil {
 			return indicatorData{}, err
@@ -312,7 +321,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 		}
 	}
 	// Choppiness Index
-	if opts.CHOPPeriod > 1 && len(closes) >= config.CHOPRequiredBars(opts.CHOPPeriod) {
+	if !opts.SkipCHOP && opts.CHOPPeriod > 1 && len(closes) >= config.CHOPRequiredBars(opts.CHOPPeriod) {
 		chopSeries, err := computer.ComputeCHOP(highs, lows, closes, opts.CHOPPeriod)
 		if err != nil {
 			return indicatorData{}, err
@@ -322,7 +331,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 		}
 	}
 	// Aroon
-	if opts.AroonPeriod > 0 && len(highs) >= config.AroonRequiredBars(opts.AroonPeriod) {
+	if !opts.SkipAroon && opts.AroonPeriod > 0 && len(highs) >= config.AroonRequiredBars(opts.AroonPeriod) {
 		aroonUp, aroonDown, err := computer.ComputeAroon(highs, lows, opts.AroonPeriod)
 		if err != nil {
 			return indicatorData{}, err
@@ -332,7 +341,7 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 		}
 	}
 	// TD Sequential
-	if len(closes) > 4 {
+	if !opts.SkipTDSequential && len(closes) > 4 {
 		buySetup, sellSetup := computeTDSequential(closes)
 		if snap := buildTDSequentialSnapshot(buySetup, sellSetup); snap != nil {
 			data.TDSequential = snap
@@ -344,6 +353,9 @@ func buildIndicatorData(closes, highs, lows, volumes []float64, lastClose float6
 func resolveIndicatorCompressOptions(opts IndicatorCompressOptions) (IndicatorCompressOptions, error) {
 	if opts == (IndicatorCompressOptions{}) {
 		return DefaultIndicatorCompressOptions(), nil
+	}
+	if opts.SkipRSI {
+		opts.SkipStochRSI = true
 	}
 	if err := ValidateIndicatorCompressOptions(opts); err != nil {
 		return IndicatorCompressOptions{}, err
@@ -371,11 +383,19 @@ func ValidateIndicatorCompressOptions(opts IndicatorCompressOptions) error {
 		if opts.RSIPeriod <= 0 {
 			return fmt.Errorf("indicator options rsi_period must be > 0 when RSI is enabled")
 		}
+	}
+	if opts.SkipRSI {
+		opts.SkipStochRSI = true
+	}
+	if !opts.SkipStochRSI {
+		if opts.SkipRSI {
+			return fmt.Errorf("indicator options stoch_rsi requires RSI to be enabled")
+		}
 		if opts.StochRSIPeriod <= 0 {
 			return fmt.Errorf("indicator options stoch_rsi_period must be > 0 when RSI is enabled")
 		}
 	}
-	if opts.ATRPeriod <= 0 {
+	if !opts.SkipATR && opts.ATRPeriod <= 0 {
 		return fmt.Errorf("indicator options atr_period must be > 0")
 	}
 	if !opts.SkipSTC {
@@ -389,16 +409,16 @@ func ValidateIndicatorCompressOptions(opts IndicatorCompressOptions) error {
 			return fmt.Errorf("indicator options stc_fast must be < stc_slow")
 		}
 	}
-	if opts.BBPeriod <= 1 {
+	if !opts.SkipBB && opts.BBPeriod <= 1 {
 		return fmt.Errorf("indicator options bb_period must be > 1")
 	}
-	if opts.BBMultiplier <= 0 {
+	if !opts.SkipBB && opts.BBMultiplier <= 0 {
 		return fmt.Errorf("indicator options bb_multiplier must be > 0")
 	}
-	if opts.CHOPPeriod <= 1 {
+	if !opts.SkipCHOP && opts.CHOPPeriod <= 1 {
 		return fmt.Errorf("indicator options chop_period must be > 1")
 	}
-	if opts.AroonPeriod <= 0 {
+	if !opts.SkipAroon && opts.AroonPeriod <= 0 {
 		return fmt.Errorf("indicator options aroon_period must be > 0")
 	}
 	if opts.LastN <= 0 {

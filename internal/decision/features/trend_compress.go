@@ -37,6 +37,9 @@ type TrendCompressOptions struct {
 	Pretty               bool
 	IncludeCurrentRSI    bool
 	IncludeStructureRSI  bool
+	EmitEMAContext       bool
+	EmitPatterns         bool
+	EmitSMC              bool
 }
 
 const (
@@ -71,6 +74,9 @@ func DefaultTrendCompressOptions() TrendCompressOptions {
 		Pretty:               false,
 		IncludeCurrentRSI:    true,
 		IncludeStructureRSI:  true,
+		EmitEMAContext:       true,
+		EmitPatterns:         true,
+		EmitSMC:              true,
 	}
 }
 
@@ -86,7 +92,7 @@ type TrendCompressedInput struct {
 	BreakSummary        *TrendBreakSummary        `json:"break_summary,omitempty"`
 	RawCandles          []TrendRawCandleOptional  `json:"raw_candles,omitempty"`
 	Pattern             *evidence.Result          `json:"pattern,omitempty"`
-	SMC                 TrendSMC                  `json:"smc"`
+	SMC                 *TrendSMC                 `json:"smc,omitempty"`
 }
 
 type TrendCompressedMeta struct {
@@ -281,7 +287,7 @@ func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []sn
 	}
 	gc.NormalizedSlope = roundFloat(normalizedSlope(closes), 4)
 	gc.SlopeState = trendSlopeState(gc.NormalizedSlope)
-	if opts.EMA20Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA20Period) {
+	if opts.EmitEMAContext && opts.EMA20Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA20Period) {
 		series, err := computer.ComputeEMA(closes, opts.EMA20Period)
 		if err != nil {
 			return TrendCompressedInput{}, err
@@ -291,7 +297,7 @@ func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []sn
 			gc.EMA20 = &val
 		}
 	}
-	if opts.EMA50Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA50Period) {
+	if opts.EmitEMAContext && opts.EMA50Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA50Period) {
 		series, err := computer.ComputeEMA(closes, opts.EMA50Period)
 		if err != nil {
 			return TrendCompressedInput{}, err
@@ -301,7 +307,7 @@ func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []sn
 			gc.EMA50 = &val
 		}
 	}
-	if opts.EMA200Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA200Period) {
+	if opts.EmitEMAContext && opts.EMA200Period > 0 && len(closes) >= config.EMARequiredBars(opts.EMA200Period) {
 		series, err := computer.ComputeEMA(closes, opts.EMA200Period)
 		if err != nil {
 			return TrendCompressedInput{}, err
@@ -335,19 +341,24 @@ func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []sn
 	candidates := buildStructureCandidates(candles, highs, lows, atrSeries, gc, structurePoints, bbUpper, bbLower, opts)
 	recentCandles := buildRecentCandles(candles, rsiSeries, opts)
 
-	patternEvidence := evidence.Combine(
-		geometry.Detect(geometryCandles, geometry.DefaultOptions()),
-		cdl.Detect(patternCandles, cdl.DefaultOptions()),
-		evidence.Options{
-			MinScore:    opts.PatternMinScore,
-			MaxDetected: opts.PatternMaxDetected,
-		},
-	)
 	var patternRef *evidence.Result
-	if len(patternEvidence.Detected) > 0 {
-		patternRef = &patternEvidence
+	if opts.EmitPatterns {
+		patternEvidence := evidence.Combine(
+			geometry.Detect(geometryCandles, geometry.DefaultOptions()),
+			cdl.Detect(patternCandles, cdl.DefaultOptions()),
+			evidence.Options{
+				MinScore:    opts.PatternMinScore,
+				MaxDetected: opts.PatternMaxDetected,
+			},
+		)
+		if len(patternEvidence.Detected) > 0 {
+			patternRef = &patternEvidence
+		}
 	}
-	smc := buildTrendSMC(candles, closes)
+	var smc *TrendSMC
+	if opts.EmitSMC {
+		smc = buildTrendSMC(candles, closes)
+	}
 	keyLevels := buildTrendKeyLevels(structurePoints)
 	breakEvents, breakSummary := buildTrendBreakSummary(closes, keyLevels)
 
@@ -368,6 +379,9 @@ func BuildTrendCompressedInputWithComputer(symbol, interval string, candles []sn
 
 func normalizeTrendCompressOptions(opts TrendCompressOptions) TrendCompressOptions {
 	def := DefaultTrendCompressOptions()
+	if opts == (TrendCompressOptions{}) {
+		return def
+	}
 	if opts.FractalSpan <= 0 {
 		opts.FractalSpan = def.FractalSpan
 	}
@@ -413,10 +427,6 @@ func normalizeTrendCompressOptions(opts TrendCompressOptions) TrendCompressOptio
 	if opts.PatternMaxDetected <= 0 {
 		opts.PatternMaxDetected = def.PatternMaxDetected
 	}
-	if !opts.IncludeCurrentRSI && !opts.IncludeStructureRSI {
-		opts.IncludeCurrentRSI = def.IncludeCurrentRSI
-		opts.IncludeStructureRSI = def.IncludeStructureRSI
-	}
 	return opts
 }
 
@@ -448,7 +458,7 @@ func buildSuperTrendSnapshot(interval string, stSeries, closes []float64) *Trend
 	return nil
 }
 
-func buildTrendSMC(candles []snapshot.Candle, closes []float64) TrendSMC {
+func buildTrendSMC(candles []snapshot.Candle, closes []float64) *TrendSMC {
 	bias := trendBiasBearish
 	if len(closes) > 0 {
 		last := closes[len(closes)-1]
@@ -456,7 +466,7 @@ func buildTrendSMC(candles []snapshot.Candle, closes []float64) TrendSMC {
 			bias = trendBiasBullish
 		}
 	}
-	return TrendSMC{
+	return &TrendSMC{
 		OrderBlock: detectOrderBlock(candles, bias),
 		FVG:        detectFVG(candles),
 	}

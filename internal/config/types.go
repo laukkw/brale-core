@@ -21,7 +21,12 @@ type SystemConfig struct {
 	Scheduler               SchedulerConfig           `mapstructure:"scheduler"`
 	Reconcile               ReconcileConfig           `mapstructure:"reconcile"`
 	RiskGuard               RiskGuardConfig           `mapstructure:"risk_guard"`
+	Prompt                  PromptConfig              `mapstructure:"prompt"`
 	EnableScheduledDecision *bool                     `mapstructure:"enable_scheduled_decision"`
+}
+
+type PromptConfig struct {
+	Locale string `mapstructure:"locale"`
 }
 
 type DatabaseConfig struct {
@@ -128,11 +133,50 @@ type SymbolConfig struct {
 	KlineLimit int             `mapstructure:"kline_limit"`
 	Agent      AgentConfig     `mapstructure:"agent"`
 	Require    SymbolRequire   `mapstructure:"require"`
+	Features   SymbolFeatures  `mapstructure:"features"`
 	Indicators IndicatorConfig `mapstructure:"indicators"`
 	Memory     MemoryConfig    `mapstructure:"memory"`
 	Consensus  ConsensusConfig `mapstructure:"consensus"`
 	Cooldown   CooldownConfig  `mapstructure:"cooldown"`
 	LLM        SymbolLLMConfig `mapstructure:"llm"`
+}
+
+type SymbolFeatures struct {
+	Indicator IndicatorFeatureConfig `mapstructure:"indicator"`
+	Structure StructureFeatureConfig `mapstructure:"structure"`
+	Mechanics MechanicsFeatureConfig `mapstructure:"mechanics"`
+}
+
+type IndicatorFeatureConfig struct {
+	EMA          *bool `mapstructure:"ema"`
+	RSI          *bool `mapstructure:"rsi"`
+	ATR          *bool `mapstructure:"atr"`
+	OBV          *bool `mapstructure:"obv"`
+	STC          *bool `mapstructure:"stc"`
+	BB           *bool `mapstructure:"bb"`
+	CHOP         *bool `mapstructure:"chop"`
+	StochRSI     *bool `mapstructure:"stoch_rsi"`
+	Aroon        *bool `mapstructure:"aroon"`
+	TDSequential *bool `mapstructure:"td_sequential"`
+}
+
+type StructureFeatureConfig struct {
+	Supertrend *bool `mapstructure:"supertrend"`
+	EMAContext *bool `mapstructure:"ema_context"`
+	RSIContext *bool `mapstructure:"rsi_context"`
+	Patterns   *bool `mapstructure:"patterns"`
+	SMC        *bool `mapstructure:"smc"`
+}
+
+type MechanicsFeatureConfig struct {
+	OI               *bool `mapstructure:"oi"`
+	Funding          *bool `mapstructure:"funding"`
+	LongShort        *bool `mapstructure:"long_short"`
+	FearGreed        *bool `mapstructure:"fear_greed"`
+	Liquidations     *bool `mapstructure:"liquidations"`
+	CVD              *bool `mapstructure:"cvd"`
+	Sentiment        *bool `mapstructure:"sentiment"`
+	FuturesSentiment *bool `mapstructure:"futures_sentiment"`
 }
 
 type ConsensusConfig struct {

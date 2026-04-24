@@ -376,7 +376,7 @@ func (s *stubStore) ListLLMRounds(ctx context.Context, symbol string, limit int)
 func (s *stubStore) SavePromptEntry(ctx context.Context, rec *store.PromptRegistryEntry) error {
 	return nil
 }
-func (s *stubStore) FindActivePrompt(ctx context.Context, role, stage string) (store.PromptRegistryEntry, bool, error) {
+func (s *stubStore) FindActivePrompt(ctx context.Context, role, stage, locale string) (store.PromptRegistryEntry, bool, error) {
 	return store.PromptRegistryEntry{}, false, nil
 }
 func (s *stubStore) ListPromptEntries(ctx context.Context, role string, activeOnly bool) ([]store.PromptRegistryEntry, error) {

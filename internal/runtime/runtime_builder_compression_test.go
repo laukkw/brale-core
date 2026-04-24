@@ -52,16 +52,24 @@ func TestBuildCompressorUsesConfiguredIndicatorEngine(t *testing.T) {
 	if !ok {
 		t.Fatalf("compressor=%T want *decision.FeatureCompressor", compressor)
 	}
-	indicatorBuilder, ok := base.Indicators.(decision.DefaultIndicatorBuilder)
+	conditionalIndicator, ok := base.Indicators.(decision.ConditionalIndicatorBuilder)
 	if !ok {
 		t.Fatalf("indicator builder=%T", base.Indicators)
+	}
+	indicatorBuilder, ok := conditionalIndicator.EnabledBuilder.(decision.DefaultIndicatorBuilder)
+	if !ok {
+		t.Fatalf("indicator enabled builder=%T", conditionalIndicator.EnabledBuilder)
 	}
 	if _, ok := indicatorBuilder.Computer.(decision.ReferenceComputer); !ok {
 		t.Fatalf("indicator computer=%T", indicatorBuilder.Computer)
 	}
-	trendBuilder, ok := base.Trends.(decision.IntervalTrendBuilder)
+	conditionalTrend, ok := base.Trends.(decision.ConditionalTrendBuilder)
 	if !ok {
 		t.Fatalf("trend builder=%T", base.Trends)
+	}
+	trendBuilder, ok := conditionalTrend.EnabledBuilder.(decision.IntervalTrendBuilder)
+	if !ok {
+		t.Fatalf("trend enabled builder=%T", conditionalTrend.EnabledBuilder)
 	}
 	if _, ok := trendBuilder.Computer.(decision.ReferenceComputer); !ok {
 		t.Fatalf("trend computer=%T", trendBuilder.Computer)

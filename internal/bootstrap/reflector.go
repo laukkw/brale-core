@@ -34,8 +34,9 @@ func (r *symbolPositionReflector) ReflectOnClose(ctx context.Context, pos store.
 
 func buildPositionReflector(sys config.SystemConfig, symbolIndexPath string, index config.SymbolIndexConfig, st store.Store, tradeFinder execution.TradeFinder) (reconcile.PositionReflector, error) {
 	bySymbol := make(map[string]*memory.ReconcileReflectorAdapter)
-	loader := promptreg.NewLoader(st, config.PromptRegistryDefaults(), zap.NewNop())
-	systemPrompt, promptVersion, err := loader.Resolve(context.Background(), "reflector", "analysis")
+	locale := config.NormalizePromptLocale(sys.Prompt.Locale)
+	loader := promptreg.NewLoader(st, config.PromptRegistryDefaultsForLocale(locale), zap.NewNop())
+	systemPrompt, promptVersion, err := loader.Resolve(context.Background(), "reflector", "analysis", locale)
 	if err != nil {
 		return nil, fmt.Errorf("resolve reflector prompt: %w", err)
 	}

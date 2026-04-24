@@ -35,6 +35,7 @@ type sanitizedSystemConfig struct {
 	LogFormat               string                       `json:"log_format,omitempty"`
 	LogLevel                string                       `json:"log_level,omitempty"`
 	LogPath                 string                       `json:"log_path,omitempty"`
+	PromptLocale            string                       `json:"prompt_locale,omitempty"`
 	Database                config.DatabaseConfig        `json:"database"`
 	ExecutionSystem         string                       `json:"execution_system,omitempty"`
 	ExecEndpoint            string                       `json:"exec_endpoint,omitempty"`
@@ -158,6 +159,7 @@ func (s *LocalConfigSource) LoadIndicatorSpec(symbol string) (IndicatorSpec, err
 	if err != nil {
 		return IndicatorSpec{}, fmt.Errorf("resolve agent enabled: %w", err)
 	}
+	plan := config.ResolveFeaturePlan(*view.Symbol)
 	opts := features.IndicatorCompressOptions{
 		EMAFast:        view.Symbol.Indicators.EMAFast,
 		EMAMid:         view.Symbol.Indicators.EMAMid,
@@ -173,12 +175,29 @@ func (s *LocalConfigSource) LoadIndicatorSpec(symbol string) (IndicatorSpec, err
 		AroonPeriod:    view.Symbol.Indicators.AroonPeriod,
 		LastN:          view.Symbol.Indicators.LastN,
 		Pretty:         view.Symbol.Indicators.Pretty,
-		SkipSTC:        view.Symbol.Indicators.SkipSTC,
 	}
 	if !enabled.Indicator {
 		opts.SkipEMA = true
 		opts.SkipRSI = true
+		opts.SkipATR = true
+		opts.SkipOBV = true
 		opts.SkipSTC = true
+		opts.SkipBB = true
+		opts.SkipCHOP = true
+		opts.SkipStochRSI = true
+		opts.SkipAroon = true
+		opts.SkipTDSequential = true
+	} else {
+		opts.SkipEMA = !plan.Indicator.EMA
+		opts.SkipRSI = !plan.Indicator.RSI
+		opts.SkipATR = !plan.Indicator.ATR
+		opts.SkipOBV = !plan.Indicator.OBV
+		opts.SkipSTC = view.Symbol.Indicators.SkipSTC || !plan.Indicator.STC
+		opts.SkipBB = !plan.Indicator.BB
+		opts.SkipCHOP = !plan.Indicator.CHOP
+		opts.SkipStochRSI = !plan.Indicator.StochRSI
+		opts.SkipAroon = !plan.Indicator.Aroon
+		opts.SkipTDSequential = !plan.Indicator.TDSequential
 	}
 	return IndicatorSpec{
 		KlineLimit: view.Symbol.KlineLimit,
@@ -192,6 +211,7 @@ func sanitizeSystemConfig(cfg config.SystemConfig) sanitizedSystemConfig {
 		LogFormat:               cfg.LogFormat,
 		LogLevel:                cfg.LogLevel,
 		LogPath:                 cfg.LogPath,
+		PromptLocale:            config.NormalizePromptLocale(cfg.Prompt.Locale),
 		Database:                cfg.Database,
 		ExecutionSystem:         cfg.ExecutionSystem,
 		ExecEndpoint:            cfg.ExecEndpoint,
