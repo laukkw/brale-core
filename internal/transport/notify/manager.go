@@ -24,7 +24,18 @@ type Manager struct {
 	senders   []Sender
 	dedupe    *dedupeGuard
 	closeAgg  *closeNoticeAggregator
+	closeWin  time.Duration
 	channel   string
+	scoped    *scopedNotifierCache
+}
+
+type scopedNotifierCache struct {
+	mu    sync.Mutex
+	items map[string]*Manager
+}
+
+func newScopedNotifierCache() *scopedNotifierCache {
+	return &scopedNotifierCache{items: make(map[string]*Manager)}
 }
 
 type DecisionImageRenderer interface {
@@ -194,17 +205,21 @@ func NewManager(cfg NotificationConfig, formatter decisionfmt.Formatter) (Notifi
 		renderer:  cardimage.NewOGRenderer(),
 		senders:   senders,
 		dedupe:    newDedupeGuard(defaultNotifyDedupeTTL),
+		closeWin:  defaultCloseAggregationWindow,
+		scoped:    newScopedNotifierCache(),
 	}
-	mgr.closeAgg = newCloseNoticeAggregator(defaultCloseAggregationWindow, mgr.sendAggregatedClose)
-	return mgr, nil
+	mgr.closeAgg = newCloseNoticeAggregator(mgr.closeWin, mgr.sendAggregatedClose)
+	return &mgr, nil
 }
 
 func NewTestManager(senders ...Sender) Manager {
 	mgr := Manager{
-		senders: append([]Sender(nil), senders...),
-		dedupe:  newDedupeGuard(defaultNotifyDedupeTTL),
+		senders:  append([]Sender(nil), senders...),
+		dedupe:   newDedupeGuard(defaultNotifyDedupeTTL),
+		closeWin: 25 * time.Millisecond,
+		scoped:   newScopedNotifierCache(),
 	}
-	mgr.closeAgg = newCloseNoticeAggregator(25*time.Millisecond, mgr.sendAggregatedClose)
+	mgr.closeAgg = newCloseNoticeAggregator(mgr.closeWin, mgr.sendAggregatedClose)
 	return mgr
 }
 
@@ -231,21 +246,38 @@ func (m Manager) DeliveryChannels() []string {
 }
 
 // NotifierForChannel scopes delivery to one outbound channel and scopes dedupe to that channel.
-func (m Manager) NotifierForChannel(channel string) (Notifier, bool) {
+func (m *Manager) NotifierForChannel(channel string) (Notifier, bool) {
+	if m == nil {
+		return nil, false
+	}
 	channel = normalizeNotifyChannel(channel)
 	if channel == "" {
 		return nil, false
+	}
+	if m.scoped == nil {
+		m.scoped = newScopedNotifierCache()
 	}
 	for idx, sender := range m.senders {
 		if senderChannelID(sender, idx) != channel {
 			continue
 		}
-		scoped := m
-		scoped.senders = []Sender{sender}
-		scoped.channel = channel
-		// Async deliver jobs are already persisted per channel. The in-memory close
-		// aggregator would otherwise acknowledge the job before an outbound send.
-		scoped.closeAgg = nil
+		m.scoped.mu.Lock()
+		scoped, ok := m.scoped.items[channel]
+		if !ok {
+			win := m.closeWin
+			if win <= 0 {
+				win = defaultCloseAggregationWindow
+			}
+			scopedCopy := *m
+			scopedCopy.senders = []Sender{sender}
+			scopedCopy.channel = channel
+			scopedCopy.scoped = nil
+			scopedCopy.closeAgg = nil
+			scoped = &scopedCopy
+			scoped.closeAgg = newCloseNoticeAggregator(win, scoped.sendAggregatedClose)
+			m.scoped.items[channel] = scoped
+		}
+		m.scoped.mu.Unlock()
 		return scoped, true
 	}
 	return nil, false
@@ -645,10 +677,7 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 	if len(notice.TakeProfits) > 0 {
 		tpText = formatFloatSlice(notice.TakeProfits)
 	}
-	reasonText := strings.TrimSpace(notice.Reason)
-	if reasonText == "" {
-		reasonText = "-"
-	}
+	reasonText := visibleCloseReason(notice.Reason)
 	riskText := "-"
 	if notice.RiskPct > 0 {
 		riskText = formatPercent(notice.RiskPct)
@@ -675,11 +704,13 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 		noticeLine("intent_kind", intentKindText),
 		noticeLine("entry", entryText),
 		noticeLine("trigger_price", triggerText),
-		noticeLine("stop", stopText),
-		noticeLine("take_profits", tpText),
-		noticeLine("reason", reasonText),
+		noticeLine("planned_stop", stopText),
+		noticeLine("planned_take_profits", tpText),
 		noticeLine("risk_pct", riskText),
 		noticeLine("leverage", leverageText),
+	}
+	if reasonText != "" {
+		lines = append(lines, noticeLine("reason", reasonText))
 	}
 	if posID != "" {
 		lines = append(lines, noticeLine("position_id", posID))
@@ -723,10 +754,7 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 	if len(notice.TakeProfits) > 0 {
 		tpText = formatFloatSlice(notice.TakeProfits)
 	}
-	reasonText := strings.TrimSpace(notice.Reason)
-	if reasonText == "" {
-		reasonText = "-"
-	}
+	reasonText := visibleCloseReason(notice.Reason)
 	riskText := "-"
 	if notice.RiskPct > 0 {
 		riskText = formatPercent(notice.RiskPct)
@@ -751,11 +779,13 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 		noticeLine("exit", exitText),
 		noticeLine(pnlLabel, pnlText),
 		noticeLine(pnlPctLabel, pnlPctText),
-		noticeLine("stop", stopText),
-		noticeLine("take_profits", tpText),
-		noticeLine("reason", reasonText),
+		noticeLine("planned_stop", stopText),
+		noticeLine("planned_take_profits", tpText),
 		noticeLine("risk_pct", riskText),
 		noticeLine("leverage", leverageText),
+	}
+	if reasonText != "" {
+		lines = append(lines, noticeLine("reason", reasonText))
 	}
 	if posID != "" {
 		lines = append(lines, noticeLine("position_id", posID))
@@ -908,14 +938,7 @@ func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialC
 	if notice.IsShort {
 		direction = "short"
 	}
-	exitReason := strings.TrimSpace(notice.ExitReason)
-	if exitReason == "" {
-		exitReason = "-"
-	}
-	exitType := strings.TrimSpace(notice.ExitType)
-	if exitType == "" {
-		exitType = "-"
-	}
+	reasonText := visibleCloseReason(notice.ExitReason)
 	lines := []string{
 		noticeLine("pair", pair),
 		noticeLine("direction", direction),
@@ -923,13 +946,14 @@ func (m Manager) SendTradePartialClose(ctx context.Context, notice TradePartialC
 		noticeLine("amount", formatFloat(notice.Amount)),
 		noticeLine("stake_amount", formatFloat(notice.StakeAmount)),
 		fmt.Sprintf("▸ %s：%s (%s)", Label("realized_profit"), formatFloat(notice.RealizedProfit), formatPercent(notice.RealizedProfitRatio)),
-		noticeLine("exit_reason", exitReason),
-		noticeLine("exit_type", exitType),
+	}
+	if reasonText != "" {
+		lines = append(lines, noticeLine("reason", reasonText))
 	}
 	title := fmt.Sprintf("[PARTIAL][%s] %s", pair, strings.ToUpper(direction))
 	body := buildNoticeBody("🔄 部分平仓", lines)
 	msg := Message{Title: title, Markdown: body, Plain: body}
-	key := fmt.Sprintf("trade_partial_close:%s:%d:%s:%s:%s:%s", pair, notice.TradeID, exitReason, exitType, formatFloat(notice.CloseRate), formatFloat(notice.Amount))
+	key := fmt.Sprintf("trade_partial_close:%s:%d:%s:%s:%s", pair, notice.TradeID, strings.TrimSpace(notice.ExitReason), formatFloat(notice.CloseRate), formatFloat(notice.Amount))
 	return m.sendWithKey(ctx, msg, key)
 }
 
@@ -948,14 +972,7 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 		return nil
 	}
 
-	exitReason := strings.TrimSpace(notice.ExitReason)
-	if exitReason == "" {
-		exitReason = "-"
-	}
-	exitType := strings.TrimSpace(notice.ExitType)
-	if exitType == "" {
-		exitType = "-"
-	}
+	reasonText := visibleCloseReason(notice.ExitReason)
 	durationText := "-"
 	if notice.TradeDurationS > 0 {
 		durationText = formatDuration(notice.TradeDurationS)
@@ -967,9 +984,10 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 		noticeLine("amount", formatFloat(notice.Amount)),
 		noticeLine("leverage", formatFloat(notice.Leverage)),
 		fmt.Sprintf("▸ %s：%s (%s)", Label("profit_abs"), formatFloat(notice.ProfitAbs), formatPercent(notice.ProfitPct)),
-		noticeLine("exit_reason", exitReason),
-		noticeLine("exit_type", exitType),
 		fmt.Sprintf("▸ 持仓时长：%s", durationText),
+	}
+	if reasonText != "" {
+		lines = append(lines, noticeLine("reason", reasonText))
 	}
 	title := fmt.Sprintf("[CLOSED][%s] %s", pair, strings.ToUpper(direction))
 	body := buildNoticeBody("📉 全部平仓完成", lines)
@@ -1054,18 +1072,15 @@ func (m Manager) sendAggregatedClose(ctx context.Context, aggregated aggregatedC
 		takeProfits = append(takeProfits, aggregated.PositionClose.TakeProfits...)
 	}
 
-	reason := "-"
-	if aggregated.PositionClose != nil && strings.TrimSpace(aggregated.PositionClose.Reason) != "" {
-		reason = strings.TrimSpace(aggregated.PositionClose.Reason)
-	} else if aggregated.CloseSummary != nil && strings.TrimSpace(aggregated.CloseSummary.Reason) != "" {
-		reason = strings.TrimSpace(aggregated.CloseSummary.Reason)
-	} else if aggregated.TradeClose != nil && strings.TrimSpace(aggregated.TradeClose.ExitReason) != "" {
-		reason = strings.TrimSpace(aggregated.TradeClose.ExitReason)
-	}
+	reason := firstVisibleCloseReason(
+		positionCloseReason(aggregated.PositionClose),
+		positionCloseSummaryReason(aggregated.CloseSummary),
+		exitReasonValue(aggregated.TradeClose),
+	)
 
-	exitType := "-"
-	if aggregated.TradeClose != nil && strings.TrimSpace(aggregated.TradeClose.ExitType) != "" {
-		exitType = strings.TrimSpace(aggregated.TradeClose.ExitType)
+	exitLabel := "exit"
+	if aggregated.TradeClose != nil {
+		exitLabel = "close_rate"
 	}
 
 	leverage := 0.0
@@ -1102,19 +1117,18 @@ func (m Manager) sendAggregatedClose(ctx context.Context, aggregated aggregatedC
 		noticeLine("direction", direction),
 		noticeLine("qty", formatFloat(qty)),
 		noticeLine("entry", formatFloat(entryPrice)),
-		noticeLine("exit", formatFloat(exitPrice)),
+		noticeLine(exitLabel, formatFloat(exitPrice)),
 		noticeLine(pnlLabel, formatFloat(pnlAmount)),
 		noticeLine(pnlPctLabel, formatPercent(pnlPct)),
-		noticeLine("reason", reason),
+	}
+	if reason != "" {
+		lines = append(lines, noticeLine("reason", reason))
 	}
 	if stopPrice > 0 {
-		lines = append(lines, noticeLine("stop", formatFloat(stopPrice)))
+		lines = append(lines, noticeLine("planned_stop", formatFloat(stopPrice)))
 	}
 	if len(takeProfits) > 0 {
-		lines = append(lines, noticeLine("take_profits", formatFloatSlice(takeProfits)))
-	}
-	if exitType != "-" {
-		lines = append(lines, noticeLine("exit_type", exitType))
+		lines = append(lines, noticeLine("planned_take_profits", formatFloatSlice(takeProfits)))
 	}
 	if tradeDurationS > 0 {
 		lines = append(lines, fmt.Sprintf("▸ 持仓时长：%s", formatDuration(tradeDurationS)))
@@ -1207,6 +1221,46 @@ func buildNoticeBody(header string, lines []string) string {
 	}
 	sb.WriteString("\n━━━━━━━━━━━━━━━━━━━━")
 	return sb.String()
+}
+
+func visibleCloseReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	switch strings.ToLower(reason) {
+	case "", "-", "external_missing", "force_exit":
+		return ""
+	default:
+		return reason
+	}
+}
+
+func firstVisibleCloseReason(values ...string) string {
+	for _, value := range values {
+		if reason := visibleCloseReason(value); reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+func positionCloseReason(notice *PositionCloseNotice) string {
+	if notice == nil {
+		return ""
+	}
+	return notice.Reason
+}
+
+func positionCloseSummaryReason(notice *PositionCloseSummaryNotice) string {
+	if notice == nil {
+		return ""
+	}
+	return notice.Reason
+}
+
+func exitReasonValue(notice *TradeCloseSummaryNotice) string {
+	if notice == nil {
+		return ""
+	}
+	return notice.ExitReason
 }
 
 func noticeLine(key string, value string) string {

@@ -24,6 +24,7 @@ type PositionReflector interface {
 type ReconcileService struct {
 	Store              store.Store
 	Executor           execution.Executor
+	TradeFinder        execution.TradeFinder
 	OrderStatusFetcher OrderStatusFetcher
 	PriceSource        market.PriceSource
 	Now                func() int64

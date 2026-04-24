@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ func (s *ReconcileService) handleExternalMissing(ctx context.Context, pos store.
 	if s.recheckExternalPosition(ctx, pos, logger) {
 		return nil
 	}
+	closedTrade, tradeFound := s.lookupClosedTrade(ctx, pos, logger)
 	var closedPos store.PositionRecord
 	var summary externalMissingSummary
 	var notice *PositionCloseSummaryNotice
@@ -53,7 +55,7 @@ func (s *ReconcileService) handleExternalMissing(ctx context.Context, pos store.
 			return err
 		}
 		closedPos = nextPos
-		summary = s.buildExternalMissingSummary(runCtx, closedPos)
+		summary = s.buildExternalMissingSummary(runCtx, closedPos, closedTrade, tradeFound)
 		logExternalMissingSummary(runCtx, closedPos, summary)
 		if s.Notifier == nil {
 			return nil
@@ -66,11 +68,11 @@ func (s *ReconcileService) handleExternalMissing(ctx context.Context, pos store.
 			ExitPrice:          summary.ExitPrice,
 			StopPrice:          summary.StopPrice,
 			TakeProfits:        summary.TakeProfits,
-			Reason:             "external_missing",
+			Reason:             summary.Reason,
 			RiskPct:            closedPos.RiskPct,
 			Leverage:           closedPos.Leverage,
-			PnLAmount:          summary.GrossPnL,
-			PnLPct:             summary.GrossPnLPct,
+			PnLAmount:          summary.PnLAmount,
+			PnLPct:             summary.PnLPct,
 			PositionID:         closedPos.PositionID,
 			ExecutorPositionID: strings.TrimSpace(closedPos.ExecutorPositionID),
 		}
@@ -95,9 +97,16 @@ type externalMissingSummary struct {
 	EntryPrice  float64
 	ExitPrice   float64
 	Qty         float64
-	GrossPnL    float64
-	GrossPnLPct float64
+	PnLAmount   float64
+	PnLPct      float64
+	Reason      string
+	Source      string
 }
+
+const (
+	externalMissingSourceEstimated = "estimated"
+	externalMissingSourceFreqtrade = "freqtrade"
+)
 
 func (s *ReconcileService) recheckExternalPosition(ctx context.Context, pos store.PositionRecord, logger *zap.Logger) bool {
 	tradeID := strings.TrimSpace(pos.ExecutorPositionID)
@@ -146,8 +155,23 @@ func (s *ReconcileService) finalizeExternalMissing(ctx context.Context, pos stor
 	return pos, nil
 }
 
-func (s *ReconcileService) buildExternalMissingSummary(ctx context.Context, pos store.PositionRecord) externalMissingSummary {
+func (s *ReconcileService) buildExternalMissingSummary(ctx context.Context, pos store.PositionRecord, trade execution.Trade, tradeFound bool) externalMissingSummary {
 	stopPrice, tpPrices := resolveRiskPlanSummary(pos)
+	if tradeFound {
+		entryPrice, exitPrice, qty := resolveClosedTradeMetrics(trade, pos)
+		pnlAmount, pnlPct := resolveClosedTradePnL(trade)
+		return externalMissingSummary{
+			StopPrice:   stopPrice,
+			TakeProfits: tpPrices,
+			EntryPrice:  entryPrice,
+			ExitPrice:   exitPrice,
+			Qty:         qty,
+			PnLAmount:   pnlAmount,
+			PnLPct:      pnlPct,
+			Reason:      firstNonEmpty(s.cachedCloseReason(pos), strings.TrimSpace(string(trade.ExitReason)), "external_missing"),
+			Source:      externalMissingSourceFreqtrade,
+		}
+	}
 	entryPrice, exitPrice, qty := s.resolveExitMetrics(ctx, pos)
 	grossPnL, grossPnLPct := computeExternalMissingPnL(pos, entryPrice, exitPrice, qty)
 	return externalMissingSummary{
@@ -156,8 +180,10 @@ func (s *ReconcileService) buildExternalMissingSummary(ctx context.Context, pos 
 		EntryPrice:  entryPrice,
 		ExitPrice:   exitPrice,
 		Qty:         qty,
-		GrossPnL:    grossPnL,
-		GrossPnLPct: grossPnLPct,
+		PnLAmount:   grossPnL,
+		PnLPct:      grossPnLPct,
+		Reason:      "external_missing",
+		Source:      externalMissingSourceEstimated,
 	}
 }
 
@@ -198,6 +224,33 @@ func (s *ReconcileService) resolveExitMetrics(ctx context.Context, pos store.Pos
 	return entryPrice, exitPrice, qty
 }
 
+func (s *ReconcileService) lookupClosedTrade(ctx context.Context, pos store.PositionRecord, logger *zap.Logger) (execution.Trade, bool) {
+	if s == nil || s.TradeFinder == nil {
+		return execution.Trade{}, false
+	}
+	tradeID, err := strconv.Atoi(strings.TrimSpace(pos.ExecutorPositionID))
+	if err != nil || tradeID <= 0 {
+		return execution.Trade{}, false
+	}
+	trade, ok, err := s.TradeFinder.FindTradeByID(ctx, tradeID)
+	if err != nil {
+		logger.Warn("reconcile closed trade lookup failed", zap.Error(err), zap.Int("trade_id", tradeID))
+		return execution.Trade{}, false
+	}
+	if !ok || trade.IsOpen {
+		return execution.Trade{}, false
+	}
+	return trade, true
+}
+
+func (s *ReconcileService) cachedCloseReason(pos store.PositionRecord) string {
+	if s == nil || s.Cache == nil {
+		return ""
+	}
+	reason, _ := s.Cache.GetCloseReason(strings.TrimSpace(pos.ExecutorPositionID))
+	return strings.TrimSpace(reason)
+}
+
 func computeExternalMissingPnL(pos store.PositionRecord, entryPrice, exitPrice, qty float64) (float64, float64) {
 	if entryPrice <= 0 || exitPrice <= 0 || qty <= 0 {
 		return 0, 0
@@ -211,21 +264,81 @@ func computeExternalMissingPnL(pos store.PositionRecord, entryPrice, exitPrice, 
 	return pnl, pnlPct
 }
 
+func resolveClosedTradeMetrics(trade execution.Trade, pos store.PositionRecord) (float64, float64, float64) {
+	entryPrice := float64(trade.OpenRate)
+	if entryPrice <= 0 {
+		entryPrice = pos.AvgEntry
+	}
+	exitPrice := float64(trade.CloseRate)
+	if exitPrice <= 0 {
+		exitPrice = pos.LastPrice
+	}
+	qty := float64(trade.Amount)
+	if qty <= 0 {
+		qty = pos.Qty
+	}
+	if qty <= 0 && pos.InitialStake > 0 && entryPrice > 0 {
+		qty = pos.InitialStake / entryPrice
+	}
+	return entryPrice, exitPrice, qty
+}
+
+func resolveClosedTradePnL(trade execution.Trade) (float64, float64) {
+	amount := float64(trade.ProfitAbs)
+	pct := normalizeFreqtradeTradePercent(float64(trade.ProfitPct))
+	if amount != 0 || pct != 0 {
+		return amount, pct
+	}
+	amount = float64(trade.CloseProfitAbs)
+	pct = normalizeFreqtradeTradePercent(float64(trade.CloseProfitPct))
+	if amount != 0 || pct != 0 {
+		return amount, pct
+	}
+	return float64(trade.RealizedProfit), float64(trade.RealizedProfitRatio)
+}
+
+func normalizeFreqtradeTradePercent(value float64) float64 {
+	if value == 0 {
+		return 0
+	}
+	return value / 100
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func logExternalMissingSummary(ctx context.Context, pos store.PositionRecord, summary externalMissingSummary) {
-	logging.FromContext(ctx).Named("reconcile").Info("position closed summary",
+	fields := []zap.Field{
 		zap.String("symbol", pos.Symbol),
 		zap.String("direction", strings.TrimSpace(pos.Side)),
 		zap.Float64("qty", summary.Qty),
 		zap.Float64("entry", summary.EntryPrice),
 		zap.Float64("exit", summary.ExitPrice),
-		zap.Float64("gross_pnl", summary.GrossPnL),
-		zap.Float64("gross_pnl_pct", summary.GrossPnLPct),
 		zap.Float64("stop", summary.StopPrice),
 		zap.Float64s("take_profits", summary.TakeProfits),
-		zap.String("reason", "external_missing"),
+		zap.String("reason", summary.Reason),
+		zap.String("pnl_source", summary.Source),
 		zap.Float64("risk_pct", pos.RiskPct),
 		zap.Float64("leverage", pos.Leverage),
-	)
+	}
+	if summary.Source == externalMissingSourceFreqtrade {
+		fields = append(fields,
+			zap.Float64("pnl", summary.PnLAmount),
+			zap.Float64("pnl_pct", summary.PnLPct),
+		)
+	} else {
+		fields = append(fields,
+			zap.Float64("gross_pnl", summary.PnLAmount),
+			zap.Float64("gross_pnl_pct", summary.PnLPct),
+		)
+	}
+	logging.FromContext(ctx).Named("reconcile").Info("position closed summary", fields...)
 }
 
 func (s *ReconcileService) handleExternalPresent(ctx context.Context, pos store.PositionRecord, extPos execution.ExternalPosition, logger *zap.Logger) error {

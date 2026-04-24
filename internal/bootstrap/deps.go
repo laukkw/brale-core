@@ -265,6 +265,7 @@ func buildReconcileServices(deps reconcileServiceBuildDeps) (*reconcile.Recovery
 	reconciler := &reconcile.ReconcileService{
 		Store:             deps.store,
 		Executor:          deps.executor,
+		TradeFinder:       deps.executor.Client,
 		Notifier:          deps.notifier,
 		Cache:             deps.positionCache,
 		PlanCache:         deps.planCache,

@@ -114,15 +114,32 @@ func (s *alwaysFailSender) Send(ctx context.Context, msg Message) error {
 }
 
 type namedCountSender struct {
+	mu      sync.Mutex
 	channel string
 	calls   int
+	lastMsg Message
 }
 
 func (s *namedCountSender) Channel() string { return s.channel }
 
-func (s *namedCountSender) Send(context.Context, Message) error {
+func (s *namedCountSender) Send(_ context.Context, msg Message) error {
+	s.mu.Lock()
 	s.calls++
+	s.lastMsg = msg
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *namedCountSender) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
+}
+
+func (s *namedCountSender) lastMessage() Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastMsg
 }
 
 type asyncFallbackNotifier struct {
@@ -462,7 +479,7 @@ func TestAsyncDeliverRoutesToSingleChannel(t *testing.T) {
 	telegram := &namedCountSender{channel: "telegram"}
 	feishu := &namedCountSender{channel: "feishu"}
 	syncManager := Manager{senders: []Sender{telegram, feishu}, dedupe: newDedupeGuard(defaultNotifyDedupeTTL)}
-	manager := NewAsyncManager(nil, syncManager, zap.NewNop())
+	manager := NewAsyncManager(nil, &syncManager, zap.NewNop())
 	rendered, err := json.Marshal(ErrorNotice{
 		Severity:  "error",
 		Component: "decision",
@@ -477,11 +494,119 @@ func TestAsyncDeliverRoutesToSingleChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Deliver() error=%v", err)
 	}
-	if telegram.calls != 1 {
-		t.Fatalf("telegram calls=%d want 1", telegram.calls)
+	if telegram.callCount() != 1 {
+		t.Fatalf("telegram calls=%d want 1", telegram.callCount())
 	}
-	if feishu.calls != 0 {
-		t.Fatalf("feishu calls=%d want 0", feishu.calls)
+	if feishu.callCount() != 0 {
+		t.Fatalf("feishu calls=%d want 0", feishu.callCount())
+	}
+}
+
+func TestAsyncDeliverAggregatesCloseNoticesPerChannel(t *testing.T) {
+	t.Parallel()
+
+	telegram := &namedCountSender{channel: "telegram"}
+	feishu := &namedCountSender{channel: "feishu"}
+	syncManager := NewTestManager(telegram, feishu)
+	manager := NewAsyncManager(nil, &syncManager, zap.NewNop())
+
+	mustJSON := func(v any) json.RawMessage {
+		t.Helper()
+		data, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		return data
+	}
+
+	if err := manager.Deliver(context.Background(), asyncEventPositionClose, "ETHUSDT", "telegram", mustJSON(PositionCloseNotice{
+		Symbol:             "ETHUSDT",
+		Direction:          "short",
+		Qty:                1.619,
+		CloseQty:           1.619,
+		IntentKind:         "CLOSE",
+		EntryPrice:         2305.53,
+		TriggerPrice:       2308.94,
+		StopPrice:          2317.88,
+		TakeProfits:        []float64{2293.10, 2283.31, 2280.82},
+		Reason:             "REVERSAL_CONFIRMED",
+		Leverage:           5,
+		PositionID:         "ETHUSDT-1777003785119948977",
+		ExecutorPositionID: "1",
+	})); err != nil {
+		t.Fatalf("deliver position close: %v", err)
+	}
+	if err := manager.Deliver(context.Background(), asyncEventPositionCloseSummary, "ETHUSDT", "telegram", mustJSON(PositionCloseSummaryNotice{
+		Symbol:             "ETHUSDT",
+		Direction:          "short",
+		Qty:                1.619,
+		EntryPrice:         2305.53,
+		ExitPrice:          2308.94,
+		StopPrice:          2317.88,
+		TakeProfits:        []float64{2293.10, 2283.31, 2280.82},
+		Reason:             "external_missing",
+		Leverage:           5,
+		PnLAmount:          -5.52079,
+		PnLPct:             -0.0014790525388955486,
+		PositionID:         "ETHUSDT-1777003785119948977",
+		ExecutorPositionID: "1",
+	})); err != nil {
+		t.Fatalf("deliver position close summary: %v", err)
+	}
+	if err := manager.Deliver(context.Background(), asyncEventTradeCloseSummary, "ETHUSDT", "telegram", mustJSON(TradeCloseSummaryNotice{
+		TradeID:        1,
+		Pair:           "ETH/USDT:USDT",
+		IsShort:        true,
+		OpenRate:       2305.53,
+		CloseRate:      2308.95,
+		Amount:         1.619,
+		StakeAmount:    746.530614,
+		CloseProfitAbs: -9.27240156,
+		CloseProfitPct: -0.0124,
+		ProfitAbs:      -9.27240156,
+		ProfitPct:      -0.0124,
+		TradeDurationS: 8606,
+		ExitReason:     "force_exit",
+		ExitType:       "external",
+		Leverage:       5,
+	})); err != nil {
+		t.Fatalf("deliver trade close summary: %v", err)
+	}
+
+	waitForCondition(t, 300*time.Millisecond, func() bool {
+		return telegram.callCount() == 1
+	})
+
+	if got := feishu.callCount(); got != 0 {
+		t.Fatalf("feishu calls=%d want 0", got)
+	}
+	msg := telegram.lastMessage()
+	if !strings.Contains(msg.Markdown, "📉 仓位已关闭") {
+		t.Fatalf("expected aggregated close header, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("pnl", formatFloat(-9.27240156))) {
+		t.Fatalf("expected freqtrade pnl in text body, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "gross_pnl") {
+		t.Fatalf("expected aggregated message to avoid gross pnl fallback, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("reason", "REVERSAL_CONFIRMED")) {
+		t.Fatalf("expected decision close reason in text body, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "force_exit") {
+		t.Fatalf("expected aggregated message to hide generic freqtrade reason, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "退出类型") {
+		t.Fatalf("expected aggregated message to avoid exit type, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("close_rate", formatFloat(2308.95))) {
+		t.Fatalf("expected freqtrade close rate in text body, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, noticeLine("planned_stop", formatFloat(2317.88))) {
+		t.Fatalf("expected planned stop metadata in text body, got %q", msg.Markdown)
+	}
+	if !strings.Contains(msg.Markdown, "▸ 交易ID：1") {
+		t.Fatalf("expected trade id in text body, got %q", msg.Markdown)
 	}
 }
 
@@ -874,8 +999,8 @@ func TestCloseAggregation_PrefersTradeExecutionMetrics(t *testing.T) {
 	})
 
 	msg := sender.lastMessage()
-	if !strings.Contains(msg.Markdown, noticeLine("exit", formatFloat(3312))) {
-		t.Fatalf("expected trade close exit price, got %q", msg.Markdown)
+	if !strings.Contains(msg.Markdown, noticeLine("close_rate", formatFloat(3312))) {
+		t.Fatalf("expected trade close rate, got %q", msg.Markdown)
 	}
 	if !strings.Contains(msg.Markdown, noticeLine("qty", formatFloat(0.45))) {
 		t.Fatalf("expected trade close qty, got %q", msg.Markdown)
@@ -886,8 +1011,17 @@ func TestCloseAggregation_PrefersTradeExecutionMetrics(t *testing.T) {
 	if !strings.Contains(msg.Markdown, noticeLine("pnl_pct", formatPercent(-0.0014))) {
 		t.Fatalf("expected normalized pnl pct, got %q", msg.Markdown)
 	}
-	if !strings.Contains(msg.Markdown, noticeLine("stop", formatFloat(3100))) {
-		t.Fatalf("expected close summary stop metadata, got %q", msg.Markdown)
+	if !strings.Contains(msg.Markdown, noticeLine("planned_stop", formatFloat(3100))) {
+		t.Fatalf("expected close summary planned stop metadata, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "external_missing") {
+		t.Fatalf("expected aggregated message to hide placeholder reason, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "force_exit") {
+		t.Fatalf("expected aggregated message to hide generic freqtrade reason, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, "退出类型") {
+		t.Fatalf("expected aggregated message to avoid exit type, got %q", msg.Markdown)
 	}
 }
 
@@ -918,5 +1052,8 @@ func TestPositionCloseSummaryExternalMissingLabelsGrossPnL(t *testing.T) {
 	}
 	if !strings.Contains(msg.Markdown, noticeLine("gross_pnl_pct", formatPercent(0.017))) {
 		t.Fatalf("expected gross pnl pct label, got %q", msg.Markdown)
+	}
+	if strings.Contains(msg.Markdown, noticeLine("reason", "external_missing")) {
+		t.Fatalf("expected external_missing reason to stay hidden, got %q", msg.Markdown)
 	}
 }

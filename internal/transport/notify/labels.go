@@ -39,6 +39,8 @@ var labelMap = map[string]string{
 	"reason":                "原因",
 	"exit_reason":           "退出原因",
 	"exit_type":             "退出类型",
+	"planned_stop":          "计划止损价",
+	"planned_take_profits":  "计划止盈价",
 	"pnl":                   "盈亏",
 	"pnl_pct":               "盈亏%",
 	"realized_profit":       "已实现盈亏",

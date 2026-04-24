@@ -22,6 +22,8 @@ type TelegramSender struct {
 	apiBase string
 }
 
+const telegramRequestTimeout = time.Minute
+
 func NewTelegramSender(cfg TelegramConfig) (Sender, error) {
 	if strings.TrimSpace(cfg.Token) == "" {
 		return nil, fmt.Errorf("telegram token is required")
@@ -29,7 +31,7 @@ func NewTelegramSender(cfg TelegramConfig) (Sender, error) {
 	if cfg.ChatID == 0 {
 		return nil, fmt.Errorf("telegram chat_id is required")
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: telegramRequestTimeout}
 	return &TelegramSender{
 		token:   cfg.Token,
 		chatID:  cfg.ChatID,
