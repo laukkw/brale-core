@@ -8,6 +8,7 @@ import (
 type sessionRoundIDContextKey struct{}
 type sessionSymbolContextKey struct{}
 type sessionFlowContextKey struct{}
+type sessionRequestIDContextKey struct{}
 
 func WithSessionRoundID(ctx context.Context, roundID RoundID) context.Context {
 	if ctx == nil {
@@ -73,4 +74,26 @@ func SessionFlowFromContext(ctx context.Context) (LLMFlow, bool) {
 		return "", false
 	}
 	return flow, true
+}
+
+func WithSessionRequestID(ctx context.Context, requestID string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, sessionRequestIDContextKey{}, strings.TrimSpace(requestID))
+}
+
+func SessionRequestIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	raw, ok := ctx.Value(sessionRequestIDContextKey{}).(string)
+	if !ok {
+		return "", false
+	}
+	requestID, err := normalizeSessionField("request_id", raw)
+	if err != nil {
+		return "", false
+	}
+	return requestID, true
 }

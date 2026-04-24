@@ -598,10 +598,10 @@ func (b *Bot) waitObserveReport(ctx context.Context, symbol, requestID string) (
 		if err != nil {
 			continue
 		}
-		if requestID != "" && resp.RequestID != "" && resp.RequestID != requestID {
+		if requestID != "" && strings.TrimSpace(resp.RequestID) != requestID {
 			continue
 		}
-		if hasObserveReport(resp) || strings.EqualFold(strings.TrimSpace(resp.Status), "ok") {
+		if observeReportReady(resp, requestID) {
 			b.logger.Info("telegram observe report ready",
 				zap.String("symbol", strings.TrimSpace(symbol)),
 				zap.String("request_id", strings.TrimSpace(resp.RequestID)),
@@ -614,6 +614,13 @@ func (b *Bot) waitObserveReport(ctx context.Context, symbol, requestID string) (
 
 func hasObserveReport(resp ObserveResponse) bool {
 	return resp.Agent.HasData() || resp.Gate.HasData() || strings.TrimSpace(resp.ReportHTML) != "" || strings.TrimSpace(resp.ReportMarkdown) != "" || strings.TrimSpace(resp.Report) != ""
+}
+
+func observeReportReady(resp ObserveResponse, requestID string) bool {
+	if hasObserveReport(resp) {
+		return true
+	}
+	return strings.TrimSpace(requestID) == "" && strings.EqualFold(strings.TrimSpace(resp.Status), "ok")
 }
 
 func (b *Bot) answerCallback(ctx context.Context, id string) {

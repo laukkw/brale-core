@@ -10,13 +10,21 @@ import (
 	"brale-core/internal/snapshot"
 )
 
-func buildSnapshotFetcher(symbolCfg config.SymbolConfig, requireMechanics bool) *snapshot.Fetcher {
+func buildSnapshotFetcher(symbolCfg config.SymbolConfig, requireMechanics bool, deps SymbolRuntimeBuildDeps) *snapshot.Fetcher {
+	liquidationsByWindow := deps.Liquidations
+	liquidationSource := deps.LiqSource
+	if !requireMechanics || !symbolCfg.Require.Liquidations {
+		liquidationsByWindow = nil
+		liquidationSource = nil
+	}
 	fetcher := binance.NewSnapshotFetcher(binance.SnapshotOptions{
-		RequireOI:           requireMechanics && symbolCfg.Require.OI,
-		RequireFunding:      requireMechanics && symbolCfg.Require.Funding,
-		RequireLongShort:    requireMechanics && symbolCfg.Require.LongShort,
-		RequireFearGreed:    requireMechanics && symbolCfg.Require.FearGreed,
-		RequireLiquidations: requireMechanics && symbolCfg.Require.Liquidations,
+		RequireOI:            requireMechanics && symbolCfg.Require.OI,
+		RequireFunding:       requireMechanics && symbolCfg.Require.Funding,
+		RequireLongShort:     requireMechanics && symbolCfg.Require.LongShort,
+		RequireFearGreed:     requireMechanics && symbolCfg.Require.FearGreed,
+		RequireLiquidations:  requireMechanics && symbolCfg.Require.Liquidations,
+		LiquidationsByWindow: liquidationsByWindow,
+		LiquidationSource:    liquidationSource,
 	})
 	fetcher.MinKlineBars = config.RequiredKlineLimit(symbolCfg)
 	if requireMechanics {
@@ -27,6 +35,8 @@ func buildSnapshotFetcher(symbolCfg config.SymbolConfig, requireMechanics bool) 
 	fetcher.LongShort = nil
 	fetcher.FearGreed = nil
 	fetcher.Liquidations = nil
+	fetcher.LiquidationsByWindow = nil
+	fetcher.LiquidationSource = nil
 	fetcher.RequireOI = false
 	fetcher.RequireFunding = false
 	fetcher.RequireLongShort = false

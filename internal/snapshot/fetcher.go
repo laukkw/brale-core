@@ -3,6 +3,10 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"brale-core/internal/interval"
@@ -17,6 +21,7 @@ type Fetcher struct {
 	FearGreed            FearGreedProvider
 	Liquidations         LiquidationProvider
 	LiquidationsByWindow LiquidationWindowProvider
+	LiquidationSource    LiquidationSourceProvider
 
 	RequireOI           bool
 	RequireFunding      bool
@@ -27,6 +32,9 @@ type Fetcher struct {
 	MinKlineBars int
 
 	Now func() time.Time
+
+	liqHistory *liqMetricHistory
+	liqMu      sync.Mutex
 }
 
 func (f *Fetcher) Fetch(ctx context.Context, symbols, intervals []string, limit int) (MarketSnapshot, error) {
@@ -46,6 +54,7 @@ func (f *Fetcher) Fetch(ctx context.Context, symbols, intervals []string, limit 
 		LongShort:            map[string]map[string]LSRBlock{},
 		Liquidations:         map[string]LiqBlock{},
 		LiquidationsByWindow: map[string]map[string]LiqWindow{},
+		LiquidationSource:    map[string]LiqSource{},
 	}
 	if err := f.loadKlines(ctx, &out, symbols, intervals, limit); err != nil {
 		return MarketSnapshot{}, err
@@ -360,11 +369,32 @@ func (f *Fetcher) loadLiquidationsByWindow(ctx context.Context, out *MarketSnaps
 		}
 		return nil
 	}
+	source, err := f.loadLiquidationSource(ctx, sym)
+	if err != nil {
+		if f.RequireLiquidations {
+			return fmt.Errorf("liquidation_source fetch failed %s: %w", sym, err)
+		}
+		source = LiqSource{}
+	}
+	f.enrichLiquidationWindows(out, sym, liq)
 	if out.LiquidationsByWindow == nil {
 		out.LiquidationsByWindow = map[string]map[string]LiqWindow{}
 	}
 	out.LiquidationsByWindow[sym] = liq
+	if out.LiquidationSource == nil {
+		out.LiquidationSource = map[string]LiqSource{}
+	}
+	if source.Source != "" || source.Status != "" || source.StreamConnected || source.CoverageSec > 0 || source.LastEventTime > 0 || source.LastGapResetTime > 0 {
+		out.LiquidationSource[sym] = source
+	}
 	return nil
+}
+
+func (f *Fetcher) loadLiquidationSource(ctx context.Context, sym string) (LiqSource, error) {
+	if f == nil || f.LiquidationSource == nil {
+		return LiqSource{}, nil
+	}
+	return f.LiquidationSource.LiquidationSource(ctx, sym)
 }
 
 func (f *Fetcher) resolveLiquidationWindowProvider() LiquidationWindowProvider {
@@ -378,6 +408,203 @@ func (f *Fetcher) resolveLiquidationWindowProvider() LiquidationWindowProvider {
 		return typed
 	}
 	return nil
+}
+
+func (f *Fetcher) enrichLiquidationWindows(out *MarketSnapshot, sym string, windows map[string]LiqWindow) {
+	if f == nil || out == nil || len(windows) == 0 {
+		return
+	}
+	now := out.Timestamp
+	oiValue := 0.0
+	if out.OI != nil {
+		oiValue = out.OI[sym].Value
+	}
+	byInterval := out.Klines[sym]
+	for window, item := range windows {
+		if oiValue > 0 {
+			item.Rel.VolOverOI = item.TotalVol / oiValue
+		}
+		if volume := closedVolumeForWindow(byInterval, window, now); volume > 0 {
+			item.Rel.VolOverVolume = item.TotalVol / volume
+		}
+		if item.Complete {
+			observationID := now.UTC().Unix()
+			item.Rel.ZScore = f.observeLiquidationWindow(sym, window, observationID, item.TotalVol)
+			item.Rel.Spike = item.Rel.ZScore >= liqSpikeThreshold
+		}
+		windows[window] = item
+	}
+}
+
+const liqSpikeThreshold = 2.0
+
+func closedVolumeForWindow(byInterval map[string][]Candle, window string, now time.Time) float64 {
+	if len(byInterval) == 0 {
+		return 0
+	}
+	candles := byInterval[window]
+	if len(candles) == 0 {
+		return 0
+	}
+	duration, err := parseLiquidationWindowDuration(window)
+	if err != nil {
+		return 0
+	}
+	return lastClosedWindowVolume(candles, duration, now)
+}
+
+func lastClosedWindowVolume(candles []Candle, duration time.Duration, now time.Time) float64 {
+	if len(candles) == 0 {
+		return 0
+	}
+	last := candles[len(candles)-1]
+	if windowCandleClosed(last.OpenTime, duration, now) {
+		return last.Volume
+	}
+	if len(candles) > 1 {
+		return candles[len(candles)-2].Volume
+	}
+	return 0
+}
+
+func windowCandleClosed(openTimeMs int64, duration time.Duration, now time.Time) bool {
+	if openTimeMs <= 0 || duration <= 0 {
+		return false
+	}
+	openTime := time.UnixMilli(openTimeMs).UTC()
+	return !openTime.Add(duration).After(now)
+}
+
+func (f *Fetcher) observeLiquidationWindow(symbol, window string, observationID int64, total float64) float64 {
+	if observationID <= 0 {
+		return 0
+	}
+	return f.ensureLiqHistory().Observe(symbol+"|"+window, observationID, total)
+}
+
+func (f *Fetcher) ensureLiqHistory() *liqMetricHistory {
+	if f == nil {
+		return newLiqMetricHistory(50)
+	}
+	f.liqMu.Lock()
+	defer f.liqMu.Unlock()
+	if f.liqHistory == nil {
+		f.liqHistory = newLiqMetricHistory(50)
+	}
+	return f.liqHistory
+}
+
+type liqMetricHistory struct {
+	mu      sync.Mutex
+	entries map[string]*liqMetricHistoryEntry
+	size    int
+}
+
+type liqMetricHistoryEntry struct {
+	history       *liqRollingHistory
+	lastBucketEnd int64
+	lastZScore    float64
+}
+
+type liqRollingHistory struct {
+	values []float64
+	next   int
+	count  int
+	sum    float64
+	sumsq  float64
+}
+
+func newLiqMetricHistory(size int) *liqMetricHistory {
+	if size <= 0 {
+		size = 1
+	}
+	return &liqMetricHistory{entries: make(map[string]*liqMetricHistoryEntry), size: size}
+}
+
+func (h *liqMetricHistory) Observe(key string, observationID int64, value float64) float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	entry := h.entries[key]
+	if entry == nil {
+		entry = &liqMetricHistoryEntry{history: newLiqRollingHistory(h.size)}
+		h.entries[key] = entry
+	}
+	if entry.lastBucketEnd == observationID {
+		return entry.lastZScore
+	}
+	z := entry.history.Observe(value)
+	entry.lastBucketEnd = observationID
+	entry.lastZScore = z
+	return z
+}
+
+func newLiqRollingHistory(size int) *liqRollingHistory {
+	if size <= 0 {
+		size = 1
+	}
+	return &liqRollingHistory{values: make([]float64, size)}
+}
+
+func (h *liqRollingHistory) Observe(value float64) float64 {
+	mean, std, ok := h.meanStd()
+	z := 0.0
+	if ok && std > 0 {
+		z = (value - mean) / std
+	}
+	h.add(value)
+	return z
+}
+
+func (h *liqRollingHistory) meanStd() (float64, float64, bool) {
+	if h == nil || h.count < 2 {
+		return 0, 0, false
+	}
+	mean := h.sum / float64(h.count)
+	variance := (h.sumsq / float64(h.count)) - (mean * mean)
+	if variance < 0 {
+		variance = 0
+	}
+	return mean, math.Sqrt(variance), true
+}
+
+func (h *liqRollingHistory) add(value float64) {
+	if h == nil || len(h.values) == 0 {
+		return
+	}
+	if h.count == len(h.values) {
+		old := h.values[h.next]
+		h.sum -= old
+		h.sumsq -= old * old
+	} else {
+		h.count++
+	}
+	h.values[h.next] = value
+	h.sum += value
+	h.sumsq += value * value
+	h.next = (h.next + 1) % len(h.values)
+}
+
+func parseLiquidationWindowDuration(raw string) (time.Duration, error) {
+	value := strings.TrimSpace(strings.ToLower(raw))
+	if len(value) < 2 {
+		return 0, fmt.Errorf("invalid window=%s", raw)
+	}
+	unit := value[len(value)-1]
+	amountRaw := value[:len(value)-1]
+	amount, err := strconv.Atoi(amountRaw)
+	if err != nil || amount <= 0 {
+		return 0, fmt.Errorf("invalid window=%s", raw)
+	}
+	switch unit {
+	case 'm':
+		return time.Duration(amount) * time.Minute, nil
+	case 'h':
+		return time.Duration(amount) * time.Hour, nil
+	case 'd':
+		return time.Duration(amount) * 24 * time.Hour, nil
+	default:
+		return 0, fmt.Errorf("unsupported window=%s", raw)
+	}
 }
 
 func keyForAge(kind, sym, iv string) string {

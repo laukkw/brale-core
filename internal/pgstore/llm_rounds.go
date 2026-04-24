@@ -20,8 +20,8 @@ func (s *PGStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) e
 	const q = `INSERT INTO llm_rounds (
 		id, snapshot_id, symbol, round_type, started_at, finished_at,
 		total_latency_ms, total_token_in, total_token_out, call_count,
-		outcome, prompt_version, error, agent_count, provider_count, gate_action
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+		outcome, prompt_version, error, agent_count, provider_count, gate_action, request_id
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 	ON CONFLICT (id) DO UPDATE SET
 		finished_at = EXCLUDED.finished_at,
 		total_latency_ms = EXCLUDED.total_latency_ms,
@@ -33,7 +33,8 @@ func (s *PGStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) e
 		error = EXCLUDED.error,
 		agent_count = EXCLUDED.agent_count,
 		provider_count = EXCLUDED.provider_count,
-		gate_action = EXCLUDED.gate_action
+		gate_action = EXCLUDED.gate_action,
+		request_id = EXCLUDED.request_id
 	RETURNING created_at`
 	var finishedAt *time.Time
 	if !rec.FinishedAt.IsZero() {
@@ -43,7 +44,7 @@ func (s *PGStore) SaveLLMRound(ctx context.Context, rec *store.LLMRoundRecord) e
 		rec.ID, rec.SnapshotID, rec.Symbol, rec.RoundType, rec.StartedAt, finishedAt,
 		nilIfZero(rec.TotalLatencyMS), nilIfZero(rec.TotalTokenIn), nilIfZero(rec.TotalTokenOut), rec.CallCount,
 		nilIfEmpty(rec.Outcome), rec.PromptVersion, nilIfEmpty(rec.Error),
-		rec.AgentCount, rec.ProviderCount, nilIfEmpty(rec.GateAction),
+		rec.AgentCount, rec.ProviderCount, nilIfEmpty(rec.GateAction), nilIfEmpty(rec.RequestID),
 	).Scan(&rec.CreatedAt)
 }
 
@@ -75,18 +76,18 @@ func (s *PGStore) ListLLMRounds(ctx context.Context, symbol string, limit int) (
 
 const llmRoundSelectSQL = `SELECT id, snapshot_id, symbol, round_type, started_at, finished_at,
 	total_latency_ms, total_token_in, total_token_out, call_count,
-	outcome, prompt_version, error, agent_count, provider_count, gate_action, created_at
+	outcome, prompt_version, error, agent_count, provider_count, gate_action, request_id, created_at
 FROM llm_rounds`
 
 func scanLLMRoundRow(row scannable) (store.LLMRoundRecord, error) {
 	var r store.LLMRoundRecord
 	var finishedAt *time.Time
 	var latMS, tokIn, tokOut *int
-	var outcome, promptVersion, errStr, gateAction *string
+	var outcome, promptVersion, errStr, gateAction, requestID *string
 	if err := row.Scan(
 		&r.ID, &r.SnapshotID, &r.Symbol, &r.RoundType, &r.StartedAt, &finishedAt,
 		&latMS, &tokIn, &tokOut, &r.CallCount,
-		&outcome, &promptVersion, &errStr, &r.AgentCount, &r.ProviderCount, &gateAction, &r.CreatedAt,
+		&outcome, &promptVersion, &errStr, &r.AgentCount, &r.ProviderCount, &gateAction, &requestID, &r.CreatedAt,
 	); err != nil {
 		return store.LLMRoundRecord{}, err
 	}
@@ -98,5 +99,6 @@ func scanLLMRoundRow(row scannable) (store.LLMRoundRecord, error) {
 	r.PromptVersion = deref(promptVersion)
 	r.Error = deref(errStr)
 	r.GateAction = deref(gateAction)
+	r.RequestID = deref(requestID)
 	return r, nil
 }

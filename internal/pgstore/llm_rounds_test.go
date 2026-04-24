@@ -70,8 +70,8 @@ func TestSaveLLMRoundKeepsEmptyPromptVersionNonNull(t *testing.T) {
 		t.Fatalf("SaveLLMRound() error = %v", err)
 	}
 
-	if len(queryer.args) != 16 {
-		t.Fatalf("arg count = %d want 16", len(queryer.args))
+	if len(queryer.args) != 17 {
+		t.Fatalf("arg count = %d want 17", len(queryer.args))
 	}
 	if queryer.args[11] == nil {
 		t.Fatal("prompt_version arg = nil want empty string")

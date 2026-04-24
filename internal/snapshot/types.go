@@ -84,7 +84,25 @@ type LiqWindow struct {
 	Imbalance    float64
 	PriceBinsBps []int
 	Bins         []LiqPriceBin
+	SampleCount  int
+	CoverageSec  int64
+	Status       string
+	Complete     bool
 	Rel          LiqRelMetrics
+}
+
+type LiqSource struct {
+	Source            string
+	Coverage          string
+	Status            string
+	StreamConnected   bool
+	CoverageSec       int64
+	SampleCount       int
+	LastEventAgeSec   int64
+	Complete          bool
+	LastReconnectTime int64
+	LastEventTime     int64
+	LastGapResetTime  int64
 }
 
 type MarketSnapshot struct {
@@ -97,4 +115,5 @@ type MarketSnapshot struct {
 	FearGreed            *FearGreedPoint
 	Liquidations         map[string]LiqBlock
 	LiquidationsByWindow map[string]map[string]LiqWindow
+	LiquidationSource    map[string]LiqSource
 }

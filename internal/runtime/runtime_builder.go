@@ -12,6 +12,7 @@ import (
 	"brale-core/internal/market"
 	"brale-core/internal/position"
 	"brale-core/internal/reconcile"
+	"brale-core/internal/snapshot"
 	"brale-core/internal/store"
 	"brale-core/internal/strategy"
 	"brale-core/internal/transport/notify"
@@ -29,16 +30,20 @@ type SymbolRuntimeBuildDeps struct {
 	Positioner    *position.PositionService
 	RiskPlanSvc   *position.RiskPlanService
 	PriceSource   market.PriceSource
+	Liquidations  snapshot.LiquidationWindowProvider
+	LiqSource     snapshot.LiquidationSourceProvider
 	Notifier      notify.Notifier
 }
 
-func NewSymbolRuntimeBuildDeps(st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource, notifier notify.Notifier) SymbolRuntimeBuildDeps {
+func NewSymbolRuntimeBuildDeps(st store.Store, stateProvider *reconcile.FSMStateProvider, positioner *position.PositionService, riskPlanSvc *position.RiskPlanService, priceSource market.PriceSource, liquidations snapshot.LiquidationWindowProvider, liqSource snapshot.LiquidationSourceProvider, notifier notify.Notifier) SymbolRuntimeBuildDeps {
 	return SymbolRuntimeBuildDeps{
 		Store:         st,
 		StateProvider: stateProvider,
 		Positioner:    positioner,
 		RiskPlanSvc:   riskPlanSvc,
 		PriceSource:   priceSource,
+		Liquidations:  liquidations,
+		LiqSource:     liqSource,
 		Notifier:      notifier,
 	}
 }
@@ -78,7 +83,7 @@ func buildSymbolRuntimeFromConfig(metricsCtx context.Context, sys config.SystemC
 		BarInterval:      barInterval,
 		RequireMechanics: requireMechanics,
 	}
-	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil)
+	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil, nil, nil)
 	return buildSymbolRuntimeFromRuntimeConfig(metricsCtx, sys, runtimeCfg, deps)
 }
 
@@ -87,7 +92,7 @@ func buildSymbolRuntimeFromRuntimeConfig(metricsCtx context.Context, sys config.
 	episodicMemory := buildEpisodicMemory(runtimeCfg.Symbol, deps.Store)
 	semanticMemory := buildSemanticMemory(runtimeCfg.Symbol, deps.Store)
 	agentSvc, providerSvc, tracker := buildSymbolAgents(metricsCtx, sys, runtimeCfg.Symbol, deps.Store)
-	fetcher := buildSnapshotFetcher(runtimeCfg.Symbol, runtimeCfg.RequireMechanics)
+	fetcher := buildSnapshotFetcher(runtimeCfg.Symbol, runtimeCfg.RequireMechanics, deps)
 	compressor, services, err := buildCompressor(runtimeCfg.Symbol, runtimeCfg.EnabledConfig, runtimeCfg.EnabledMap)
 	if err != nil {
 		return SymbolRuntime{}, err

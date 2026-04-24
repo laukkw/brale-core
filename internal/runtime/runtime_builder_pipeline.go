@@ -52,7 +52,7 @@ func buildPipeline(sys config.SystemConfig, st store.Store, stateProvider *recon
 		Binding:     bind,
 		BarInterval: barInterval,
 	}
-	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil)
+	deps := NewSymbolRuntimeBuildDeps(st, stateProvider, positioner, riskPlanSvc, priceSource, nil, nil, nil)
 	return buildPipelineFromRuntimeConfig(sys, deps, runtimeCfg, runner, exitConfirmCache, workingMemory, episodicMemory, semanticMemory)
 }
 

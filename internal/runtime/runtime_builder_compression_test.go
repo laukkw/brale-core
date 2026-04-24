@@ -1,11 +1,23 @@
 package runtime
 
 import (
+	"context"
 	"testing"
 
 	"brale-core/internal/config"
 	"brale-core/internal/decision"
+	"brale-core/internal/snapshot"
 )
+
+type testRuntimeLiqProvider struct{}
+
+func (testRuntimeLiqProvider) LiquidationsByWindow(context.Context, string) (map[string]snapshot.LiqWindow, error) {
+	return map[string]snapshot.LiqWindow{snapshot.LiqWindow1h: {Status: "ok"}}, nil
+}
+
+func (testRuntimeLiqProvider) LiquidationSource(context.Context, string) (snapshot.LiqSource, error) {
+	return snapshot.LiqSource{Source: "binance_force_order_snapshot_ws", Status: "ok"}, nil
+}
 
 func TestBuildCompressorUsesConfiguredIndicatorEngine(t *testing.T) {
 	compressor, services, err := buildCompressor(config.SymbolConfig{
@@ -92,5 +104,63 @@ func TestBuildCompressorWrapsShadowEngineComparison(t *testing.T) {
 	}
 	if _, ok := shadow.shadowComputer.(decision.ReferenceComputer); !ok {
 		t.Fatalf("shadow computer=%T", shadow.shadowComputer)
+	}
+}
+
+func TestBuildSnapshotFetcherDisablesLiquidationsWhenConfigDisabled(t *testing.T) {
+	t.Parallel()
+
+	provider := testRuntimeLiqProvider{}
+	fetcher := buildSnapshotFetcher(config.SymbolConfig{
+		Symbol: "BTCUSDT",
+		Require: config.SymbolRequire{
+			OI:           true,
+			Funding:      true,
+			LongShort:    true,
+			FearGreed:    true,
+			Liquidations: false,
+		},
+	}, true, SymbolRuntimeBuildDeps{
+		Liquidations: provider,
+		LiqSource:    provider,
+	})
+
+	if fetcher.RequireLiquidations {
+		t.Fatal("RequireLiquidations=true want false when config disables liquidations")
+	}
+	if fetcher.LiquidationsByWindow != nil {
+		t.Fatalf("LiquidationsByWindow=%T want nil when config disables liquidations", fetcher.LiquidationsByWindow)
+	}
+	if fetcher.LiquidationSource != nil {
+		t.Fatalf("LiquidationSource=%T want nil when config disables liquidations", fetcher.LiquidationSource)
+	}
+}
+
+func TestBuildSnapshotFetcherInjectsLiquidationsWhenConfigEnabled(t *testing.T) {
+	t.Parallel()
+
+	provider := testRuntimeLiqProvider{}
+	fetcher := buildSnapshotFetcher(config.SymbolConfig{
+		Symbol: "BTCUSDT",
+		Require: config.SymbolRequire{
+			OI:           true,
+			Funding:      true,
+			LongShort:    true,
+			FearGreed:    true,
+			Liquidations: true,
+		},
+	}, true, SymbolRuntimeBuildDeps{
+		Liquidations: provider,
+		LiqSource:    provider,
+	})
+
+	if !fetcher.RequireLiquidations {
+		t.Fatal("RequireLiquidations=false want true when config enables liquidations")
+	}
+	if fetcher.LiquidationsByWindow == nil {
+		t.Fatal("expected LiquidationsByWindow provider when config enables liquidations")
+	}
+	if fetcher.LiquidationSource == nil {
+		t.Fatal("expected LiquidationSource provider when config enables liquidations")
 	}
 }

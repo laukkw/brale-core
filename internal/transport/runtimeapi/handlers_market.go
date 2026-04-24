@@ -20,39 +20,52 @@ func (s *Server) handleMarketStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	inspector, ok := s.PriceSource.(market.PriceStreamInspector)
-	if !ok {
-		writeJSON(w, map[string]any{
-			"status":     "unsupported",
-			"symbol":     symbol,
-			"message":    "price source does not support stream inspection",
-			"request_id": requestIDFromContext(ctx),
-		})
-		return
-	}
-
-	ss, found := inspector.StreamStatus(symbol)
-	if !found {
-		writeJSON(w, map[string]any{
-			"status":     "not_found",
-			"symbol":     symbol,
-			"message":    "no stream data for this symbol",
-			"request_id": requestIDFromContext(ctx),
-		})
-		return
-	}
-
 	resp := map[string]any{
-		"status":          "ok",
-		"symbol":          ss.Symbol,
-		"source":          ss.Source,
-		"ws_connected":    ss.Connected,
-		"last_mark_price": ss.LastPrice,
-		"age_ms":          ss.AgeMs,
-		"fresh":           ss.Fresh,
-		"request_id":      requestIDFromContext(ctx),
+		"request_id": requestIDFromContext(ctx),
+		"symbol":     symbol,
 	}
-	if !ss.LastPriceTS.IsZero() {
-		resp["last_mark_ts"] = ss.LastPriceTS.Format(time.RFC3339Nano)
+	foundPrice := false
+	if ok {
+		ss, found := inspector.StreamStatus(symbol)
+		if found {
+			foundPrice = true
+			resp["status"] = "ok"
+			resp["source"] = ss.Source
+			resp["ws_connected"] = ss.Connected
+			resp["last_mark_price"] = ss.LastPrice
+			resp["age_ms"] = ss.AgeMs
+			resp["fresh"] = ss.Fresh
+			if !ss.LastPriceTS.IsZero() {
+				resp["last_mark_ts"] = ss.LastPriceTS.Format(time.RFC3339Nano)
+			}
+		}
+	}
+	if s.LiquidationInspector != nil {
+		if liq, found := s.LiquidationInspector.LiquidationStreamStatus(symbol); found {
+			if !foundPrice {
+				resp["status"] = "ok"
+			}
+			resp["liquidation"] = map[string]any{
+				"symbol":             liq.Symbol,
+				"source":             liq.Source,
+				"status":             liq.Status,
+				"stream_connected":   liq.StreamConnected,
+				"shard_count":        liq.ShardCount,
+				"coverage_sec":       liq.CoverageSec,
+				"sample_count":       liq.SampleCount,
+				"last_event_age_sec": liq.LastEventAgeSec,
+				"complete":           liq.Complete,
+			}
+		}
+	}
+	if _, ok := resp["status"]; !ok {
+		if s.PriceSource == nil {
+			resp["status"] = "unsupported"
+			resp["message"] = "price source does not support stream inspection"
+		} else {
+			resp["status"] = "not_found"
+			resp["message"] = "no stream data for this symbol"
+		}
 	}
 	writeJSON(w, resp)
 }

@@ -32,6 +32,25 @@ type StructureAnchorContext struct {
 // MechanicsDataContext provides code-computed mechanics conflict signals
 // for the Mechanics Provider to cross-validate Agent claims.
 type MechanicsDataContext struct {
-	Conflicts    []string `json:"conflicts,omitempty"`
-	ReversalRisk string   `json:"reversal_risk,omitempty"`
+	Conflicts         []string                           `json:"conflicts,omitempty"`
+	ReversalRisk      string                             `json:"reversal_risk,omitempty"`
+	LiquidationState  *MechanicsLiquidationContext       `json:"liquidation_state,omitempty"`
+	LiquidationSource *MechanicsLiquidationSourceContext `json:"liquidation_source,omitempty"`
+}
+
+type MechanicsLiquidationContext struct {
+	Stress   string `json:"stress,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Window   string `json:"window,omitempty"`
+	Complete bool   `json:"complete,omitempty"`
+}
+
+type MechanicsLiquidationSourceContext struct {
+	Source          string `json:"source,omitempty"`
+	Status          string `json:"status,omitempty"`
+	StreamConnected bool   `json:"stream_connected,omitempty"`
+	CoverageSec     int64  `json:"coverage_sec,omitempty"`
+	SampleCount     int    `json:"sample_count,omitempty"`
+	LastEventAgeSec int64  `json:"last_event_age_sec,omitempty"`
+	Complete        bool   `json:"complete,omitempty"`
 }

@@ -28,7 +28,7 @@ func newSymbolRuntimeBuilder(ctx context.Context, sys config.SystemConfig, symbo
 		ctx:             ctx,
 		sys:             sys,
 		symbolIndexPath: symbolIndexPath,
-		deps:            runtime.NewSymbolRuntimeBuildDeps(deps.persistence.store, deps.persistence.stateProvider, deps.position.positioner, deps.position.riskPlanSvc, deps.position.priceSource, deps.execution.notifier),
+		deps:            runtime.NewSymbolRuntimeBuildDeps(deps.persistence.store, deps.persistence.stateProvider, deps.position.positioner, deps.position.riskPlanSvc, deps.position.priceSource, deps.liquidationSource, deps.liquidationSource, deps.execution.notifier),
 	}
 }
 
@@ -76,6 +76,7 @@ func startScheduler(ctx context.Context, logger *zap.Logger, sys config.SystemCo
 		DisableTickerLoops: strings.EqualFold(sys.Scheduler.Backend, "river"),
 		Logger:             logger.Named("scheduler"),
 		PriceStream:        deps.position.priceSource,
+		LiquidationStream:  deps.liquidationSource,
 	}
 	scheduler.SetScheduledDecision(deps.execution.scheduled)
 	if err := scheduler.Start(ctx); err != nil {
@@ -111,16 +112,18 @@ func loadSymbolConfigs(logger *zap.Logger, sys config.SystemConfig, symbolIndexP
 
 func buildRuntimeHandler(sys config.SystemConfig, deps coreDeps, scheduler *runtime.RuntimeScheduler, resolver *runtimeapi.RuntimeSymbolResolver, symbolConfigs map[string]runtimeapi.ConfigBundle) (http.Handler, error) {
 	runtimeServer := runtimeapi.Server{
-		Scheduler:     scheduler,
-		Resolver:      resolver,
-		PlanCache:     deps.position.positioner.PlanCache,
-		PriceSource:   deps.position.priceSource,
-		KlineProvider: binance.NewFuturesMarket(),
-		AllowSymbol:   deps.execution.allowSymbol,
-		Store:         deps.persistence.store,
-		ExecClient:    deps.execution.executor.Client,
-		PositionCache: deps.position.positionCache,
-		SymbolConfigs: symbolConfigs,
+		Scheduler:            scheduler,
+		Resolver:             resolver,
+		PlanCache:            deps.position.positioner.PlanCache,
+		PriceSource:          deps.position.priceSource,
+		LiquidationStream:    deps.liquidationSource,
+		LiquidationInspector: deps.liquidationSource,
+		KlineProvider:        binance.NewFuturesMarket(),
+		AllowSymbol:          deps.execution.allowSymbol,
+		Store:                deps.persistence.store,
+		ExecClient:           deps.execution.executor.Client,
+		PositionCache:        deps.position.positionCache,
+		SymbolConfigs:        symbolConfigs,
 	}
 	return runtimeServer.Handler()
 }

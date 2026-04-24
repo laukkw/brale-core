@@ -164,6 +164,7 @@ type LLMRoundRecord struct {
 	AgentCount     int
 	ProviderCount  int
 	GateAction     string
+	RequestID      string
 	CreatedAt      time.Time
 }
 

@@ -59,21 +59,23 @@ type runtimeExecClient interface {
 }
 
 type Server struct {
-	Scheduler     Scheduler
-	Resolver      SymbolResolver
-	SymbolConfigs map[string]ConfigBundle
-	ObserveJobs   *asyncjob.Manager[observeResponse]
-	Store         store.Store
-	ExecClient    runtimeExecClient
-	PositionCache *position.PositionCache
-	PlanCache     *position.PlanCache
-	PriceSource   market.PriceSource
-	KlineProvider snapshot.KlineProvider
-	AllowSymbol   func(symbol string) bool
-	lastMu        sync.RWMutex
-	lastRun       map[string]lastObserve
-	klineCacheMu  sync.RWMutex
-	klineCache    map[string]dashboardKlineCacheEntry
+	Scheduler            Scheduler
+	Resolver             SymbolResolver
+	SymbolConfigs        map[string]ConfigBundle
+	ObserveJobs          *asyncjob.Manager[observeResponse]
+	Store                store.Store
+	ExecClient           runtimeExecClient
+	PositionCache        *position.PositionCache
+	PlanCache            *position.PlanCache
+	PriceSource          market.PriceSource
+	LiquidationStream    interface{ Start(context.Context) error }
+	LiquidationInspector market.LiquidationStreamInspector
+	KlineProvider        snapshot.KlineProvider
+	AllowSymbol          func(symbol string) bool
+	lastMu               sync.RWMutex
+	lastRun              map[string]lastObserve
+	klineCacheMu         sync.RWMutex
+	klineCache           map[string]dashboardKlineCacheEntry
 }
 
 func (s *Server) Handler() (http.Handler, error) {

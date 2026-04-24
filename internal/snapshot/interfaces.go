@@ -29,3 +29,7 @@ type LiquidationProvider interface {
 type LiquidationWindowProvider interface {
 	LiquidationsByWindow(ctx context.Context, symbol string) (map[string]LiqWindow, error)
 }
+
+type LiquidationSourceProvider interface {
+	LiquidationSource(ctx context.Context, symbol string) (LiqSource, error)
+}

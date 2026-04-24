@@ -193,8 +193,10 @@ func (s service) handleAnalyzeMarket(ctx context.Context, _ *sdkmcp.CallToolRequ
 	if err != nil {
 		return nil, nil, err
 	}
-	out["observe_available"] = true
 	out["observe"] = observeMap
+	if !strings.EqualFold(strings.TrimSpace(observe.Status), "empty") {
+		out["observe_available"] = true
+	}
 	return nil, out, nil
 }
 

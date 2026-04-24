@@ -165,9 +165,11 @@ func (s *RuntimeScheduler) planStreamTransitionLocked() streamTransition {
 func (s *RuntimeScheduler) applyStreamTransition(transition streamTransition) {
 	if transition.shouldStart {
 		s.startPriceStream(transition.streamCtx)
+		s.startLiquidationStream(transition.streamCtx)
 	}
 	if transition.shouldStop {
 		s.stopPriceStream()
+		s.stopLiquidationStream()
 	}
 }
 
@@ -185,4 +187,20 @@ func (s *RuntimeScheduler) stopPriceStream() {
 		return
 	}
 	s.PriceStream.Close()
+}
+
+func (s *RuntimeScheduler) startLiquidationStream(ctx context.Context) {
+	if s.LiquidationStream == nil || ctx == nil {
+		return
+	}
+	if err := s.LiquidationStream.Start(ctx); err != nil && s.Logger != nil {
+		s.Logger.Warn("liquidation stream start failed", zap.Error(err))
+	}
+}
+
+func (s *RuntimeScheduler) stopLiquidationStream() {
+	if s.LiquidationStream == nil {
+		return
+	}
+	s.LiquidationStream.Close()
 }

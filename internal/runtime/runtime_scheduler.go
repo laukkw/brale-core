@@ -40,6 +40,10 @@ type RuntimeScheduler struct {
 		Start(ctx context.Context) error
 		Close()
 	}
+	LiquidationStream interface {
+		Start(ctx context.Context) error
+		Close()
+	}
 
 	AccountFetcher func(ctx context.Context, symbol string) (execution.AccountState, error)
 
@@ -99,6 +103,7 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	s.setLifecycle(true, runCtx, cancel)
 	if shouldStartStream {
 		s.startPriceStream(runCtx)
+		s.startLiquidationStream(runCtx)
 	}
 	if !s.DisableTickerLoops {
 		s.startLoops(runCtx)
@@ -120,6 +125,7 @@ func (s *RuntimeScheduler) Stop() {
 		rt.StopServices()
 	}
 	s.stopPriceStream()
+	s.stopLiquidationStream()
 	for _, worker := range s.barWorkers {
 		worker.Stop()
 	}

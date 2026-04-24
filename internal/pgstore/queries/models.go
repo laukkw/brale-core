@@ -46,6 +46,7 @@ type LlmRound struct {
 	AgentCount     int32              `db:"agent_count" json:"agent_count"`
 	ProviderCount  int32              `db:"provider_count" json:"provider_count"`
 	GateAction     pgtype.Text        `db:"gate_action" json:"gate_action"`
+	RequestID      pgtype.Text        `db:"request_id" json:"request_id"`
 	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 

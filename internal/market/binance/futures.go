@@ -6,7 +6,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"brale-core/internal/market"
@@ -25,7 +24,6 @@ import (
 
 type FuturesMarket struct {
 	Client         *futures.Client
-	liqHistory     *liqHistoryStore
 	RequestTimeout time.Duration
 }
 
@@ -43,7 +41,6 @@ type OrderbookLevel struct {
 func NewFuturesMarket() *FuturesMarket {
 	return &FuturesMarket{
 		Client:         futures.NewClient("", ""),
-		liqHistory:     newLiqHistoryStore(liqHistorySize),
 		RequestTimeout: 12 * time.Second,
 	}
 }
@@ -278,125 +275,12 @@ func (m *FuturesMarket) LongShortRatio(ctx context.Context, symbol, interval str
 }
 
 type liqEvent struct {
+	symbol   string
 	timeMs   int64
 	price    float64
 	qty      float64
 	notional float64
 	isLong   bool
-}
-
-const (
-	liqHistorySize    = 50
-	liqSpikeThreshold = 2.0
-)
-
-type liqHistoryStore struct {
-	mu      sync.Mutex
-	entries map[string]*liqHistory
-	size    int
-}
-
-type liqHistory struct {
-	values []float64
-	next   int
-	count  int
-	sum    float64
-	sumsq  float64
-}
-
-func newLiqHistoryStore(size int) *liqHistoryStore {
-	if size <= 0 {
-		size = 1
-	}
-	return &liqHistoryStore{
-		entries: make(map[string]*liqHistory),
-		size:    size,
-	}
-}
-
-func (s *liqHistoryStore) Observe(key string, value float64) float64 {
-	if s == nil {
-		return 0
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	hist := s.entries[key]
-	if hist == nil {
-		hist = newLiqHistory(s.size)
-		s.entries[key] = hist
-	}
-	return hist.observe(value)
-}
-
-func newLiqHistory(size int) *liqHistory {
-	if size <= 0 {
-		size = 1
-	}
-	return &liqHistory{values: make([]float64, size)}
-}
-
-func (h *liqHistory) observe(value float64) float64 {
-	mean, std, ok := h.meanStd()
-	zscore := 0.0
-	if ok && std > 0 {
-		zscore = (value - mean) / std
-	}
-	h.add(value)
-	return zscore
-}
-
-func (h *liqHistory) meanStd() (float64, float64, bool) {
-	if h == nil || h.count < 2 {
-		return 0, 0, false
-	}
-	mean := h.sum / float64(h.count)
-	variance := (h.sumsq / float64(h.count)) - (mean * mean)
-	if variance < 0 {
-		variance = 0
-	}
-	return mean, math.Sqrt(variance), true
-}
-
-func (h *liqHistory) add(value float64) {
-	if h == nil || len(h.values) == 0 {
-		return
-	}
-	if h.count == len(h.values) {
-		old := h.values[h.next]
-		h.sum -= old
-		h.sumsq -= old * old
-	} else {
-		h.count++
-	}
-	h.values[h.next] = value
-	h.sum += value
-	h.sumsq += value * value
-	h.next = (h.next + 1) % len(h.values)
-}
-
-func (m *FuturesMarket) LiquidationsByWindow(ctx context.Context, symbol string) (map[string]snapshot.LiqWindow, error) {
-	if err := m.validateClient(); err != nil {
-		return nil, err
-	}
-	ctx, cancel := m.requestContext(ctx)
-	defer cancel()
-	symbol = strings.TrimSpace(symbol)
-	if symbol == "" {
-		return nil, market.ValidationErrorf("symbol is required")
-	}
-	windows, priceBins, windowDurations, maxWindow, err := resolveLiquidationWindows()
-	if err != nil {
-		return nil, err
-	}
-	endTime := time.Now().UTC()
-	startMs, endMs := liquidationTimeRange(endTime, maxWindow)
-	events, err := m.fetchLiquidationEvents(ctx, symbol, startMs, endMs)
-	if err != nil {
-		return nil, err
-	}
-	results := aggregateLiquidationWindows(events, windows, windowDurations, endMs, priceBins)
-	m.enrichLiquidationWindowMetrics(ctx, symbol, windows, endTime, results)
-	return results, nil
 }
 
 func resolveLiquidationWindows() ([]string, []int, map[string]time.Duration, time.Duration, error) {
@@ -418,69 +302,6 @@ func resolveLiquidationWindows() ([]string, []int, map[string]time.Duration, tim
 		}
 	}
 	return windows, priceBins, windowDurations, maxWindow, nil
-}
-
-func liquidationTimeRange(endTime time.Time, maxWindow time.Duration) (int64, int64) {
-	endMs := endTime.UnixMilli()
-	startMs := endMs - maxWindow.Milliseconds()
-	if startMs < 0 {
-		startMs = 0
-	}
-	return startMs, endMs
-}
-
-func (m *FuturesMarket) fetchLiquidationEvents(ctx context.Context, symbol string, startMs, endMs int64) ([]liqEvent, error) {
-	const forceOrderLimit = 1000
-	orders, err := m.Client.NewListLiquidationOrdersService().Symbol(symbol).StartTime(startMs).EndTime(endMs).Limit(forceOrderLimit).Do(ctx)
-	if err != nil {
-		return nil, market.ExternalError(err, "binance_force_orders_failed")
-	}
-	events := make([]liqEvent, 0, len(orders))
-	for _, order := range orders {
-		if order == nil {
-			continue
-		}
-		event, ok, err := liquidationOrderToEvent(order.Price, order.ExecutedQuantity, order.OrigQuantity, order.Side, order.Time)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		events = append(events, event)
-	}
-	return events, nil
-}
-
-func liquidationOrderToEvent(priceText, executedQtyText, origQtyText string, side futures.SideType, timeMs int64) (liqEvent, bool, error) {
-	price, err := parseFloat(priceText)
-	if err != nil {
-		return liqEvent{}, false, err
-	}
-	qty, err := parseFloat(executedQtyText)
-	if err != nil {
-		return liqEvent{}, false, err
-	}
-	if qty == 0 {
-		qty, err = parseFloat(origQtyText)
-		if err != nil {
-			return liqEvent{}, false, err
-		}
-	}
-	if qty <= 0 || price <= 0 {
-		return liqEvent{}, false, nil
-	}
-	isLong, ok := liquidationSideIsLong(side)
-	if !ok {
-		return liqEvent{}, false, nil
-	}
-	return liqEvent{
-		timeMs:   timeMs,
-		price:    price,
-		qty:      qty,
-		notional: price * qty,
-		isLong:   isLong,
-	}, true, nil
 }
 
 func liquidationSideIsLong(side futures.SideType) (bool, bool) {
@@ -508,83 +329,6 @@ func aggregateLiquidationWindows(events []liqEvent, windows []string, windowDura
 	return results
 }
 
-func (m *FuturesMarket) enrichLiquidationWindowMetrics(ctx context.Context, symbol string, windows []string, endTime time.Time, results map[string]snapshot.LiqWindow) {
-	oiValue := m.loadOpenInterestValue(ctx, symbol)
-	volumeByWindow := m.loadVolumeByWindow(ctx, symbol, windows, endTime)
-	for _, window := range windows {
-		win := results[window]
-		if oiValue > 0 {
-			win.Rel.VolOverOI = win.TotalVol / oiValue
-		}
-		volume := volumeByWindow[window]
-		if volume > 0 {
-			win.Rel.VolOverVolume = win.TotalVol / volume
-		}
-		if m != nil && m.liqHistory != nil {
-			key := symbol + "|" + window
-			win.Rel.ZScore = m.liqHistory.Observe(key, win.TotalVol)
-		}
-		win.Rel.Spike = win.Rel.ZScore >= liqSpikeThreshold
-		results[window] = win
-	}
-}
-
-func (m *FuturesMarket) loadOpenInterestValue(ctx context.Context, symbol string) float64 {
-	if oi, err := m.OpenInterest(ctx, symbol); err == nil {
-		return oi.Value
-	}
-	return 0
-}
-
-func (m *FuturesMarket) loadVolumeByWindow(ctx context.Context, symbol string, windows []string, endTime time.Time) map[string]float64 {
-	volumeByWindow := make(map[string]float64, len(windows))
-	for _, window := range windows {
-		volume, err := m.liqWindowVolume(ctx, symbol, window, endTime)
-		if err != nil {
-			continue
-		}
-		volumeByWindow[window] = volume
-	}
-	return volumeByWindow
-}
-
-func (m *FuturesMarket) liqWindowVolume(ctx context.Context, symbol, window string, now time.Time) (float64, error) {
-	klines, err := m.Klines(ctx, symbol, window, 2)
-	if err != nil {
-		return 0, err
-	}
-	if len(klines) == 0 {
-		return 0, nil
-	}
-	duration, err := parseWindowDuration(window)
-	if err != nil {
-		return 0, err
-	}
-	return lastClosedVolume(klines, duration, now), nil
-}
-
-func lastClosedVolume(klines []snapshot.Candle, duration time.Duration, now time.Time) float64 {
-	if len(klines) == 0 {
-		return 0
-	}
-	last := klines[len(klines)-1]
-	if candleClosed(last.OpenTime, duration, now) {
-		return last.Volume
-	}
-	if len(klines) > 1 {
-		return klines[len(klines)-2].Volume
-	}
-	return 0
-}
-
-func candleClosed(openTimeMs int64, duration time.Duration, now time.Time) bool {
-	if openTimeMs <= 0 || duration <= 0 {
-		return false
-	}
-	openTime := time.UnixMilli(openTimeMs).UTC()
-	return !openTime.Add(duration).After(now)
-}
-
 func aggregateLiqWindow(events []liqEvent, sinceMs int64, priceBins []int) snapshot.LiqWindow {
 	window := snapshot.LiqWindow{
 		PriceBinsBps: append([]int(nil), priceBins...),
@@ -605,6 +349,7 @@ func aggregateLiqWindow(events []liqEvent, sinceMs int64, priceBins []int) snaps
 		if event.notional <= 0 || event.qty <= 0 {
 			continue
 		}
+		window.SampleCount++
 		if event.isLong {
 			longVol += event.notional
 		} else {

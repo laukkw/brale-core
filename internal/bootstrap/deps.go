@@ -79,11 +79,12 @@ type riskMonitorBuildDeps struct {
 }
 
 type coreDeps struct {
-	persistence persistenceDeps
-	execution   executionDeps
-	position    positionDeps
-	reconcile   reconcileDeps
-	closeDB     func()
+	persistence       persistenceDeps
+	execution         executionDeps
+	position          positionDeps
+	reconcile         reconcileDeps
+	liquidationSource *binance.LiquidationStream
+	closeDB           func()
 }
 
 func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDeps, error) {
@@ -106,6 +107,10 @@ func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDep
 	priceSource, err := buildPriceSource(env.index)
 	if err != nil {
 		return coreDeps{}, fmt.Errorf("build price source: %w", err)
+	}
+	liquidationSource, err := buildLiquidationSource(env.index)
+	if err != nil {
+		return coreDeps{}, fmt.Errorf("build liquidation source: %w", err)
 	}
 
 	recovery, reconciler, err := buildReconcileServices(reconcileServiceBuildDeps{
@@ -147,8 +152,9 @@ func buildCoreDeps(ctx context.Context, logger *zap.Logger, env appEnv) (coreDep
 			priceSource:   priceSource,
 			riskMonitor:   riskMonitor,
 		},
-		reconcile: reconcileDeps{recovery: recovery, reconciler: reconciler},
-		closeDB:   closeDB,
+		reconcile:         reconcileDeps{recovery: recovery, reconciler: reconciler},
+		liquidationSource: liquidationSource,
+		closeDB:           closeDB,
 	}
 	success = true
 	return deps, nil
@@ -234,6 +240,12 @@ func buildPriceSource(index config.SymbolIndexConfig) (*binance.MarkPriceStream,
 	return binance.NewMarkPriceStream(binance.MarkPriceStreamOptions{
 		Symbols: config.SymbolsFromIndex(index),
 		Rate:    time.Second,
+	})
+}
+
+func buildLiquidationSource(index config.SymbolIndexConfig) (*binance.LiquidationStream, error) {
+	return binance.NewLiquidationStream(binance.LiquidationStreamOptions{
+		Symbols: config.SymbolsFromIndex(index),
 	})
 }
 

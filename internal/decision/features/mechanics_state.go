@@ -43,6 +43,8 @@ type mechanicsCrowdingState struct {
 
 type mechanicsLiquidationState struct {
 	Stress    string  `json:"stress"`
+	Status    string  `json:"status,omitempty"`
+	Complete  bool    `json:"complete,omitempty"`
 	Window    string  `json:"window,omitempty"`
 	ZScore    float64 `json:"zscore,omitempty"`
 	VolOverOI float64 `json:"vol_over_oi,omitempty"`
@@ -100,10 +102,61 @@ func buildMechanicsStateRaw(input MechanicsCompressedInput, pretty bool) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	if pretty {
-		return json.MarshalIndent(summary, "", "  ")
+	merged, err := mechanicsStatePayload(input, summary)
+	if err != nil {
+		return nil, err
 	}
-	return json.Marshal(summary)
+	if pretty {
+		return json.MarshalIndent(merged, "", "  ")
+	}
+	return json.Marshal(merged)
+}
+
+func mechanicsStatePayload(input MechanicsCompressedInput, summary MechanicsStateSummary) (map[string]any, error) {
+	inputRaw, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(inputRaw, &payload); err != nil {
+		return nil, err
+	}
+	summaryRaw, err := json.Marshal(summary)
+	if err != nil {
+		return nil, err
+	}
+	var summaryPayload map[string]any
+	if err := json.Unmarshal(summaryRaw, &summaryPayload); err != nil {
+		return nil, err
+	}
+	for key, value := range summaryPayload {
+		payload[key] = value
+	}
+	stripMechanicsStateLegacyFields(payload)
+	return payload, nil
+}
+
+func stripMechanicsStateLegacyFields(payload map[string]any) {
+	for key, value := range payload {
+		switch key {
+		case "timestamp", "fear_greed_next_update_sec", "fear_greed_history", "sentiment_by_interval", "bins", "price_bins_bps":
+			delete(payload, key)
+			continue
+		}
+		switch typed := value.(type) {
+		case map[string]any:
+			stripMechanicsStateLegacyFields(typed)
+			if len(typed) == 0 {
+				delete(payload, key)
+			}
+		case []any:
+			for _, item := range typed {
+				if nested, ok := item.(map[string]any); ok {
+					stripMechanicsStateLegacyFields(nested)
+				}
+			}
+		}
+	}
 }
 
 func hasMechanicsStateSummary(summary MechanicsStateSummary) bool {
@@ -373,6 +426,18 @@ func crowdingAnchors(input MechanicsCompressedInput) (float64, float64, bool) {
 }
 
 func summarizeLiquidationWindow(name string, payload liqWindowPayload) mechanicsLiquidationState {
+	if payload.Status != "" && payload.Status != "ok" {
+		return mechanicsLiquidationState{
+			Stress:    "unknown",
+			Status:    payload.Status,
+			Complete:  payload.Complete,
+			Window:    name,
+			ZScore:    roundFloat(liqWindowZScore(payload), 4),
+			VolOverOI: roundFloat(liqWindowVolOverOI(payload), 4),
+			Spike:     liqWindowSpike(payload),
+			Imbalance: roundFloat(payload.Imbalance, 4),
+		}
+	}
 	stress := "low"
 	zscore := 0.0
 	volOverOI := 0.0
@@ -390,12 +455,32 @@ func summarizeLiquidationWindow(name string, payload liqWindowPayload) mechanics
 	}
 	return mechanicsLiquidationState{
 		Stress:    stress,
+		Status:    payload.Status,
+		Complete:  payload.Complete,
 		Window:    name,
 		ZScore:    roundFloat(zscore, 4),
 		VolOverOI: roundFloat(volOverOI, 4),
 		Spike:     spike,
 		Imbalance: roundFloat(payload.Imbalance, 4),
 	}
+}
+
+func liqWindowZScore(payload liqWindowPayload) float64 {
+	if payload.Rel == nil {
+		return 0
+	}
+	return payload.Rel.ZScore
+}
+
+func liqWindowVolOverOI(payload liqWindowPayload) float64 {
+	if payload.Rel == nil {
+		return 0
+	}
+	return payload.Rel.VolOverOI
+}
+
+func liqWindowSpike(payload liqWindowPayload) bool {
+	return payload.Rel != nil && payload.Rel.Spike
 }
 
 func liquidationStressScore(stress string) int {

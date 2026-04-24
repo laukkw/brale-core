@@ -22,7 +22,7 @@ oi = true
 funding = true
 long_short = true
 fear_greed = true
-# 清算数据可选；策略不依赖时关闭。
+# 清算数据开关兼硬依赖：true=接入并要求成功，false=不接入。
 liquidations = false
 
 [indicators]

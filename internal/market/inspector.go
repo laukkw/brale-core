@@ -18,3 +18,19 @@ type StreamStatus struct {
 type PriceStreamInspector interface {
 	StreamStatus(symbol string) (StreamStatus, bool)
 }
+
+type LiquidationStreamStatus struct {
+	Symbol          string `json:"symbol"`
+	Source          string `json:"source"`
+	Status          string `json:"status"`
+	StreamConnected bool   `json:"stream_connected"`
+	ShardCount      int    `json:"shard_count"`
+	CoverageSec     int64  `json:"coverage_sec"`
+	SampleCount     int    `json:"sample_count"`
+	LastEventAgeSec int64  `json:"last_event_age_sec"`
+	Complete        bool   `json:"complete"`
+}
+
+type LiquidationStreamInspector interface {
+	LiquidationStreamStatus(symbol string) (LiquidationStreamStatus, bool)
+}

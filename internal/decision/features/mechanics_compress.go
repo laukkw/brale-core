@@ -33,6 +33,7 @@ type MechanicsCompressedInput struct {
 	FearGreed              *fearGreedPayload           `json:"fear_greed,omitempty"`
 	Liquidations           *liqPayload                 `json:"liquidations,omitempty"`
 	LiquidationsByWindow   map[string]liqWindowPayload `json:"liquidations_by_window,omitempty"`
+	LiquidationSource      *liqSourcePayload           `json:"liquidation_source,omitempty"`
 	FuturesSentiment       *futuresSentimentPayload    `json:"futures_sentiment,omitempty"`
 }
 
@@ -110,9 +111,24 @@ type liqWindowPayload struct {
 	ShortVol     float64              `json:"short_vol"`
 	TotalVol     float64              `json:"total_vol"`
 	Imbalance    float64              `json:"imbalance"`
+	SampleCount  int                  `json:"sample_count,omitempty"`
+	CoverageSec  int64                `json:"coverage_sec,omitempty"`
+	Status       string               `json:"status,omitempty"`
+	Complete     bool                 `json:"complete,omitempty"`
 	PriceBinsBps []int                `json:"price_bins_bps,omitempty"`
 	Bins         []liqPriceBinPayload `json:"bins,omitempty"`
 	Rel          *liqRelPayload       `json:"rel,omitempty"`
+}
+
+type liqSourcePayload struct {
+	Source          string `json:"source,omitempty"`
+	Coverage        string `json:"coverage,omitempty"`
+	Status          string `json:"status,omitempty"`
+	StreamConnected bool   `json:"stream_connected,omitempty"`
+	CoverageSec     int64  `json:"coverage_sec,omitempty"`
+	SampleCount     int    `json:"sample_count,omitempty"`
+	LastEventAgeSec int64  `json:"last_event_age_sec,omitempty"`
+	Complete        bool   `json:"complete,omitempty"`
 }
 
 type futuresSentimentPayload struct {
@@ -214,6 +230,20 @@ func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnap
 			payload := buildLiquidationsByWindowPayloads(byWindow)
 			if len(payload) > 0 {
 				out.LiquidationsByWindow = payload
+			}
+		}
+	}
+	if snap.LiquidationSource != nil {
+		if src, ok := snap.LiquidationSource[symbol]; ok {
+			out.LiquidationSource = &liqSourcePayload{
+				Source:          strings.TrimSpace(src.Source),
+				Coverage:        strings.TrimSpace(src.Coverage),
+				Status:          strings.TrimSpace(src.Status),
+				StreamConnected: src.StreamConnected,
+				CoverageSec:     src.CoverageSec,
+				SampleCount:     src.SampleCount,
+				LastEventAgeSec: src.LastEventAgeSec,
+				Complete:        src.Complete,
 			}
 		}
 	}
@@ -536,26 +566,14 @@ func buildLiquidationsByWindowPayloads(byWindow map[string]snapshot.LiqWindow) m
 	out := make(map[string]liqWindowPayload, len(byWindow))
 	for window, win := range byWindow {
 		payload := liqWindowPayload{
-			LongVol:   roundFloat(win.LongVol, 4),
-			ShortVol:  roundFloat(win.ShortVol, 4),
-			TotalVol:  roundFloat(win.TotalVol, 4),
-			Imbalance: roundFloat(win.Imbalance, 4),
-		}
-		bins, bps := limitLiquidationBins(win.Bins, win.PriceBinsBps, maxLiquidationBins)
-		if len(bps) > 0 {
-			payload.PriceBinsBps = append([]int(nil), bps...)
-		}
-		if len(bins) > 0 {
-			payload.Bins = make([]liqPriceBinPayload, 0, len(bins))
-			for _, bin := range bins {
-				payload.Bins = append(payload.Bins, liqPriceBinPayload{
-					Bps:       bin.Bps,
-					LongVol:   roundFloat(bin.LongVol, 4),
-					ShortVol:  roundFloat(bin.ShortVol, 4),
-					TotalVol:  roundFloat(bin.TotalVol, 4),
-					Imbalance: roundFloat(bin.Imbalance, 4),
-				})
-			}
+			LongVol:     roundFloat(win.LongVol, 4),
+			ShortVol:    roundFloat(win.ShortVol, 4),
+			TotalVol:    roundFloat(win.TotalVol, 4),
+			Imbalance:   roundFloat(win.Imbalance, 4),
+			SampleCount: win.SampleCount,
+			CoverageSec: win.CoverageSec,
+			Status:      strings.TrimSpace(win.Status),
+			Complete:    win.Complete,
 		}
 		rel := liqRelPayload{
 			VolOverOI:     roundFloat(win.Rel.VolOverOI, 4),
@@ -602,6 +620,7 @@ func hasMechanicsData(out MechanicsCompressedInput) bool {
 		out.FearGreed != nil ||
 		out.Liquidations != nil ||
 		len(out.LiquidationsByWindow) > 0 ||
+		out.LiquidationSource != nil ||
 		out.FuturesSentiment != nil
 }
 

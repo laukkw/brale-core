@@ -95,11 +95,29 @@ func buildMechanicsDataFromInputs(mech features.MechanicsSnapshot) *MechanicsDat
 		CrowdingState     *struct {
 			ReversalRisk string `json:"reversal_risk"`
 		} `json:"crowding_state"`
+		LiquidationState *struct {
+			Stress   string `json:"stress"`
+			Status   string `json:"status"`
+			Window   string `json:"window"`
+			Complete bool   `json:"complete"`
+		} `json:"liquidation_state"`
+		LiquidationSource *struct {
+			Source          string `json:"source"`
+			Status          string `json:"status"`
+			StreamConnected bool   `json:"stream_connected"`
+			CoverageSec     int64  `json:"coverage_sec"`
+			SampleCount     int    `json:"sample_count"`
+			LastEventAgeSec int64  `json:"last_event_age_sec"`
+			Complete        bool   `json:"complete"`
+		} `json:"liquidation_source"`
 	}
 	if err := json.Unmarshal(mech.RawJSON, &state); err != nil {
 		return nil
 	}
-	if len(state.MechanicsConflict) == 0 && (state.CrowdingState == nil || state.CrowdingState.ReversalRisk == "") {
+	if len(state.MechanicsConflict) == 0 &&
+		(state.CrowdingState == nil || state.CrowdingState.ReversalRisk == "") &&
+		state.LiquidationState == nil &&
+		state.LiquidationSource == nil {
 		return nil
 	}
 	ctx := &MechanicsDataContext{
@@ -107,6 +125,25 @@ func buildMechanicsDataFromInputs(mech features.MechanicsSnapshot) *MechanicsDat
 	}
 	if state.CrowdingState != nil {
 		ctx.ReversalRisk = state.CrowdingState.ReversalRisk
+	}
+	if state.LiquidationState != nil {
+		ctx.LiquidationState = &MechanicsLiquidationContext{
+			Stress:   state.LiquidationState.Stress,
+			Status:   state.LiquidationState.Status,
+			Window:   state.LiquidationState.Window,
+			Complete: state.LiquidationState.Complete,
+		}
+	}
+	if state.LiquidationSource != nil {
+		ctx.LiquidationSource = &MechanicsLiquidationSourceContext{
+			Source:          state.LiquidationSource.Source,
+			Status:          state.LiquidationSource.Status,
+			StreamConnected: state.LiquidationSource.StreamConnected,
+			CoverageSec:     state.LiquidationSource.CoverageSec,
+			SampleCount:     state.LiquidationSource.SampleCount,
+			LastEventAgeSec: state.LiquidationSource.LastEventAgeSec,
+			Complete:        state.LiquidationSource.Complete,
+		}
 	}
 	return ctx
 }

@@ -19,7 +19,7 @@ func TestBuildProviderDataContextUsesDecisionIntervalAndParsesAnchors(t *testing
 		},
 		Mechanics: features.MechanicsSnapshot{
 			Symbol:  symbol,
-			RawJSON: []byte(`{"crowding_state":{"reversal_risk":"medium"},"mechanics_conflict":["funding_long_but_oi_falling"]}`),
+			RawJSON: []byte(`{"crowding_state":{"reversal_risk":"medium"},"mechanics_conflict":["funding_long_but_oi_falling"],"liquidation_state":{"stress":"unknown","status":"warming_up","window":"1h","complete":false},"liquidation_source":{"source":"binance_force_order_snapshot_ws","status":"warming_up","stream_connected":true,"coverage_sec":1800,"sample_count":3,"last_event_age_sec":45,"complete":false}}`),
 		},
 	}
 
@@ -50,6 +50,12 @@ func TestBuildProviderDataContextUsesDecisionIntervalAndParsesAnchors(t *testing
 	}
 	if len(got.MechanicsCtx.Conflicts) != 1 || got.MechanicsCtx.Conflicts[0] != "funding_long_but_oi_falling" {
 		t.Fatalf("conflicts=%v", got.MechanicsCtx.Conflicts)
+	}
+	if got.MechanicsCtx.LiquidationState == nil || got.MechanicsCtx.LiquidationState.Status != "warming_up" {
+		t.Fatalf("liquidation_state=%+v want warming_up", got.MechanicsCtx.LiquidationState)
+	}
+	if got.MechanicsCtx.LiquidationSource == nil || got.MechanicsCtx.LiquidationSource.Source != "binance_force_order_snapshot_ws" {
+		t.Fatalf("liquidation_source=%+v", got.MechanicsCtx.LiquidationSource)
 	}
 }
 

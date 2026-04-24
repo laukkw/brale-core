@@ -230,7 +230,15 @@ func (r *Recorder) Finish(ctx context.Context, outcome string) error {
 		AgentCount:     agentCount,
 		ProviderCount:  providerCount,
 		GateAction:     gateAction,
+		RequestID:      sessionRequestID(ctx),
 		CreatedAt:      finishedAt.UTC(),
 	}
 	return r.store.SaveLLMRound(ctx, rec)
+}
+
+func sessionRequestID(ctx context.Context) string {
+	if requestID, ok := llm.SessionRequestIDFromContext(ctx); ok {
+		return requestID
+	}
+	return ""
 }

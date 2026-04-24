@@ -36,6 +36,7 @@ CREATE TABLE llm_rounds (
     agent_count      INT          NOT NULL DEFAULT 0,
     provider_count   INT          NOT NULL DEFAULT 0,
     gate_action      TEXT,
+    request_id       TEXT,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 

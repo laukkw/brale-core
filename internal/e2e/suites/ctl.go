@@ -30,14 +30,15 @@ func (s *CTLSuite) Run(ctx *e2e.Context) e2e.SuiteResult {
 	symbol := ctx.Config.Symbol
 
 	cmds := []struct {
-		name                string
-		args                []string
-		allowReportNotFound bool
+		name                   string
+		args                   []string
+		suppressSuccessDetails bool
+		validateOutput         func(string) error
 	}{
-		{"schedule status", []string{"schedule", "status", "--endpoint", endpoint}, false},
-		{"position list", []string{"position", "list", "--endpoint", endpoint}, false},
-		{"decision latest", []string{"decision", "latest", "--endpoint", endpoint, "--symbol", symbol}, false},
-		{"observe report", []string{"observe", "report", "--endpoint", endpoint, "--symbol", symbol}, true},
+		{"schedule status", []string{"schedule", "status", "--endpoint", endpoint}, false, nil},
+		{"position list", []string{"position", "list", "--endpoint", endpoint}, false, nil},
+		{"decision latest", []string{"decision", "latest", "--endpoint", endpoint, "--symbol", symbol}, false, nil},
+		{"observe report", []string{"observe", "report", "--endpoint", endpoint, "--symbol", symbol}, true, validateObserveReportOutput},
 	}
 
 	selfBin, err := os.Executable()
@@ -47,7 +48,7 @@ func (s *CTLSuite) Run(ctx *e2e.Context) e2e.SuiteResult {
 
 	allPassed := true
 	for _, cmd := range cmds {
-		check := runCLICheck(selfBin, cmd.name, cmd.args, cmd.allowReportNotFound)
+		check := runCLICheck(selfBin, cmd.name, cmd.args, cmd.suppressSuccessDetails, cmd.validateOutput)
 		result.Checks = append(result.Checks, check)
 		if !check.Passed {
 			allPassed = false
@@ -93,17 +94,12 @@ func (s *CTLSuite) Run(ctx *e2e.Context) e2e.SuiteResult {
 	return result
 }
 
-func runCLICheck(bin, name string, args []string, allowReportNotFound bool) e2e.CheckResult {
+func runCLICheck(bin, name string, args []string, suppressSuccessDetails bool, validateOutput func(string) error) e2e.CheckResult {
 	check := e2e.CheckResult{Name: name}
 	cmd := exec.Command(bin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		outStr := strings.TrimSpace(string(out))
-		if allowReportNotFound && (strings.Contains(outStr, "http 404") || strings.Contains(outStr, "暂无该符号观察结果")) {
-			check.Passed = true
-			check.Message = "report not found yet (acceptable)"
-			return check
-		}
 		check.Passed = false
 		if len(outStr) > 200 {
 			outStr = outStr[:200] + "..."
@@ -111,7 +107,26 @@ func runCLICheck(bin, name string, args []string, allowReportNotFound bool) e2e.
 		check.Message = fmt.Sprintf("exit=%v output=%s", err, outStr)
 		return check
 	}
+	outStr := strings.TrimSpace(string(out))
+	if validateOutput != nil {
+		if validateErr := validateOutput(outStr); validateErr != nil {
+			check.Passed = false
+			check.Message = validateErr.Error()
+			return check
+		}
+	}
 	check.Passed = true
+	if suppressSuccessDetails {
+		check.Message = "ok"
+		return check
+	}
 	check.Message = fmt.Sprintf("ok (%d bytes)", len(out))
 	return check
+}
+
+func validateObserveReportOutput(out string) error {
+	if strings.TrimSpace(out) == "" {
+		return fmt.Errorf("empty observe report output")
+	}
+	return nil
 }

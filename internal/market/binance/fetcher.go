@@ -6,11 +6,13 @@ import (
 )
 
 type SnapshotOptions struct {
-	RequireOI           bool
-	RequireFunding      bool
-	RequireLongShort    bool
-	RequireFearGreed    bool
-	RequireLiquidations bool
+	RequireOI            bool
+	RequireFunding       bool
+	RequireLongShort     bool
+	RequireFearGreed     bool
+	RequireLiquidations  bool
+	LiquidationsByWindow snapshot.LiquidationWindowProvider
+	LiquidationSource    snapshot.LiquidationSourceProvider
 }
 
 func NewSnapshotFetcher(opts SnapshotOptions) *snapshot.Fetcher {
@@ -22,7 +24,8 @@ func NewSnapshotFetcher(opts SnapshotOptions) *snapshot.Fetcher {
 		LongShort:            futuresMarket,
 		FearGreed:            nil,
 		Liquidations:         nil,
-		LiquidationsByWindow: futuresMarket,
+		LiquidationsByWindow: opts.LiquidationsByWindow,
+		LiquidationSource:    opts.LiquidationSource,
 		RequireOI:            opts.RequireOI,
 		RequireFunding:       opts.RequireFunding,
 		RequireLongShort:     opts.RequireLongShort,

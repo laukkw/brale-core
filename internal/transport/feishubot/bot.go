@@ -293,10 +293,10 @@ func (b *Bot) waitObserveReport(ctx context.Context, symbol, requestID string) (
 		if err != nil {
 			continue
 		}
-		if requestID != "" && resp.RequestID != "" && resp.RequestID != requestID {
+		if requestID != "" && strings.TrimSpace(resp.RequestID) != requestID {
 			continue
 		}
-		if hasObserveReport(resp) || strings.EqualFold(strings.TrimSpace(resp.Status), "ok") {
+		if observeReportReady(resp, requestID) {
 			return resp, true
 		}
 	}
@@ -304,6 +304,13 @@ func (b *Bot) waitObserveReport(ctx context.Context, symbol, requestID string) (
 
 func hasObserveReport(resp botruntime.ObserveResponse) bool {
 	return resp.Agent.HasData() || resp.Gate.HasData() || strings.TrimSpace(resp.ReportHTML) != "" || strings.TrimSpace(resp.ReportMarkdown) != "" || strings.TrimSpace(resp.Report) != ""
+}
+
+func observeReportReady(resp botruntime.ObserveResponse, requestID string) bool {
+	if hasObserveReport(resp) {
+		return true
+	}
+	return strings.TrimSpace(requestID) == "" && strings.EqualFold(strings.TrimSpace(resp.Status), "ok")
 }
 
 func (b *Bot) handleSchedule(ctx context.Context, chatID string, enable bool) {

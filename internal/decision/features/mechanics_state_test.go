@@ -203,6 +203,11 @@ func TestSummarizeLiquidationWindow(t *testing.T) {
 			payload: liqWindowPayload{Rel: &liqRelPayload{Spike: true}},
 			want:    mechanicsLiquidationState{Stress: "high", Window: "15m", ZScore: 0, VolOverOI: 0, Spike: true, Imbalance: 0},
 		},
+		{
+			name:    "warming_up is unknown not low",
+			payload: liqWindowPayload{Status: "warming_up", CoverageSec: 1200, Complete: false, Rel: &liqRelPayload{ZScore: 2.9, VolOverOI: 0.2, Spike: true}},
+			want:    mechanicsLiquidationState{Stress: "unknown", Status: "warming_up", Complete: false, Window: "15m", ZScore: 2.9, VolOverOI: 0.2, Spike: true, Imbalance: 0},
+		},
 	}
 
 	for _, tt := range tests {
@@ -354,7 +359,7 @@ func TestBuildMechanicsStateSummaryBuildsStateAndConflicts(t *testing.T) {
 	}
 }
 
-func TestBuildMechanicsStateRawDropsLegacyFields(t *testing.T) {
+func TestBuildMechanicsStateRawPreservesLiquidationQualityFields(t *testing.T) {
 	input := MechanicsCompressedInput{
 		Timestamp:              "2026-04-11T00:00:20Z",
 		FearGreedNextUpdateSec: 300,
@@ -372,12 +377,26 @@ func TestBuildMechanicsStateRawDropsLegacyFields(t *testing.T) {
 		},
 		LiquidationsByWindow: map[string]liqWindowPayload{
 			"1h": {
-				Imbalance: 0.28,
+				Imbalance:   0.28,
+				Status:      "warming_up",
+				CoverageSec: 1800,
+				SampleCount: 3,
+				Complete:    false,
 				Bins: []liqPriceBinPayload{
 					{Bps: 25, LongVol: 10, ShortVol: 20, TotalVol: 30, Imbalance: -0.33},
 				},
 				Rel: &liqRelPayload{ZScore: 2.1, VolOverOI: 0.06},
 			},
+		},
+		LiquidationSource: &liqSourcePayload{
+			Source:          "binance_force_order_snapshot_ws",
+			Coverage:        "largest_order_per_symbol_per_1000ms",
+			Status:          "warming_up",
+			StreamConnected: true,
+			CoverageSec:     1800,
+			SampleCount:     3,
+			LastEventAgeSec: 45,
+			Complete:        false,
 		},
 		FearGreed: &fearGreedPayload{Value: 24},
 	}
@@ -409,6 +428,12 @@ func TestBuildMechanicsStateRawDropsLegacyFields(t *testing.T) {
 	}
 	if _, ok := payload["liquidation_state"]; !ok {
 		t.Fatalf("state raw missing liquidation_state: %s", serialized)
+	}
+	if _, ok := payload["liquidation_source"]; !ok {
+		t.Fatalf("state raw missing liquidation_source: %s", serialized)
+	}
+	if _, ok := payload["liquidations_by_window"]; !ok {
+		t.Fatalf("state raw missing liquidations_by_window: %s", serialized)
 	}
 	if _, ok := payload["sentiment_state"]; !ok {
 		t.Fatalf("state raw missing sentiment_state: %s", serialized)

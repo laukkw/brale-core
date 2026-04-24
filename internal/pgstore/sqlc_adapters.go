@@ -52,6 +52,7 @@ func mapLLMRound(row queries.LlmRound) store.LLMRoundRecord {
 		AgentCount:     int(row.AgentCount),
 		ProviderCount:  int(row.ProviderCount),
 		GateAction:     textValue(row.GateAction),
+		RequestID:      textValue(row.RequestID),
 		CreatedAt:      timestamptzValue(row.CreatedAt),
 	}
 }
