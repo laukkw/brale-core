@@ -11,6 +11,10 @@ exec_api_key = "${EXEC_USERNAME}"
 exec_api_secret = "${EXEC_SECRET}"
 exec_auth = "basic"
 enable_scheduled_decision = true
+
+[prompt]
+locale = "zh"
+
 llm_min_interval = "3s"
 
 [database]

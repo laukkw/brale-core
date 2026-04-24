@@ -182,7 +182,7 @@ bralectl mcp serve --mode http --addr 0.0.0.0:8765  # 远程 HTTP 模式
 
 | 层级 | 路径 | 范围 |
 |------+------+------|
-| 系统 | =configs/system.toml= | 日志、数据库、LLM 端点、调度、通知 |
+| 系统 | =configs/system.toml= | 日志、数据库、LLM 端点、Prompt 语言、调度、通知 |
 | 品种索引 | =configs/symbols-index.toml= | 品种名称到配置 / 策略文件的映射 |
 | 品种 | =configs/symbols/*.toml= | 单品种：周期、智能体、指标、记忆、共识 |
 | 策略 | =configs/strategies/*.toml= | 单品种：风控参数、Gate/Sieve 规则、止盈止损策略 |
@@ -426,7 +426,7 @@ Four-layer TOML hierarchy:
 
 | Layer | Path | Scope |
 |-------+------+-------|
-| System | =configs/system.toml= | Logging, DB, LLM endpoints, scheduling, notifications |
+| System | =configs/system.toml= | Logging, DB, LLM endpoints, prompt locale, scheduling, notifications |
 | Symbol Index | =configs/symbols-index.toml= | Maps symbols to config/strategy files |
 | Symbol | =configs/symbols/*.toml= | Per-symbol: intervals, agents, indicators, memory, consensus |
 | Strategy | =configs/strategies/*.toml= | Per-symbol: risk params, gate/sieve rules, TP/SL policy |
