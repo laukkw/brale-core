@@ -4,7 +4,7 @@
 # 交易对标识（必须与交易所数据源完全一致）。
 symbol = "ETHUSDT"
 # K 线周期。第一个元素（最短周期）同时作为 decisionInterval 注入 Agent prompt。
-intervals = ["1h","4h","1d"]
+intervals = ['30m','1h','4h']
 # 每个周期拉取的 K 线数量。越大结构检测越好，但速度越慢。
 kline_limit = 205
 
@@ -22,8 +22,8 @@ oi = true
 funding = true
 long_short = true
 fear_greed = true
-# 清算数据可选；策略不依赖时关闭。
-liquidations = false
+# 清算数据开关兼硬依赖：true=接入并要求成功，false=不接入。
+liquidations = true
 
 [indicators]
 # 指标计算引擎：

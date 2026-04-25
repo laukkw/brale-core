@@ -1226,7 +1226,7 @@ func buildNoticeBody(header string, lines []string) string {
 func visibleCloseReason(reason string) string {
 	reason = strings.TrimSpace(reason)
 	switch strings.ToLower(reason) {
-	case "", "-", "external_missing", "force_exit":
+	case "", "-", "external_missing":
 		return ""
 	default:
 		return reason

@@ -62,6 +62,7 @@ func mapPromptRegistry(row queries.PromptRegistry) store.PromptRegistryEntry {
 		ID:           uint(row.ID),
 		Role:         row.Role,
 		Stage:        row.Stage,
+		Locale:       row.Locale,
 		Version:      row.Version,
 		SystemPrompt: row.SystemPrompt,
 		Description:  textValue(row.Description),

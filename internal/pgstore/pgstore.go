@@ -61,15 +61,6 @@ func RunMigrations(connStr string, logger *zap.Logger) error {
 	}, "database migrations applied")
 }
 
-func RollbackLastMigration(connStr string, logger *zap.Logger) error {
-	return withMigrator(connStr, logger, func(m *migrate.Migrate) error {
-		if err := m.Steps(-1); err != nil && err != migrate.ErrNoChange {
-			return fmt.Errorf("rollback migration: %w", err)
-		}
-		return nil
-	}, "database migration rolled back")
-}
-
 func withMigrator(connStr string, logger *zap.Logger, fn func(*migrate.Migrate) error, successMsg string) error {
 	src, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {

@@ -47,14 +47,16 @@
 
 *解决方案：*
 
+当前仅支持前向 migration；若 =schema_migrations.dirty= 为 =true=，
+请先手动修正该标记，再重新执行 =make migrate-up=。
+
 #+begin_src bash
 make stop
-make migrate-down          # 回滚到上一个稳定版本
 make migrate-up            # 重新执行迁移
 make start
 #+end_src
 
-若回滚失败，可手动修正 =schema_migrations= 表中的 =dirty= 标记后重试。
+若重试仍失败，可手动修正 =schema_migrations= 表中的 =dirty= 标记后再执行 =make migrate-up=。
 
 ** 止损未触发
 
@@ -201,14 +203,16 @@ make start
 
 *Resolution:*
 
+Forward-only migrations are supported now. If =schema_migrations.dirty= is =true=,
+fix that flag manually first, then re-run =make migrate-up=.
+
 #+begin_src bash
 make stop
-make migrate-down          # roll back to the last stable version
 make migrate-up            # re-run migrations
 make start
 #+end_src
 
-If rollback also fails, manually correct the =dirty= flag in =schema_migrations= and retry.
+If the retry still fails, manually correct the =dirty= flag in =schema_migrations= and run =make migrate-up= again.
 
 ** Stoploss Not Triggered
 

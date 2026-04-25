@@ -103,6 +103,7 @@ func buildMechanicsDataFromInputs(mech features.MechanicsSnapshot) *MechanicsDat
 		} `json:"liquidation_state"`
 		LiquidationSource *struct {
 			Source          string `json:"source"`
+			Coverage        string `json:"coverage"`
 			Status          string `json:"status"`
 			StreamConnected bool   `json:"stream_connected"`
 			CoverageSec     int64  `json:"coverage_sec"`
@@ -137,6 +138,7 @@ func buildMechanicsDataFromInputs(mech features.MechanicsSnapshot) *MechanicsDat
 	if state.LiquidationSource != nil {
 		ctx.LiquidationSource = &MechanicsLiquidationSourceContext{
 			Source:          state.LiquidationSource.Source,
+			Coverage:        state.LiquidationSource.Coverage,
 			Status:          state.LiquidationSource.Status,
 			StreamConnected: state.LiquidationSource.StreamConnected,
 			CoverageSec:     state.LiquidationSource.CoverageSec,

@@ -47,6 +47,7 @@ type MechanicsLiquidationContext struct {
 
 type MechanicsLiquidationSourceContext struct {
 	Source          string `json:"source,omitempty"`
+	Coverage        string `json:"coverage,omitempty"`
 	Status          string `json:"status,omitempty"`
 	StreamConnected bool   `json:"stream_connected,omitempty"`
 	CoverageSec     int64  `json:"coverage_sec,omitempty"`

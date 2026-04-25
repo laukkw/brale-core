@@ -54,6 +54,7 @@ type PromptRegistry struct {
 	ID           int64              `db:"id" json:"id"`
 	Role         string             `db:"role" json:"role"`
 	Stage        string             `db:"stage" json:"stage"`
+	Locale       string             `db:"locale" json:"locale"`
 	Version      string             `db:"version" json:"version"`
 	SystemPrompt string             `db:"system_prompt" json:"system_prompt"`
 	Description  pgtype.Text        `db:"description" json:"description"`

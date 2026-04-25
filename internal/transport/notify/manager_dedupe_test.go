@@ -567,7 +567,6 @@ func TestAsyncDeliverAggregatesCloseNoticesPerChannel(t *testing.T) {
 		ProfitPct:      -0.0124,
 		TradeDurationS: 8606,
 		ExitReason:     "force_exit",
-		ExitType:       "external",
 		Leverage:       5,
 	})); err != nil {
 		t.Fatalf("deliver trade close summary: %v", err)
@@ -888,7 +887,6 @@ func TestCloseAggregation_MergesCloseNoticesByExecutorTradeID(t *testing.T) {
 		ProfitPct:      0.0175,
 		TradeDurationS: 3600,
 		ExitReason:     "roi",
-		ExitType:       "force_exit",
 	}); err != nil {
 		t.Fatalf("send trade close summary: %v", err)
 	}
@@ -988,7 +986,6 @@ func TestCloseAggregation_PrefersTradeExecutionMetrics(t *testing.T) {
 		ProfitPct:      -0.0014,
 		TradeDurationS: 75,
 		ExitReason:     "force_exit",
-		ExitType:       "external",
 		Leverage:       2,
 	}); err != nil {
 		t.Fatalf("send trade close summary: %v", err)
@@ -1017,11 +1014,40 @@ func TestCloseAggregation_PrefersTradeExecutionMetrics(t *testing.T) {
 	if strings.Contains(msg.Markdown, "external_missing") {
 		t.Fatalf("expected aggregated message to hide placeholder reason, got %q", msg.Markdown)
 	}
-	if strings.Contains(msg.Markdown, "force_exit") {
-		t.Fatalf("expected aggregated message to hide generic freqtrade reason, got %q", msg.Markdown)
+	if !strings.Contains(msg.Markdown, noticeLine("reason", "force_exit")) {
+		t.Fatalf("expected aggregated message to keep explicit force_exit reason, got %q", msg.Markdown)
 	}
 	if strings.Contains(msg.Markdown, "退出类型") {
 		t.Fatalf("expected aggregated message to avoid exit type, got %q", msg.Markdown)
+	}
+}
+
+func TestSendTradeCloseSummaryShowsForceExitReason(t *testing.T) {
+	sender := &countSender{}
+	mgr := Manager{
+		senders: []Sender{sender},
+		dedupe:  newDedupeGuard(2 * time.Minute),
+	}
+
+	if err := mgr.SendTradeCloseSummary(context.Background(), TradeCloseSummaryNotice{
+		TradeID:        7,
+		Pair:           "ETH/USDT:USDT",
+		IsShort:        true,
+		OpenRate:       2305.53,
+		CloseRate:      2308.95,
+		Amount:         1.619,
+		ProfitAbs:      -9.27240156,
+		ProfitPct:      -0.0124,
+		TradeDurationS: 8606,
+		ExitReason:     "force_exit",
+		Leverage:       5,
+	}); err != nil {
+		t.Fatalf("send trade close summary: %v", err)
+	}
+
+	msg := sender.lastMessage()
+	if !strings.Contains(msg.Markdown, noticeLine("reason", "force_exit")) {
+		t.Fatalf("expected close summary to show force_exit reason, got %q", msg.Markdown)
 	}
 }
 

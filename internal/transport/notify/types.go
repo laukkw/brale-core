@@ -93,7 +93,6 @@ type TradePartialCloseNotice struct {
 	RealizedProfit      float64
 	RealizedProfitRatio float64
 	ExitReason          string
-	ExitType            string
 }
 
 type TradeCloseSummaryNotice struct {
@@ -111,7 +110,6 @@ type TradeCloseSummaryNotice struct {
 	TradeDuration  int
 	TradeDurationS int64
 	ExitReason     string
-	ExitType       string
 	Leverage       float64
 }
 

@@ -10,25 +10,27 @@ import (
 )
 
 const findActivePrompt = `-- name: FindActivePrompt :one
-SELECT id, role, stage, version, system_prompt, description, active, created_at, updated_at
+SELECT id, role, stage, locale, version, system_prompt, description, active, created_at, updated_at
 FROM prompt_registry
-WHERE role = $1 AND stage = $2 AND active = true
+WHERE role = $1 AND stage = $2 AND locale = $3 AND active = true
 ORDER BY created_at DESC
 LIMIT 1
 `
 
 type FindActivePromptParams struct {
-	Role  string `db:"role" json:"role"`
-	Stage string `db:"stage" json:"stage"`
+	Role   string `db:"role" json:"role"`
+	Stage  string `db:"stage" json:"stage"`
+	Locale string `db:"locale" json:"locale"`
 }
 
 func (q *Queries) FindActivePrompt(ctx context.Context, arg FindActivePromptParams) (PromptRegistry, error) {
-	row := q.db.QueryRow(ctx, findActivePrompt, arg.Role, arg.Stage)
+	row := q.db.QueryRow(ctx, findActivePrompt, arg.Role, arg.Stage, arg.Locale)
 	var i PromptRegistry
 	err := row.Scan(
 		&i.ID,
 		&i.Role,
 		&i.Stage,
+		&i.Locale,
 		&i.Version,
 		&i.SystemPrompt,
 		&i.Description,
@@ -40,20 +42,20 @@ func (q *Queries) FindActivePrompt(ctx context.Context, arg FindActivePromptPara
 }
 
 const listPromptEntries = `-- name: ListPromptEntries :many
-SELECT id, role, stage, version, system_prompt, description, active, created_at, updated_at
+SELECT id, role, stage, locale, version, system_prompt, description, active, created_at, updated_at
 FROM prompt_registry
 WHERE CASE WHEN $1::text = '' THEN true ELSE role = $1 END
   AND CASE WHEN $2::boolean THEN active = true ELSE true END
-ORDER BY role, stage, created_at DESC
+ORDER BY role, stage, locale, created_at DESC
 `
 
 type ListPromptEntriesParams struct {
-	Column1 string `db:"column_1" json:"column_1"`
-	Column2 bool   `db:"column_2" json:"column_2"`
+	Role       string `db:"role" json:"role"`
+	ActiveOnly bool   `db:"active_only" json:"active_only"`
 }
 
 func (q *Queries) ListPromptEntries(ctx context.Context, arg ListPromptEntriesParams) ([]PromptRegistry, error) {
-	rows, err := q.db.Query(ctx, listPromptEntries, arg.Column1, arg.Column2)
+	rows, err := q.db.Query(ctx, listPromptEntries, arg.Role, arg.ActiveOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +67,7 @@ func (q *Queries) ListPromptEntries(ctx context.Context, arg ListPromptEntriesPa
 			&i.ID,
 			&i.Role,
 			&i.Stage,
+			&i.Locale,
 			&i.Version,
 			&i.SystemPrompt,
 			&i.Description,

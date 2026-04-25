@@ -1,10 +1,60 @@
 package features
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"brale-core/internal/snapshot"
 )
+
+func TestBuildMechanicsCompressedZeroOptionsUseDefaultSnapshotFeatures(t *testing.T) {
+	snap := snapshot.MarketSnapshot{
+		Funding: map[string]snapshot.FundingBlock{
+			"BTCUSDT": {Rate: 0.0002, Timestamp: 1700000000000},
+		},
+	}
+
+	got, err := BuildMechanicsCompressed(context.Background(), "BTCUSDT", snap, MechanicsCompressOptions{})
+	if err != nil {
+		t.Fatalf("BuildMechanicsCompressed() error = %v", err)
+	}
+	if got.Funding == nil {
+		t.Fatal("BuildMechanicsCompressed() funding = nil, want snapshot funding")
+	}
+}
+
+func TestBuildMechanicsCompressedExplicitEmptyFeatureFlagsStayDisabled(t *testing.T) {
+	snap := snapshot.MarketSnapshot{
+		Funding: map[string]snapshot.FundingBlock{
+			"BTCUSDT": {Rate: 0.0002, Timestamp: 1700000000000},
+		},
+	}
+
+	_, err := BuildMechanicsCompressed(context.Background(), "BTCUSDT", snap, MechanicsCompressOptions{
+		FeatureFlagsExplicit: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "no data") {
+		t.Fatalf("BuildMechanicsCompressed() error = %v, want no data error", err)
+	}
+}
+
+func TestDefaultMechanicsBuilderZeroOptionsUseDefaultSnapshotFeatures(t *testing.T) {
+	snap := snapshot.MarketSnapshot{
+		Funding: map[string]snapshot.FundingBlock{
+			"BTCUSDT": {Rate: 0.0002, Timestamp: 1700000000000},
+		},
+	}
+
+	got, err := (DefaultMechanicsBuilder{}).BuildMechanics(context.Background(), snap, "BTCUSDT")
+	if err != nil {
+		t.Fatalf("DefaultMechanicsBuilder.BuildMechanics() error = %v", err)
+	}
+	if !strings.Contains(string(got.RawJSON), `"funding"`) {
+		t.Fatalf("DefaultMechanicsBuilder.BuildMechanics() raw = %s, want funding payload", got.RawJSON)
+	}
+}
 
 func TestClassifyFundingState(t *testing.T) {
 	tests := []struct {

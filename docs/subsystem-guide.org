@@ -34,15 +34,11 @@ DATABASE_DSN=postgres://user:pass@localhost:5432/brale?sslmode=disable
 # 应用所有待执行迁移
 make migrate-up
 
-# 回退最新一次迁移
-make migrate-down
-
 # 或通过 brale-core 二进制
 ./brale-core -migrate-up -system configs/system.toml
-./brale-core -migrate-down -system configs/system.toml
 #+end_src
 
-如果本地没有 Go 环境，=make migrate-up/down= 会自动通过 Docker 执行。
+如果本地没有 Go 环境，=make migrate-up= 会自动通过 Docker 执行。
 
 ** 核心数据表
 

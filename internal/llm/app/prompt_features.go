@@ -322,7 +322,7 @@ func featureFragmentZH(stage, key string) string {
 	case promptStageAgentMechanics + "/fear_greed":
 		return "- 情绪指数已可用时，参考 `fear_greed` 与 `sentiment_state` 判断情绪极端是否在放大机制风险。"
 	case promptStageAgentMechanics + "/liquidations", promptStageProviderMechanics + "/liquidations", promptStageInPosMechanics + "/liquidations":
-		return "- 清算数据已可用时，重点读取 `liquidation_source.status` 与 `liquidations_by_window.*.sample_count/coverage_sec/complete`；`warming_up/stale/unavailable` 只能代表样本质量不足，不能直接解释为低风险。"
+		return "- 清算数据已可用时，重点读取 `liquidation_source.coverage/status` 与 `liquidation_source.sample_count/coverage_sec/complete`，以及 `liquidations_by_window.*.sample_count/coverage_sec/complete`；当 `liquidation_source.coverage=largest_order_per_symbol_per_1000ms` 时，`sample_count` 只表示“每个 symbol 每 1000ms 保留的最大一笔清算样本数”，不是完整逐笔市场总量；`warming_up/stale/unavailable` 只能代表样本质量不足，不能直接解释为低风险。"
 	case promptStageAgentMechanics + "/cvd":
 		return "- CVD 已可用时，结合 `cvd_by_interval` 判断主动买卖量是否支持当前方向。"
 	case promptStageAgentMechanics + "/sentiment":
@@ -375,7 +375,7 @@ func featureFragmentEN(stage, key string) string {
 	case promptStageAgentMechanics + "/fear_greed":
 		return "- When fear-greed data is available, use `fear_greed` and `sentiment_state` to judge whether sentiment extremes are amplifying mechanics risk."
 	case promptStageAgentMechanics + "/liquidations", promptStageProviderMechanics + "/liquidations", promptStageInPosMechanics + "/liquidations":
-		return "- When liquidation data is available, focus on `liquidation_source.status` and `liquidations_by_window.*.sample_count/coverage_sec/complete`; `warming_up/stale/unavailable` means the sample quality is incomplete, not that risk is low."
+		return "- When liquidation data is available, focus on `liquidation_source.coverage/status`, `liquidation_source.sample_count/coverage_sec/complete`, and `liquidations_by_window.*.sample_count/coverage_sec/complete`; when `liquidation_source.coverage=largest_order_per_symbol_per_1000ms`, `sample_count` means the count of the largest sampled liquidation per symbol per 1000ms, not the complete tick-by-tick market total; `warming_up/stale/unavailable` means the sample quality is incomplete, not that risk is low."
 	case promptStageAgentMechanics + "/cvd":
 		return "- When CVD is available, use `cvd_by_interval` to judge whether aggressive flow confirms the current direction."
 	case promptStageAgentMechanics + "/sentiment":

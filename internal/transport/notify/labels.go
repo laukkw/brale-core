@@ -38,7 +38,6 @@ var labelMap = map[string]string{
 	"close_rate":            "平仓价(成交)",
 	"reason":                "原因",
 	"exit_reason":           "退出原因",
-	"exit_type":             "退出类型",
 	"planned_stop":          "计划止损价",
 	"planned_take_profits":  "计划止盈价",
 	"pnl":                   "盈亏",

@@ -83,7 +83,7 @@ COMPOSE = $(STACK_EXPORTS) $(STACK_PROXY_SOURCE) docker compose -f "$(COMPOSE_FI
 # PREPARE_STACK runs the prepare-stack logic locally (via Go) or in Docker.
 PREPARE_STACK_ARGS = -env-file .env -config-in "$(FREQTRADE_CONFIG_ROOT)/config.base.json" -config-out "$(FREQTRADE_CONFIG_FILE)" -proxy-env-out "$(STACK_PROXY_ENV_FILE)" -system-in "$(BRALE_SYSTEM_IN)"
 
-.PHONY: help env-init setup init check prepare start apply-config start-freqtrade wait-freqtrade wait-brale ctl-smoke post-start-verify start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs logs-all build bralectl-build install-bralectl bralectl-builder-image add-symbol llm-probe migrate-up migrate-down e2e-start e2e-stop e2e-reset e2e-status e2e-test e2e-logs
+.PHONY: help env-init setup init check prepare start apply-config start-freqtrade wait-freqtrade wait-brale ctl-smoke post-start-verify start-brale mcp-start mcp-stop mcp-logs stop-freqtrade stop-brale stop restart rebuild down status logs logs-all build bralectl-build install-bralectl bralectl-builder-image add-symbol llm-probe migrate-up e2e-start e2e-stop e2e-reset e2e-status e2e-test e2e-logs
 
 help: ## Show the main make targets and optional component switches
 	@printf '%-22s %s\n' "env-init" "Create .env from .env.example if missing"; \
@@ -394,15 +394,6 @@ migrate-up: ## Run database migrations
 		echo "[INFO] go not found, running migrations in Docker"; \
 		$(COMPOSE) up -d timescaledb >/dev/null; \
 		$(COMPOSE) run --rm --no-deps brale -migrate-up; \
-	fi
-
-migrate-down: ## Roll back the last database migration
-	@if command -v go >/dev/null 2>&1; then \
-		go run ./cmd/brale-core -migrate-down; \
-	else \
-		echo "[INFO] go not found, rolling back migrations in Docker"; \
-		$(COMPOSE) up -d timescaledb >/dev/null; \
-		$(COMPOSE) run --rm --no-deps brale -migrate-down; \
 	fi
 
 # ======================================================================

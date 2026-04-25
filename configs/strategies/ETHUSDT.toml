@@ -168,7 +168,7 @@ min_update_interval_sec = 300
 #   +0.30 结构清晰 +0.25 结构完整 +0.20 指标对齐
 #   +0.15 动能扩张 +0.10×脚本加分 -0.20 噪音 -0.25 tag矛盾
 # 调参：0.20 激进 / 0.35 默认 / 0.55 保守 / 0.75 极保守
-quality_threshold = 0.35
+quality_threshold = 0.30
 
 # 执行价值阈值
 # entry_edge = |方向分数| × setup_quality × (1 - risk_penalty)

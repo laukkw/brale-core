@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -94,14 +93,7 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 		}
 		s.markExitNotified(tradeID, orderID)
 	}
-	internalReason := ""
-	if s.PosCache != nil {
-		if val, ok := s.PosCache.GetCloseReason(strconv.Itoa(tradeID)); ok {
-			internalReason = val
-		}
-	}
 	exitReason := firstNonEmpty(string(trade.ExitReason), evt.ExitReason)
-	exitType := resolveExitType(internalReason, exitReason)
 	if trade.IsOpen {
 		closeRate := resolveCloseRate(trade, exitOrder, evt)
 		amount := resolveExitAmount(exitOrder, evt)
@@ -117,7 +109,6 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 			RealizedProfit:      float64(trade.RealizedProfit),
 			RealizedProfitRatio: float64(trade.RealizedProfitRatio),
 			ExitReason:          exitReason,
-			ExitType:            exitType,
 		}
 		logger.Info("trade partial close notify",
 			zap.Int("trade_id", notice.TradeID),
@@ -130,7 +121,6 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 			zap.Float64("realized_profit", notice.RealizedProfit),
 			zap.Float64("realized_profit_ratio", notice.RealizedProfitRatio),
 			zap.String("exit_reason", notice.ExitReason),
-			zap.String("exit_type", notice.ExitType),
 		)
 		if err := s.Notifier.SendTradePartialClose(ctx, notice); err != nil {
 			logger.Warn("webhook partial close notify failed", zap.Error(err), zap.Int("trade_id", tradeID))
@@ -156,7 +146,6 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 		TradeDuration:  trade.TradeDuration,
 		TradeDurationS: int64(trade.TradeDurationSeconds),
 		ExitReason:     exitReason,
-		ExitType:       exitType,
 		Leverage:       float64(trade.Leverage),
 	}
 	logger.Info("trade close summary notify",
@@ -172,7 +161,6 @@ func (s *WebhookSyncService) notifyExit(ctx context.Context, logger *zap.Logger,
 		zap.Float64("profit_abs", notice.ProfitAbs),
 		zap.Float64("profit_pct", notice.ProfitPct),
 		zap.String("exit_reason", notice.ExitReason),
-		zap.String("exit_type", notice.ExitType),
 	)
 	if err := s.Notifier.SendTradeCloseSummary(ctx, notice); err != nil {
 		logger.Warn("webhook close summary notify failed", zap.Error(err), zap.Int("trade_id", tradeID))
@@ -310,24 +298,6 @@ func resolveExitStake(ord execution.TradeOrder, trade execution.Trade) float64 {
 		return float64(trade.StakeAmount)
 	}
 	return 0
-}
-
-func resolveExitType(internalReason string, exitReason string) string {
-	internal := strings.ToLower(strings.TrimSpace(internalReason))
-	if strings.Contains(internal, "stop_loss_hit") {
-		return "stop_loss"
-	}
-	if strings.Contains(internal, "take_profit_hit") {
-		return "take_profit"
-	}
-	reason := strings.ToLower(strings.TrimSpace(exitReason))
-	if strings.Contains(reason, "stop") {
-		return "stop_loss"
-	}
-	if strings.Contains(reason, "roi") || strings.Contains(reason, "profit") || strings.Contains(reason, "take") || strings.Contains(reason, "tp") {
-		return "take_profit"
-	}
-	return "external"
 }
 
 func normalizeFreqtradePercent(value float64) float64 {

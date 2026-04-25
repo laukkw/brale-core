@@ -285,3 +285,36 @@ func TestProviderPromptsCarryMovementFieldsAndDataAnchors(t *testing.T) {
 		t.Fatalf("provider user missing shared constraint payload: %s", prompts.IndicatorUser)
 	}
 }
+
+func TestMechanicsProviderPromptsCarryLiquidationCoverageSemantics(t *testing.T) {
+	builder := LLMPromptBuilder{
+		ProviderMechanicsSystem: "provider-mechanics-system",
+		UserFormat:              UserPromptFormatBullet,
+	}
+
+	prompts, err := builder.ProviderPrompts(
+		agent.IndicatorSummary{},
+		agent.StructureSummary{},
+		agent.MechanicsSummary{},
+		decision.AgentEnabled{Mechanics: true},
+		decision.ProviderDataContext{
+			MechanicsCtx: &decision.MechanicsDataContext{
+				LiquidationSource: &decision.MechanicsLiquidationSourceContext{
+					Source:      "binance_force_order_snapshot_ws",
+					Coverage:    "largest_order_per_symbol_per_1000ms",
+					Status:      "warming_up",
+					SampleCount: 4,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ProviderPrompts: %v", err)
+	}
+	if !strings.Contains(prompts.MechanicsSys, "largest_order_per_symbol_per_1000ms") {
+		t.Fatalf("mechanics system prompt missing liquidation coverage semantics: %s", prompts.MechanicsSys)
+	}
+	if !strings.Contains(prompts.MechanicsUser, `- coverage: "largest_order_per_symbol_per_1000ms"`) {
+		t.Fatalf("mechanics user prompt missing liquidation coverage anchor: %s", prompts.MechanicsUser)
+	}
+}

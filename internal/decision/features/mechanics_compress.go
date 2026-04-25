@@ -13,18 +13,19 @@ import (
 )
 
 type MechanicsCompressOptions struct {
-	Pretty             bool
-	Metrics            *market.MetricsService
-	Sentiment          *market.SentimentService
-	FearGreed          *market.FearGreedService
-	EnableOI           bool
-	EnableFunding      bool
-	EnableLongShort    bool
-	EnableFearGreed    bool
-	EnableLiquidations bool
-	EnableCVD          bool
-	EnableSentiment    bool
-	EnableFutSentiment bool
+	Pretty               bool
+	Metrics              *market.MetricsService
+	Sentiment            *market.SentimentService
+	FearGreed            *market.FearGreedService
+	FeatureFlagsExplicit bool
+	EnableOI             bool
+	EnableFunding        bool
+	EnableLongShort      bool
+	EnableFearGreed      bool
+	EnableLiquidations   bool
+	EnableCVD            bool
+	EnableSentiment      bool
+	EnableFutSentiment   bool
 }
 
 type MechanicsCompressedInput struct {
@@ -183,6 +184,7 @@ func BuildMechanicsCompressed(ctx context.Context, symbol string, snap snapshot.
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	opts = normalizeMechanicsCompressOptions(opts)
 	key := strings.ToUpper(strings.TrimSpace(symbol))
 	out := MechanicsCompressedInput{
 		Symbol:    key,
@@ -198,6 +200,32 @@ func BuildMechanicsCompressed(ctx context.Context, symbol string, snap snapshot.
 		return out, fmt.Errorf("mechanics: no data for symbol %s", symbol)
 	}
 	return out, nil
+}
+
+func normalizeMechanicsCompressOptions(opts MechanicsCompressOptions) MechanicsCompressOptions {
+	if opts.FeatureFlagsExplicit || hasAnyMechanicsFeatureFlag(opts) {
+		return opts
+	}
+	opts.EnableOI = true
+	opts.EnableFunding = true
+	opts.EnableLongShort = true
+	opts.EnableFearGreed = true
+	opts.EnableLiquidations = true
+	opts.EnableCVD = true
+	opts.EnableFutSentiment = true
+	opts.EnableSentiment = opts.Sentiment != nil
+	return opts
+}
+
+func hasAnyMechanicsFeatureFlag(opts MechanicsCompressOptions) bool {
+	return opts.EnableOI ||
+		opts.EnableFunding ||
+		opts.EnableLongShort ||
+		opts.EnableFearGreed ||
+		opts.EnableLiquidations ||
+		opts.EnableCVD ||
+		opts.EnableSentiment ||
+		opts.EnableFutSentiment
 }
 
 func applySnapshotFields(out *MechanicsCompressedInput, snap snapshot.MarketSnapshot, symbol string, opts MechanicsCompressOptions) {

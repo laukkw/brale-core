@@ -40,7 +40,6 @@ type migrationMode string
 const (
 	migrationNone migrationMode = ""
 	migrationUp   migrationMode = "up"
-	migrationDown migrationMode = "down"
 )
 
 type cliOptions struct {
@@ -55,19 +54,12 @@ func parseCLIOptions(args []string) (cliOptions, error) {
 	systemPath := fs.String("system", "configs/system.toml", "system config path")
 	symbolIndexPath := fs.String("symbols", "configs/symbols-index.toml", "symbols index config path")
 	migrateUp := fs.Bool("migrate-up", false, "apply pending database migrations and exit")
-	migrateDown := fs.Bool("migrate-down", false, "roll back the latest database migration and exit")
 	if err := fs.Parse(args); err != nil {
 		return cliOptions{}, err
 	}
-	if *migrateUp && *migrateDown {
-		return cliOptions{}, fmt.Errorf("only one of -migrate-up/-migrate-down can be set")
-	}
 	migration := migrationNone
-	switch {
-	case *migrateUp:
+	if *migrateUp {
 		migration = migrationUp
-	case *migrateDown:
-		migration = migrationDown
 	}
 	return cliOptions{
 		SystemPath:      *systemPath,
@@ -84,8 +76,6 @@ func runMigrationCommand(ctx context.Context, systemPath string, mode migrationM
 	switch mode {
 	case migrationUp:
 		return pgstore.RunMigrations(sys.Database.DSN, logging.L())
-	case migrationDown:
-		return pgstore.RollbackLastMigration(sys.Database.DSN, logging.L())
 	default:
 		return nil
 	}
