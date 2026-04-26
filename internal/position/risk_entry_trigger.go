@@ -37,6 +37,18 @@ func (m *RiskMonitor) handlePlanEntry(ctx context.Context, symbol string) error 
 	if !triggered {
 		return nil
 	}
+	if isEntryInvalidatedByStop(entry.Plan.Direction, quote.Price, entry.Plan.StopLoss) {
+		logger.Info("entry invalidated by stop",
+			zap.Float64("mark_price", quote.Price),
+			zap.Float64("entry_price", entry.Plan.Entry),
+			zap.Float64("stop_loss", entry.Plan.StopLoss),
+			zap.String("side", entry.Plan.Direction),
+		)
+		if m.PlanCache != nil {
+			m.PlanCache.Remove(planSymbol)
+		}
+		return nil
+	}
 	acct, err := m.fetchAccountState(ctx, planSymbol, logger)
 	if err != nil {
 		return &riskMonitorOpError{Op: "fetch account state", Symbol: planSymbol, Err: err}
@@ -198,5 +210,17 @@ func isEntryTriggered(side string, mark float64, entry float64) bool {
 		return mark >= entry
 	default:
 		return mark <= entry
+	}
+}
+
+func isEntryInvalidatedByStop(side string, mark float64, stopLoss float64) bool {
+	if mark <= 0 || stopLoss <= 0 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(side)) {
+	case "short":
+		return mark >= stopLoss
+	default:
+		return mark <= stopLoss
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"brale-core/internal/decision/decisionfmt"
 	"brale-core/internal/jobs"
@@ -32,6 +33,7 @@ const (
 	asyncEventTradeOpen            = "trade_open"
 	asyncEventTradePartialClose    = "trade_partial_close"
 	asyncEventTradeCloseSummary    = "trade_close_summary"
+	tradeLifecycleNotifyDelay      = 5 * time.Second
 )
 
 type gateAsyncPayload struct {
@@ -89,7 +91,7 @@ func (m *AsyncManager) enqueue(ctx context.Context, eventType, symbol string, pa
 		Symbol:    symbol,
 		Payload:   json.RawMessage(data),
 	}
-	if err := m.enqueueJob(ctx, client, args); err != nil {
+	if err := m.enqueueJob(ctx, client, args, notifyRenderInsertOpts(eventType)); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("enqueue async notification: %w", err)
@@ -107,13 +109,37 @@ func (m *AsyncManager) riverClient() *river.Client[pgx.Tx] {
 	return m.client
 }
 
-func (m *AsyncManager) enqueueJob(ctx context.Context, client *river.Client[pgx.Tx], args jobs.NotifyRenderArgs) error {
+func (m *AsyncManager) enqueueJob(ctx context.Context, client *river.Client[pgx.Tx], args jobs.NotifyRenderArgs, opts *river.InsertOpts) error {
 	if tx := notifyport.TxFromContext(ctx); tx != nil {
-		_, err := client.InsertTx(ctx, tx, args, nil)
+		_, err := client.InsertTx(ctx, tx, args, opts)
 		return err
 	}
-	_, err := client.Insert(ctx, args, nil)
+	_, err := client.Insert(ctx, args, opts)
 	return err
+}
+
+func notifyRenderInsertOpts(eventType string) *river.InsertOpts {
+	if !shouldDelayTradeLifecycleNotify(eventType) {
+		return nil
+	}
+	scheduledAt := time.Now().Add(tradeLifecycleNotifyDelay)
+	opts := (jobs.NotifyRenderArgs{}).InsertOpts()
+	opts.ScheduledAt = scheduledAt
+	return &opts
+}
+
+func shouldDelayTradeLifecycleNotify(eventType string) bool {
+	switch eventType {
+	case asyncEventPositionOpen,
+		asyncEventPositionClose,
+		asyncEventPositionCloseSummary,
+		asyncEventTradeOpen,
+		asyncEventTradePartialClose,
+		asyncEventTradeCloseSummary:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *AsyncManager) EnqueueRendered(ctx context.Context, eventType, symbol string, rendered json.RawMessage) error {

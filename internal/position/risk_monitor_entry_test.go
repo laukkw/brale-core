@@ -100,6 +100,64 @@ func TestRiskMonitorLeverageRoundingAndQtyReduction(t *testing.T) {
 	}
 }
 
+func TestRiskMonitorInvalidatesLongEntryPastStop(t *testing.T) {
+	planCache := NewPlanCache()
+	plan := execution.ExecutionPlan{
+		Symbol:    "BTCUSDT",
+		Direction: "long",
+		Entry:     100,
+		StopLoss:  95,
+		RiskPct:   0.1,
+		Leverage:  5,
+		RiskAnnotations: execution.RiskAnnotations{
+			RiskDistance: 5,
+			MaxInvestPct: 0.2,
+		},
+	}
+	planCache.ForceUpsert(plan.Symbol, plan)
+	exec := &recordingExecutor{}
+	monitor := baseRiskMonitorWithExecutor(planCache, 94, exec)
+
+	if err := monitor.handlePlanEntry(context.Background(), plan.Symbol); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := planCache.GetEntry(plan.Symbol); ok {
+		t.Fatalf("expected invalidated plan to be removed")
+	}
+	if exec.placeOrderCalls != 0 {
+		t.Fatalf("place order calls=%d want 0", exec.placeOrderCalls)
+	}
+}
+
+func TestRiskMonitorInvalidatesShortEntryPastStop(t *testing.T) {
+	planCache := NewPlanCache()
+	plan := execution.ExecutionPlan{
+		Symbol:    "BTCUSDT",
+		Direction: "short",
+		Entry:     100,
+		StopLoss:  105,
+		RiskPct:   0.1,
+		Leverage:  5,
+		RiskAnnotations: execution.RiskAnnotations{
+			RiskDistance: 5,
+			MaxInvestPct: 0.2,
+		},
+	}
+	planCache.ForceUpsert(plan.Symbol, plan)
+	exec := &recordingExecutor{}
+	monitor := baseRiskMonitorWithExecutor(planCache, 106, exec)
+
+	if err := monitor.handlePlanEntry(context.Background(), plan.Symbol); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := planCache.GetEntry(plan.Symbol); ok {
+		t.Fatalf("expected invalidated plan to be removed")
+	}
+	if exec.placeOrderCalls != 0 {
+		t.Fatalf("place order calls=%d want 0", exec.placeOrderCalls)
+	}
+}
+
 func TestRiskMonitorMaxDrawdownPctZeroDisablesGuard(t *testing.T) {
 	monitor := &RiskMonitor{}
 	if got := monitor.maxDrawdownPct(); got != 0 {
@@ -201,11 +259,15 @@ func TestRefreshRiskPlanOnTPHitReturnsUpdateError(t *testing.T) {
 }
 
 func baseRiskMonitor(planCache *PlanCache, markPrice float64) *RiskMonitor {
+	return baseRiskMonitorWithExecutor(planCache, markPrice, &stubExecutor{})
+}
+
+func baseRiskMonitorWithExecutor(planCache *PlanCache, markPrice float64, exec execution.Executor) *RiskMonitor {
 	return &RiskMonitor{
 		PriceSource: stubPriceSource{price: markPrice},
 		Positions: &PositionService{
 			Store:     &stubStore{},
-			Executor:  &stubExecutor{},
+			Executor:  exec,
 			PlanCache: planCache,
 		},
 		PlanCache: planCache,
@@ -248,6 +310,11 @@ func (s stubPriceSource) MarkPrice(ctx context.Context, symbol string) (market.P
 
 type stubExecutor struct{}
 
+type recordingExecutor struct {
+	stubExecutor
+	placeOrderCalls int
+}
+
 func (s *stubExecutor) Name() string { return "stub" }
 func (s *stubExecutor) GetOpenPositions(ctx context.Context, symbol string) ([]execution.ExternalPosition, error) {
 	return nil, nil
@@ -269,6 +336,11 @@ func (s *stubExecutor) CancelOrder(ctx context.Context, req execution.CancelOrde
 }
 func (s *stubExecutor) Ping(ctx context.Context) error { return nil }
 func (s *stubExecutor) NowMillis() int64               { return 0 }
+
+func (s *recordingExecutor) PlaceOrder(ctx context.Context, req execution.PlaceOrderReq) (execution.PlaceOrderResp, error) {
+	s.placeOrderCalls++
+	return execution.PlaceOrderResp{ExternalID: "recorded", Status: "submitted"}, nil
+}
 
 type stubStore struct{}
 

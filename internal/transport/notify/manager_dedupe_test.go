@@ -473,6 +473,33 @@ func TestAsyncManagerFallsBackToSyncBeforeRiverClient(t *testing.T) {
 	}
 }
 
+func TestNotifyRenderInsertOptsDelaysLifecycleEvents(t *testing.T) {
+	t.Parallel()
+
+	before := time.Now()
+	opts := notifyRenderInsertOpts(asyncEventPositionOpen)
+	if opts == nil {
+		t.Fatalf("expected lifecycle event to have insert opts")
+	}
+	if opts.ScheduledAt.Before(before.Add(tradeLifecycleNotifyDelay - time.Second)) {
+		t.Fatalf("scheduled_at=%s, want delayed by about %s", opts.ScheduledAt, tradeLifecycleNotifyDelay)
+	}
+	if opts.ScheduledAt.After(before.Add(tradeLifecycleNotifyDelay + time.Second)) {
+		t.Fatalf("scheduled_at=%s, want delayed by about %s", opts.ScheduledAt, tradeLifecycleNotifyDelay)
+	}
+	if opts.UniqueOpts.ByPeriod != 2*time.Minute || !opts.UniqueOpts.ByArgs {
+		t.Fatalf("unique opts not preserved: %#v", opts.UniqueOpts)
+	}
+}
+
+func TestNotifyRenderInsertOptsDoesNotDelayGate(t *testing.T) {
+	t.Parallel()
+
+	if opts := notifyRenderInsertOpts(asyncEventGate); opts != nil {
+		t.Fatalf("gate opts=%#v, want nil", opts)
+	}
+}
+
 func TestAsyncDeliverRoutesToSingleChannel(t *testing.T) {
 	t.Parallel()
 
