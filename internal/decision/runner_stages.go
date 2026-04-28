@@ -19,12 +19,7 @@ import (
 
 func (r *Runner) runAgentStage(ctx context.Context, symbol string, comp features.CompressionResult, enabled AgentEnabled, logger *zap.Logger) (SymbolResult, error) {
 	start := time.Now()
-	logger.Info("agent stage started",
-		zap.String("symbol", symbol),
-		zap.Bool("indicator", enabled.Indicator),
-		zap.Bool("structure", enabled.Structure),
-		zap.Bool("mechanics", enabled.Mechanics),
-	)
+	logDecisionStageStarted(logger, "agent stage started", enabled)
 	ind, st, mech, agentPrompts, agentInputs, err := r.analyze(ctx, symbol, comp, enabled)
 	if err != nil {
 		logger.Error("agent analyze failed", zap.Error(err))
@@ -36,12 +31,7 @@ func (r *Runner) runAgentStage(ctx context.Context, symbol string, comp features
 
 func (r *Runner) runProviderStage(ctx context.Context, symbol string, enabled AgentEnabled, res SymbolResult, dataCtx ProviderDataContext, logger *zap.Logger) (SymbolResult, error) {
 	start := time.Now()
-	logger.Info("provider stage started",
-		zap.String("symbol", symbol),
-		zap.Bool("indicator", enabled.Indicator),
-		zap.Bool("structure", enabled.Structure),
-		zap.Bool("mechanics", enabled.Mechanics),
-	)
+	logDecisionStageStarted(logger, "provider stage started", enabled)
 	providerEnabled := providerEnabledFromAgentPrompts(enabled, res.AgentPrompts)
 	pInd, pSt, pMech, providerPrompts, err := r.judge(ctx, symbol, res.AgentIndicator, res.AgentStructure, res.AgentMechanics, providerEnabled, dataCtx)
 	if err != nil {
@@ -63,6 +53,14 @@ func (r *Runner) runProviderStage(ctx context.Context, symbol string, enabled Ag
 	}
 	res.ProviderPrompts = providerPrompts
 	return res, nil
+}
+
+func logDecisionStageStarted(logger *zap.Logger, message string, enabled AgentEnabled) {
+	logger.Info(message,
+		zap.Bool("indicator", enabled.Indicator),
+		zap.Bool("structure", enabled.Structure),
+		zap.Bool("mechanics", enabled.Mechanics),
+	)
 }
 
 func providerEnabledFromAgentPrompts(enabled AgentEnabled, prompts AgentPromptSet) AgentEnabled {

@@ -149,6 +149,14 @@ services:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+      - path: ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}
+        required: false
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_DSN: "postgres://${POSTGRES_USER:-brale}:${POSTGRES_PASSWORD:-brale}@timescaledb:5432/${POSTGRES_DB:-brale}?sslmode=disable"
     entrypoint: ["bralectl"]
     command:
       - "--endpoint"

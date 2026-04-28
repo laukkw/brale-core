@@ -194,6 +194,53 @@ func TestInstallDefaultsToHTTPForClaudeCodeAndRemovesLegacyFile(t *testing.T) {
 	}
 }
 
+func TestDockerComposeMCPServiceGetsRuntimeConfigEnv(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("read docker-compose.yml: %v", err)
+	}
+	block := dockerComposeServiceBlock(t, string(data), "mcp")
+	for _, want := range []string{
+		"env_file:",
+		"- path: .env",
+		"- path: ${STACK_PROXY_ENV_FILE:-./data/freqtrade/proxy.env}",
+		"environment:",
+		"TZ: Asia/Shanghai",
+	} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("mcp service block missing %q:\n%s", want, block)
+		}
+	}
+	const wantDSN = `DATABASE_DSN: "postgres://${POSTGRES_USER:-brale}:${POSTGRES_PASSWORD:-brale}@timescaledb:5432/${POSTGRES_DB:-brale}?sslmode=disable"`
+	if !strings.Contains(block, wantDSN) {
+		t.Fatalf("mcp service block missing DATABASE_DSN override:\n%s", block)
+	}
+}
+
+func dockerComposeServiceBlock(t *testing.T, compose string, service string) string {
+	t.Helper()
+	lines := strings.Split(compose, "\n")
+	start := -1
+	for i, line := range lines {
+		if line == "  "+service+":" {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		t.Fatalf("service %q not found", service)
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		line := lines[i]
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(strings.TrimSpace(line), ":") {
+			end = i
+			break
+		}
+	}
+	return strings.Join(lines[start:end], "\n")
+}
+
 func TestInstallSkipsLocalHTTPAutoStartWhenRepoRootCannotBeResolved(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

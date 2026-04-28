@@ -14,6 +14,7 @@ import (
 	"brale-core/internal/memory"
 	"brale-core/internal/prompt/positionprompt"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRunnerRunAgentAndProviderStagesInjectsWorkingMemoryPromptContext(t *testing.T) {
@@ -56,6 +57,30 @@ func TestRunnerRunAgentAndProviderStagesInjectsWorkingMemoryPromptContext(t *tes
 	}
 }
 
+func TestLogDecisionStageStartedDoesNotDuplicateBoundSymbol(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core).With(zap.String("symbol", "BTCUSDT"))
+
+	logDecisionStageStarted(logger, "agent stage started", AgentEnabled{
+		Indicator: true,
+		Structure: true,
+		Mechanics: true,
+	})
+
+	if observed.Len() != 1 {
+		t.Fatalf("logs=%d want 1", observed.Len())
+	}
+	symbolFields := 0
+	for _, field := range observed.All()[0].Context {
+		if field.Key == "symbol" {
+			symbolFields++
+		}
+	}
+	if symbolFields != 1 {
+		t.Fatalf("symbol fields=%d want 1 (context=%v)", symbolFields, observed.All()[0].Context)
+	}
+}
+
 func TestPipelineRecordWorkingMemoryBuildsEntry(t *testing.T) {
 	wm := &stubWorkingMemory{}
 	roundID, err := llm.NewRoundID("round-working-memory")
@@ -64,8 +89,8 @@ func TestPipelineRecordWorkingMemoryBuildsEntry(t *testing.T) {
 	}
 	ctx := llm.WithSessionRoundID(context.Background(), roundID)
 	p := &Pipeline{
-		Runner:         &Runner{Configs: map[string]config.SymbolConfig{"BTCUSDT": {Symbol: "BTCUSDT", Intervals: []string{"15m"}}}},
-		WorkingMemory:  wm,
+		Runner:        &Runner{Configs: map[string]config.SymbolConfig{"BTCUSDT": {Symbol: "BTCUSDT", Intervals: []string{"15m"}}}},
+		WorkingMemory: wm,
 	}
 
 	p.recordWorkingMemory(ctx, SymbolResult{
