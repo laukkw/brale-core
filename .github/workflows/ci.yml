@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+      - dev
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25.x"
+
+jobs:
+  go:
+    name: Go tests and builds
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build bralectl
+        run: go build -o /tmp/bralectl ./cmd/bralectl
+
+      - name: Build brale-core
+        run: go build -o /tmp/brale-core ./cmd/brale-core
+
+  compose:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose configuration
+        run: docker compose --profile mcp config --quiet
