@@ -30,6 +30,7 @@ run_init=1
 with_mcp=0
 run_setup=0
 setup_lang=""
+full_clone=0
 host_uid="$(id -u)"
 host_gid="$(id -g)"
 
@@ -46,6 +47,7 @@ Options:
   --with-mcp          Start the stack with the optional MCP Streamable HTTP service
   --setup             Run 'make setup' after clone/update
   --setup-lang LANG   Preselect setup wizard language (zh or en)
+  --full-clone        Clone the full Git history instead of the default shallow checkout
   -h, --help          Show this help text
 EOF
 }
@@ -159,6 +161,10 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --full-clone)
+      full_clone=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -188,8 +194,15 @@ if [[ ! -d "$parent_dir" ]]; then
 fi
 
 if [[ ! -d "$target_dir/.git" ]]; then
-  log "[INFO] cloning brale-core into $target_dir"
-  git clone "$repo_url" "$target_dir"
+  if [[ "$full_clone" -eq 1 ]]; then
+    log "[INFO] cloning full brale-core history into $target_dir"
+    git clone "$repo_url" "$target_dir"
+  else
+    log "[INFO] shallow cloning brale-core ref $ref into $target_dir"
+    if ! git clone --depth 1 --branch "$ref" "$repo_url" "$target_dir"; then
+      fail "shallow clone failed for ref '$ref'. Check the ref name or rerun with --full-clone."
+    fi
+  fi
 else
   log "[INFO] reusing existing checkout at $target_dir"
   current_origin="$(git -C "$target_dir" remote get-url origin 2>/dev/null || true)"
@@ -205,10 +218,23 @@ if [[ -n "$(git -C "$target_dir" status --porcelain)" ]]; then
   log "[WARN] working tree is dirty; skipping git fetch/reset and using local files as-is"
 else
   log "[INFO] updating checkout to $ref"
-  git -C "$target_dir" fetch --tags origin
-  git -C "$target_dir" checkout "$ref"
-  if git -C "$target_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
-    git -C "$target_dir" pull --ff-only origin "$ref"
+  is_shallow="$(git -C "$target_dir" rev-parse --is-shallow-repository 2>/dev/null || printf 'false')"
+  if [[ "$full_clone" -eq 1 || "$is_shallow" != "true" ]]; then
+    git -C "$target_dir" fetch --tags origin
+    git -C "$target_dir" checkout "$ref"
+    if git -C "$target_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
+      git -C "$target_dir" pull --ff-only origin "$ref"
+    fi
+  else
+    if ! git -C "$target_dir" fetch --depth 1 origin "$ref"; then
+      fail "failed to update shallow checkout for ref '$ref'. Check the ref name or rerun with --full-clone."
+    fi
+    if git -C "$target_dir" show-ref --verify --quiet "refs/heads/$ref"; then
+      git -C "$target_dir" checkout "$ref"
+      git -C "$target_dir" reset --hard FETCH_HEAD
+    else
+      git -C "$target_dir" checkout --detach FETCH_HEAD
+    fi
   fi
 fi
 

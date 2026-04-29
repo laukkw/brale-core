@@ -66,6 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bo
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --setup --setup-lang zh
 # 或：已有可用 .env 时跳过交互式 init，直接启动
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --no-init
+# 默认使用浅克隆；如需完整 Git 历史可加 --full-clone
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --full-clone
 #+end_src
 
 *** 手动部署
@@ -309,6 +311,8 @@ curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bo
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --setup --setup-lang en
 # or: skip the interactive init step when .env is already ready
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --no-init
+# The default checkout is shallow; add --full-clone when full Git history is needed
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --full-clone
 #+end_src
 
 *** Manual

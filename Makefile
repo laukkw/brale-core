@@ -43,6 +43,12 @@ BRALECTL_OUTPUT_BIN ?= $(OUTPUT_ROOT)/bralectl
 BRALECTL_INSTALL_DIR ?= $(HOME)/.local/bin
 BRALECTL_INSTALL_BIN ?= $(BRALECTL_INSTALL_DIR)/bralectl
 BRALECTL_DOCKER_IMAGE ?= brale-core-go-builder
+GO_BUILD_FLAGS ?= -buildvcs=false
+HOST_UNAME_S := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')
+HOST_UNAME_M := $(shell uname -m 2>/dev/null)
+GO_BUILD_GOOS ?= $(if $(filter darwin,$(HOST_UNAME_S)),darwin,$(if $(filter linux,$(HOST_UNAME_S)),linux,$(HOST_UNAME_S)))
+GO_BUILD_GOARCH ?= $(if $(filter x86_64 amd64,$(HOST_UNAME_M)),amd64,$(if $(filter arm64 aarch64,$(HOST_UNAME_M)),arm64,$(HOST_UNAME_M)))
+GO_BUILD_ENV = CGO_ENABLED=0 GOOS="$(GO_BUILD_GOOS)" GOARCH="$(GO_BUILD_GOARCH)"
 TEMPLATE_SYMBOL ?=
 VERIFY_CTL ?= 1
 CTL_SYMBOL ?= $(strip $(shell awk -F'"' '/^[[:space:]]*symbol[[:space:]]*=[[:space:]]*"/ { print $$2; exit }' "$(BRALE_SYMBOL_INDEX_IN)" 2>/dev/null))
@@ -66,12 +72,17 @@ STACK_PROXY_SOURCE = if [ -f "$$STACK_PROXY_ENV_FILE" ]; then \
 			continue; \
 		fi; \
 		if [[ "$$trimmed" =~ ^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)=(.*)$$ ]]; then \
+			key="$${BASH_REMATCH[1]}"; \
 			value="$${BASH_REMATCH[2]}"; \
 			if printf '%s\n' "$$value" | grep -q '[`$$]'; then \
 				echo "[ERR] proxy env values must be literal in $$STACK_PROXY_ENV_FILE"; \
 				exit 1; \
 			fi; \
-			export "$${BASH_REMATCH[1]}=$$value"; \
+			if [[ "$$key" =~ ^(HTTP_PROXY|HTTPS_PROXY|http_proxy|https_proxy)$$ ]] && [[ "$$value" =~ ^socks5?h?:// ]]; then \
+				echo "[WARN] skipping $$key from $$STACK_PROXY_ENV_FILE for Docker build: apt does not support SOCKS proxies"; \
+				continue; \
+			fi; \
+			export "$$key=$$value"; \
 		else \
 			echo "[ERR] invalid proxy env entry in $$STACK_PROXY_ENV_FILE: $$trimmed"; \
 			exit 1; \
@@ -310,23 +321,30 @@ build: ## Build bralectl into _output/bralectl
 		exit 1; \
 	fi
 	@mkdir -p "$(dir $(BRALECTL_OUTPUT_BIN))"
-	go build -o "$(BRALECTL_OUTPUT_BIN)" ./cmd/bralectl
+	$(GO_BUILD_ENV) go build $(GO_BUILD_FLAGS) -o "$(BRALECTL_OUTPUT_BIN)" ./cmd/bralectl
 
 bralectl-build: ## Build the local bralectl binary
 	@mkdir -p "$(dir $(BRALECTL_BIN))"
 	@if command -v go >/dev/null 2>&1; then \
-		go build -o "$(BRALECTL_BIN)" ./cmd/bralectl; \
+		if $(GO_BUILD_ENV) go build $(GO_BUILD_FLAGS) -o "$(BRALECTL_BIN)" ./cmd/bralectl; then \
+			exit 0; \
+		fi; \
+		echo "[WARN] local go build failed, building bralectl in Docker"; \
 	else \
 		echo "[INFO] go not found, building bralectl in Docker"; \
-		$(MAKE) bralectl-builder-image; \
-		docker run --rm \
-			-e GOPROXY="$(GOPROXY)" \
-			-e GOSUMDB="$(GOSUMDB)" \
-			-v "$(CURDIR):/src" \
-			-w /src \
-			"$(BRALECTL_DOCKER_IMAGE)" \
-			go build -o "$(BRALECTL_BIN)" ./cmd/bralectl; \
-	fi
+	fi; \
+	$(MAKE) bralectl-builder-image; \
+	docker run --rm \
+		-e GOPROXY="$(GOPROXY)" \
+		-e GOSUMDB="$(GOSUMDB)" \
+		-e CGO_ENABLED=0 \
+		-e GOOS="$(GO_BUILD_GOOS)" \
+		-e GOARCH="$(GO_BUILD_GOARCH)" \
+		-v "$(CURDIR):/src" \
+		-v "$(abspath $(dir $(BRALECTL_BIN))):/out" \
+		-w /src \
+		"$(BRALECTL_DOCKER_IMAGE)" \
+		go build $(GO_BUILD_FLAGS) -o "/out/$(notdir $(BRALECTL_BIN))" ./cmd/bralectl
 
 install-bralectl: bralectl-build ## Build latest bralectl and install it into a PATH directory
 	@set -e; \
@@ -363,7 +381,7 @@ add-symbol:
 	fi; \
 	if command -v go >/dev/null 2>&1; then \
 		mkdir -p "$(dir $(BRALECTL_BIN))"; \
-		go build -o "$(BRALECTL_BIN)" ./cmd/bralectl; \
+		$(GO_BUILD_ENV) go build $(GO_BUILD_FLAGS) -o "$(BRALECTL_BIN)" ./cmd/bralectl; \
 		"$(BRALECTL_BIN)" add-symbol "$(SYMBOL)" --repo "$(CURDIR)" $$extra_args; \
 	else \
 		tty_args="-i"; \

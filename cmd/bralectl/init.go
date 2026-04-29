@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	huh "charm.land/huh/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // envField maps a .env key to a human-readable prompt label, a default value,
@@ -51,6 +53,12 @@ type initSummary struct {
 	FeishuEnabled       bool
 	MCPEnabled          bool
 	DatabaseDescription string
+}
+
+type initSymbolConfig struct {
+	Symbol     string   `mapstructure:"symbol"`
+	Intervals  []string `mapstructure:"intervals"`
+	KlineLimit int      `mapstructure:"kline_limit"`
 }
 
 func initCmd() *cobra.Command {
@@ -167,10 +175,8 @@ func runInit(stdout, stderr io.Writer, repoRoot string, nonInteractive bool) err
 	// Write updated .env preserving structure.
 	// Derive notification flags.
 	current["NOTIFICATION_ENABLED"] = initNotificationEnabled(current)
+	normalizeInitNotificationDefaults(current)
 	current["ENABLE_MCP"] = formatBoolValue(parseBoolValue(current["ENABLE_MCP"]))
-	if _, ok := current["NOTIFICATION_STARTUP_NOTIFY_ENABLED"]; !ok {
-		current["NOTIFICATION_STARTUP_NOTIFY_ENABLED"] = "false"
-	}
 	if err := writeUpdatedEnv(envPath, current); err != nil {
 		return fmt.Errorf("write .env: %w", err)
 	}
@@ -291,7 +297,7 @@ func discoverSymbolChoices(repoRoot string) ([]symbolChoice, error) {
 		if base == "default.toml" {
 			continue
 		}
-		symbolCfg, err := config.LoadSymbolConfig(path)
+		symbolCfg, err := loadInitSymbolConfig(path)
 		if err != nil {
 			return nil, fmt.Errorf("load symbol config %s: %w", path, err)
 		}
@@ -313,6 +319,33 @@ func discoverSymbolChoices(repoRoot string) ([]symbolChoice, error) {
 		return nil, fmt.Errorf("no symbol configs found under %s", pattern)
 	}
 	return choices, nil
+}
+
+func loadInitSymbolConfig(path string) (initSymbolConfig, error) {
+	var cfg initSymbolConfig
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, fmt.Errorf("read config %s: %w", path, err)
+	}
+	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v.SetConfigType("toml")
+	if err := v.ReadConfig(bytes.NewReader(raw)); err != nil {
+		return cfg, fmt.Errorf("read config %s: %w", path, err)
+	}
+	if err := v.Unmarshal(&cfg); err != nil {
+		return cfg, fmt.Errorf("unmarshal config %s: %w", path, err)
+	}
+	cfg.Symbol = strings.ToUpper(strings.TrimSpace(cfg.Symbol))
+	if cfg.Symbol == "" {
+		return cfg, fmt.Errorf("symbol is required")
+	}
+	if len(cfg.Intervals) == 0 {
+		return cfg, fmt.Errorf("intervals is required")
+	}
+	if cfg.KlineLimit <= 0 {
+		return cfg, fmt.Errorf("kline_limit must be > 0")
+	}
+	return cfg, nil
 }
 
 func currentSymbolChoices(repoRoot string, available []symbolChoice) ([]symbolChoice, error) {
@@ -551,7 +584,7 @@ func promptProxyConfiguration(_ io.Writer, current map[string]string) error {
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
-				Title("Enable HTTP/HTTPS/SOCKS proxy?").
+				Title("Enable network proxy?").
 				Value(&enabled).
 				Affirmative("Yes").
 				Negative("No"),
@@ -563,7 +596,7 @@ func promptProxyConfiguration(_ io.Writer, current map[string]string) error {
 	if enabled {
 		proxyHost := defaultValue(current, "PROXY_HOST", "host.docker.internal")
 		proxyPort := defaultValue(current, "PROXY_PORT", "7890")
-		proxyScheme := defaultValue(current, "PROXY_SCHEME", "http")
+		proxyScheme := normalizeInitProxyScheme(current["PROXY_SCHEME"])
 		proxyNoProxy := defaultValue(current, "PROXY_NO_PROXY", "localhost,127.0.0.1,brale,freqtrade")
 		if err := huh.NewForm(
 			huh.NewGroup(
@@ -573,14 +606,6 @@ func promptProxyConfiguration(_ io.Writer, current map[string]string) error {
 				huh.NewInput().
 					Title("Proxy port").
 					Value(&proxyPort),
-				huh.NewSelect[string]().
-					Title("Proxy scheme").
-					Options(
-						huh.NewOption("http", "http"),
-						huh.NewOption("https", "https"),
-						huh.NewOption("socks5", "socks5"),
-					).
-					Value(&proxyScheme),
 				huh.NewInput().
 					Title("No proxy hosts (comma-separated)").
 					Value(&proxyNoProxy),
@@ -594,6 +619,17 @@ func promptProxyConfiguration(_ io.Writer, current map[string]string) error {
 		current["PROXY_NO_PROXY"] = proxyNoProxy
 	}
 	return nil
+}
+
+func normalizeInitProxyScheme(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "https":
+		return "https"
+	case "socks5":
+		return "socks5"
+	default:
+		return "http"
+	}
 }
 
 func promptTelegramConfiguration(_ io.Writer, current map[string]string) error {
@@ -1014,6 +1050,27 @@ func initNotificationEnabled(values map[string]string) string {
 		}
 	}
 	return "false"
+}
+
+func normalizeInitNotificationDefaults(values map[string]string) {
+	for _, key := range []string{
+		"NOTIFICATION_ENABLED",
+		"NOTIFICATION_STARTUP_NOTIFY_ENABLED",
+		"NOTIFICATION_TELEGRAM_ENABLED",
+		"NOTIFICATION_FEISHU_ENABLED",
+		"NOTIFICATION_FEISHU_BOT_ENABLED",
+	} {
+		values[key] = formatBoolValue(parseBoolValue(values[key]))
+	}
+	if strings.TrimSpace(values["NOTIFICATION_TELEGRAM_CHAT_ID"]) == "" {
+		values["NOTIFICATION_TELEGRAM_CHAT_ID"] = "0"
+	}
+	if strings.TrimSpace(values["NOTIFICATION_FEISHU_BOT_MODE"]) == "" {
+		values["NOTIFICATION_FEISHU_BOT_MODE"] = "long_connection"
+	}
+	if strings.TrimSpace(values["NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE"]) == "" {
+		values["NOTIFICATION_FEISHU_DEFAULT_RECEIVE_ID_TYPE"] = "chat_id"
+	}
 }
 
 func parseBoolValue(raw string) bool {

@@ -31,7 +31,7 @@ RUN go mod download
 
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 go build -o /out/bralectl ./cmd/bralectl
+RUN CGO_ENABLED=0 go build -buildvcs=false -o /out/bralectl ./cmd/bralectl
 
 FROM bralectl-builder AS builder
 
@@ -40,7 +40,7 @@ COPY --from=node-runtime /usr/local/ /usr/local/
 RUN npm ci --prefix /src/webui/og-card-demo
 
 COPY webui ./webui
-RUN CGO_ENABLED=0 go build -o /out/brale-core ./cmd/brale-core
+RUN CGO_ENABLED=0 go build -buildvcs=false -o /out/brale-core ./cmd/brale-core
 
 FROM debian:bookworm-slim AS brale-runtime
 
