@@ -2,7 +2,6 @@ package decisionutil
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -77,13 +76,6 @@ func RunAndParse[T any](
 		schema := llm.SchemaFromType[T]()
 		invoke = func(callCtx context.Context, reqSystem, reqUser string) (string, error) {
 			return sp.CallStructured(callCtx, reqSystem, reqUser, schema)
-		}
-		parse = func(raw string) (T, error) {
-			var out T
-			if err := json.Unmarshal([]byte(raw), &out); err == nil {
-				return out, nil
-			}
-			return decode(raw)
 		}
 	}
 

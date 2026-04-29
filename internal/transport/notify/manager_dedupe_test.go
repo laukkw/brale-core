@@ -118,6 +118,7 @@ type namedCountSender struct {
 	channel string
 	calls   int
 	lastMsg Message
+	msgs    []Message
 }
 
 func (s *namedCountSender) Channel() string { return s.channel }
@@ -126,6 +127,7 @@ func (s *namedCountSender) Send(_ context.Context, msg Message) error {
 	s.mu.Lock()
 	s.calls++
 	s.lastMsg = msg
+	s.msgs = append(s.msgs, msg)
 	s.mu.Unlock()
 	return nil
 }
@@ -140,6 +142,14 @@ func (s *namedCountSender) lastMessage() Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastMsg
+}
+
+func (s *namedCountSender) messages() []Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Message, len(s.msgs))
+	copy(out, s.msgs)
+	return out
 }
 
 type asyncFallbackNotifier struct {
@@ -529,7 +539,7 @@ func TestAsyncDeliverRoutesToSingleChannel(t *testing.T) {
 	}
 }
 
-func TestAsyncDeliverAggregatesCloseNoticesPerChannel(t *testing.T) {
+func TestAsyncDeliverSendsCloseNoticesDirectlyPerChannel(t *testing.T) {
 	t.Parallel()
 
 	telegram := &namedCountSender{channel: "telegram"}
@@ -599,40 +609,21 @@ func TestAsyncDeliverAggregatesCloseNoticesPerChannel(t *testing.T) {
 		t.Fatalf("deliver trade close summary: %v", err)
 	}
 
-	waitForCondition(t, 300*time.Millisecond, func() bool {
-		return telegram.callCount() == 1
-	})
-
+	if got := telegram.callCount(); got != 3 {
+		t.Fatalf("telegram calls=%d want 3", got)
+	}
 	if got := feishu.callCount(); got != 0 {
 		t.Fatalf("feishu calls=%d want 0", got)
 	}
-	msg := telegram.lastMessage()
-	if !strings.Contains(msg.Markdown, "📉 仓位已关闭") {
-		t.Fatalf("expected aggregated close header, got %q", msg.Markdown)
+	msgs := telegram.messages()
+	if !strings.Contains(msgs[0].Markdown, "仓位关闭") {
+		t.Fatalf("expected position close message, got %q", msgs[0].Markdown)
 	}
-	if !strings.Contains(msg.Markdown, noticeLine("pnl", formatFloat(-9.27240156))) {
-		t.Fatalf("expected freqtrade pnl in text body, got %q", msg.Markdown)
+	if !strings.Contains(msgs[1].Markdown, "仓位全部平仓") {
+		t.Fatalf("expected position close summary message, got %q", msgs[1].Markdown)
 	}
-	if strings.Contains(msg.Markdown, "gross_pnl") {
-		t.Fatalf("expected aggregated message to avoid gross pnl fallback, got %q", msg.Markdown)
-	}
-	if !strings.Contains(msg.Markdown, noticeLine("reason", "REVERSAL_CONFIRMED")) {
-		t.Fatalf("expected decision close reason in text body, got %q", msg.Markdown)
-	}
-	if strings.Contains(msg.Markdown, "force_exit") {
-		t.Fatalf("expected aggregated message to hide generic freqtrade reason, got %q", msg.Markdown)
-	}
-	if strings.Contains(msg.Markdown, "退出类型") {
-		t.Fatalf("expected aggregated message to avoid exit type, got %q", msg.Markdown)
-	}
-	if !strings.Contains(msg.Markdown, noticeLine("close_rate", formatFloat(2308.95))) {
-		t.Fatalf("expected freqtrade close rate in text body, got %q", msg.Markdown)
-	}
-	if !strings.Contains(msg.Markdown, noticeLine("planned_stop", formatFloat(2317.88))) {
-		t.Fatalf("expected planned stop metadata in text body, got %q", msg.Markdown)
-	}
-	if !strings.Contains(msg.Markdown, "▸ 交易ID：1") {
-		t.Fatalf("expected trade id in text body, got %q", msg.Markdown)
+	if !strings.Contains(msgs[2].Markdown, "全部平仓完成") {
+		t.Fatalf("expected trade close summary message, got %q", msgs[2].Markdown)
 	}
 }
 

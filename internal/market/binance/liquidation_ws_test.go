@@ -188,6 +188,26 @@ func TestLiquidationStreamPrunesEventsOutsideMaxWindow(t *testing.T) {
 	}
 }
 
+func TestLiquidationObservationIDIsStableWithinWindowBucket(t *testing.T) {
+	t.Parallel()
+
+	duration := time.Hour
+	base := time.Unix(1_700_000_000, 0).UTC()
+	first := liquidationObservationID(base.UnixMilli(), duration)
+	second := liquidationObservationID(base.Add(30*time.Minute).UnixMilli(), duration)
+	third := liquidationObservationID(time.UnixMilli(first).Add(duration).UnixMilli(), duration)
+
+	if first == 0 {
+		t.Fatal("observation id is zero")
+	}
+	if first != second {
+		t.Fatalf("observation id changed inside bucket: first=%d second=%d", first, second)
+	}
+	if third == first {
+		t.Fatalf("observation id did not change across bucket: %d", third)
+	}
+}
+
 func TestLiquidationStreamServeUsesSingleSymbolSDK(t *testing.T) {
 	doneC := make(chan struct{})
 	stopC := make(chan struct{})

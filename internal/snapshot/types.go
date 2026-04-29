@@ -78,17 +78,18 @@ type LiqPriceBin struct {
 }
 
 type LiqWindow struct {
-	LongVol      float64
-	ShortVol     float64
-	TotalVol     float64
-	Imbalance    float64
-	PriceBinsBps []int
-	Bins         []LiqPriceBin
-	SampleCount  int
-	CoverageSec  int64
-	Status       string
-	Complete     bool
-	Rel          LiqRelMetrics
+	LongVol       float64
+	ShortVol      float64
+	TotalVol      float64
+	Imbalance     float64
+	PriceBinsBps  []int
+	Bins          []LiqPriceBin
+	SampleCount   int
+	CoverageSec   int64
+	Status        string
+	Complete      bool
+	ObservationID int64
+	Rel           LiqRelMetrics
 }
 
 type LiqSource struct {

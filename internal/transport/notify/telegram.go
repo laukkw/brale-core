@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"brale-core/internal/pkg/redact"
 )
 
 type TelegramSender struct {
@@ -129,10 +131,7 @@ func (s *TelegramSender) sanitizeRequestError(action string, err error) error {
 	if err == nil {
 		return nil
 	}
-	msg := strings.TrimSpace(err.Error())
-	if token := strings.TrimSpace(s.token); token != "" {
-		msg = strings.ReplaceAll(msg, token, "<redacted>")
-	}
+	msg := strings.TrimSpace(redact.Secrets(err.Error(), s.token))
 	if msg == "" {
 		msg = "request failed"
 	}

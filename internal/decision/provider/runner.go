@@ -146,10 +146,50 @@ func decodeStructure(raw string) (StructureProviderOut, error) {
 
 func decodeMechanics(raw string) (MechanicsProviderOut, error) {
 	var out MechanicsProviderOut
+	var err error
+	raw, err = canonicalMechanicsJSON(raw)
+	if err != nil {
+		return MechanicsProviderOut{}, err
+	}
 	if err := decodeStrict(raw, &out, "liquidation_stress.value", "liquidation_stress.confidence", "liquidation_stress.reason", "signal_tag"); err != nil {
 		return MechanicsProviderOut{}, err
 	}
 	return out, nil
+}
+
+func canonicalMechanicsJSON(raw string) (string, error) {
+	clean := llmclean.CleanJSON(raw)
+	if strings.TrimSpace(clean) == "" {
+		return clean, nil
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(clean), &data); err != nil {
+		return clean, nil
+	}
+	liq, ok := data["liquidation_stress"].(map[string]any)
+	if !ok {
+		return clean, nil
+	}
+	nestedTag, hasNested := liq["signal_tag"].(string)
+	if !hasNested {
+		return clean, nil
+	}
+	nestedTag = strings.TrimSpace(nestedTag)
+	topTag, hasTop := data["signal_tag"].(string)
+	topTag = strings.TrimSpace(topTag)
+	if hasTop && topTag != "" && nestedTag != "" && topTag != nestedTag {
+		return "", fmt.Errorf("conflicting signal_tag: top=%q liquidation_stress=%q", topTag, nestedTag)
+	}
+	if (!hasTop || topTag == "") && nestedTag != "" {
+		data["signal_tag"] = nestedTag
+	}
+	delete(liq, "signal_tag")
+	data["liquidation_stress"] = liq
+	out, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize mechanics json: %w", err)
+	}
+	return string(out), nil
 }
 
 func decodeInPositionIndicator(raw string) (InPositionIndicatorOut, error) {

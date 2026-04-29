@@ -53,6 +53,9 @@ func TestTranslateTermFallbacks(t *testing.T) {
 	if got := translateTerm("trend_surge"); got != "trend_surge(趋势加速)" {
 		t.Fatalf("translateTerm mapped=%q", got)
 	}
+	if got := translateTerm("bos_up"); got != "bos_up(向上 BOS)" {
+		t.Fatalf("translateTerm bos_up=%q", got)
+	}
 	if got := translateTerm("中文"); got != "中文" {
 		t.Fatalf("translateTerm han=%q", got)
 	}
@@ -64,6 +67,9 @@ func TestTranslateTermFallbacks(t *testing.T) {
 func TestTranslateLLMKeyAndProviderRole(t *testing.T) {
 	if got := translateLLMKey("confidence"); got != "置信度" {
 		t.Fatalf("translateLLMKey=%q", got)
+	}
+	if got := translateLLMKey("last_break"); got != "最近结构事件" {
+		t.Fatalf("translateLLMKey last_break=%q", got)
 	}
 	if got := translateLLMKey("custom_key"); got != "custom_key" {
 		t.Fatalf("translateLLMKey custom=%q", got)
@@ -79,6 +85,35 @@ func TestTranslateLLMKeyAndProviderRole(t *testing.T) {
 	}
 	if got := providerRoleLabel(" custom "); got != "custom" {
 		t.Fatalf("providerRoleLabel custom=%q", got)
+	}
+}
+
+func TestMergeNarrativeSummaryClarifiesInvalidatedStructureEvent(t *testing.T) {
+	report := DecisionReport{
+		Agents: []StageOutput{
+			{
+				Role: "structure",
+				Summary: strings.Join([]string{
+					"状态：结构状态=mixed(信号混杂/分歧)",
+					"动作：最近结构事件=bos_up(向上 BOS)",
+				}, "\n"),
+			},
+		},
+		Providers: []StageOutput{
+			{
+				Role: "structure",
+				Summary: strings.Join([]string{
+					"动作：信号标签=假突破回落；结构不清晰；结构叙事已失效",
+					"冲突：原因=close below EMA20 despite bos_up last_break",
+				}, "\n"),
+			},
+		},
+	}
+
+	got := mergeNarrativeSummary(report)
+	want := "结构复核=向上 BOS 未被确认，当前按假突破回落处理"
+	if !strings.Contains(got, want) {
+		t.Fatalf("mergeNarrativeSummary() missing structure clarification %q\n--- got ---\n%s", want, got)
 	}
 }
 

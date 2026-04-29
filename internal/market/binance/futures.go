@@ -324,9 +324,19 @@ func aggregateLiquidationWindows(events []liqEvent, windows []string, windowDura
 		if sinceMs < 0 {
 			sinceMs = 0
 		}
-		results[window] = aggregateLiqWindow(events, sinceMs, priceBins)
+		item := aggregateLiqWindow(events, sinceMs, priceBins)
+		item.ObservationID = liquidationObservationID(endMs, windowDur)
+		results[window] = item
 	}
 	return results
+}
+
+func liquidationObservationID(endMs int64, duration time.Duration) int64 {
+	durationMs := duration.Milliseconds()
+	if endMs <= 0 || durationMs <= 0 {
+		return 0
+	}
+	return (endMs / durationMs) * durationMs
 }
 
 func aggregateLiqWindow(events []liqEvent, sinceMs int64, priceBins []int) snapshot.LiqWindow {

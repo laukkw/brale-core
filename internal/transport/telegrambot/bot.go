@@ -18,6 +18,7 @@ import (
 
 	"brale-core/internal/cardimage"
 	"brale-core/internal/pkg/httpclient"
+	"brale-core/internal/pkg/redact"
 	symbolpkg "brale-core/internal/pkg/symbol"
 	"brale-core/internal/transport/botruntime"
 
@@ -335,7 +336,7 @@ func (b *Bot) sendImage(ctx context.Context, chatID int64, asset *cardimage.Imag
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := b.client.Do(req)
 	if err != nil {
-		return err
+		return errors.New(redact.Secrets(err.Error(), b.token))
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -658,7 +659,7 @@ func (b *Bot) doTelegramRequest(ctx context.Context, method, path string, payloa
 	}
 	resp, err := b.client.Do(req)
 	if err != nil {
-		return err
+		return errors.New(redact.Secrets(err.Error(), b.token))
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {

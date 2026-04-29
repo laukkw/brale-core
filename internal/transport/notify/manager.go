@@ -246,6 +246,9 @@ func (m Manager) DeliveryChannels() []string {
 }
 
 // NotifierForChannel scopes delivery to one outbound channel and scopes dedupe to that channel.
+// Channel-scoped notifiers are used by durable async delivery jobs, so close
+// events must be sent directly instead of being acknowledged into an in-memory
+// aggregation window.
 func (m *Manager) NotifierForChannel(channel string) (Notifier, bool) {
 	if m == nil {
 		return nil, false
@@ -264,17 +267,12 @@ func (m *Manager) NotifierForChannel(channel string) (Notifier, bool) {
 		m.scoped.mu.Lock()
 		scoped, ok := m.scoped.items[channel]
 		if !ok {
-			win := m.closeWin
-			if win <= 0 {
-				win = defaultCloseAggregationWindow
-			}
 			scopedCopy := *m
 			scopedCopy.senders = []Sender{sender}
 			scopedCopy.channel = channel
 			scopedCopy.scoped = nil
 			scopedCopy.closeAgg = nil
 			scoped = &scopedCopy
-			scoped.closeAgg = newCloseNoticeAggregator(win, scoped.sendAggregatedClose)
 			m.scoped.items[channel] = scoped
 		}
 		m.scoped.mu.Unlock()
@@ -650,6 +648,7 @@ func (m Manager) SendPositionClose(ctx context.Context, notice PositionCloseNoti
 		m.closeAgg.AddPositionClose(key, notice)
 		return nil
 	}
+	key = "position_close:" + key
 	posID := strings.TrimSpace(notice.PositionID)
 
 	qtyText := formatFloat(notice.Qty)
@@ -735,6 +734,7 @@ func (m Manager) SendPositionCloseSummary(ctx context.Context, notice PositionCl
 		m.closeAgg.AddPositionCloseSummary(key, notice)
 		return nil
 	}
+	key = "position_close_summary:" + key
 	posID := strings.TrimSpace(notice.PositionID)
 
 	qtyText := formatFloat(notice.Qty)
@@ -971,6 +971,7 @@ func (m Manager) SendTradeCloseSummary(ctx context.Context, notice TradeCloseSum
 		m.closeAgg.AddTradeCloseSummary(key, notice)
 		return nil
 	}
+	key = "trade_close_summary:" + key
 
 	reasonText := visibleCloseReason(notice.ExitReason)
 	durationText := "-"

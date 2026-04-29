@@ -427,9 +427,8 @@ func (f *Fetcher) enrichLiquidationWindows(out *MarketSnapshot, sym string, wind
 		if volume := closedVolumeForWindow(byInterval, window, now); volume > 0 {
 			item.Rel.VolOverVolume = item.TotalVol / volume
 		}
-		if item.Complete {
-			observationID := now.UTC().Unix()
-			item.Rel.ZScore = f.observeLiquidationWindow(sym, window, observationID, item.TotalVol)
+		if item.Complete && item.ObservationID > 0 {
+			item.Rel.ZScore = f.observeLiquidationWindow(sym, window, item.ObservationID, item.TotalVol)
 			item.Rel.Spike = item.Rel.ZScore >= liqSpikeThreshold
 		}
 		windows[window] = item

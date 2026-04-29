@@ -38,6 +38,7 @@ func mergeNarrativeSummary(report DecisionReport) string {
 			hasValue = true
 		}
 	}
+	addStructureResolutionNote(sections, seen)
 	if !hasValue {
 		return ""
 	}
@@ -52,6 +53,99 @@ func mergeNarrativeSummary(report DecisionReport) string {
 		lines = append(lines, fmt.Sprintf("%s：%s", label, strings.Join(values, "；")))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func addStructureResolutionNote(sections map[string][]string, seen map[string]map[string]struct{}) {
+	lastBreak := firstSectionValueWithPrefix(sections["动作"], "最近结构事件=")
+	if lastBreak == "" {
+		lastBreak = firstSectionValueWithPrefix(sections["动作"], "最近结构变化=")
+	}
+	if lastBreak == "" || !containsStructureInvalidation(sections) {
+		return
+	}
+	note := fmt.Sprintf("结构复核=%s 未被确认，当前按%s处理", structureEventLabel(lastBreak), structureResolutionLabel(sections))
+	if _, ok := seen["冲突"]; !ok {
+		seen["冲突"] = map[string]struct{}{}
+	}
+	if _, exists := seen["冲突"][note]; exists {
+		return
+	}
+	seen["冲突"][note] = struct{}{}
+	sections["冲突"] = append(sections["冲突"], note)
+}
+
+func firstSectionValueWithPrefix(values []string, prefix string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if strings.HasPrefix(trimmed, prefix) {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func structureEventLabel(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if after, ok := strings.CutPrefix(trimmed, "最近结构事件="); ok {
+		trimmed = strings.TrimSpace(after)
+	} else if after, ok := strings.CutPrefix(trimmed, "最近结构变化="); ok {
+		trimmed = strings.TrimSpace(after)
+	}
+	if open := strings.Index(trimmed, "("); open >= 0 {
+		if close := strings.LastIndex(trimmed, ")"); close > open {
+			return strings.TrimSpace(trimmed[open+1 : close])
+		}
+	}
+	switch trimmed {
+	case "bos_up":
+		return "向上 BOS"
+	case "bos_down":
+		return "向下 BOS"
+	case "choch_up":
+		return "向上 CHoCH"
+	case "choch_down":
+		return "向下 CHoCH"
+	}
+	return trimmed
+}
+
+func containsStructureInvalidation(sections map[string][]string) bool {
+	for _, value := range sections["动作"] {
+		if isStructureInvalidationValue(value) {
+			return true
+		}
+	}
+	for _, value := range sections["冲突"] {
+		if isStructureInvalidationValue(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func isStructureInvalidationValue(value string) bool {
+	normalized := strings.TrimSpace(value)
+	return strings.Contains(normalized, "fakeout_rejection") ||
+		strings.Contains(normalized, "structure_broken") ||
+		strings.Contains(normalized, "信号标签=假突破回落") ||
+		strings.Contains(normalized, "信号标签=结构失效") ||
+		strings.Contains(normalized, "结构不清晰") ||
+		strings.Contains(normalized, "结构叙事已失效")
+}
+
+func structureResolutionLabel(sections map[string][]string) string {
+	for _, value := range sections["动作"] {
+		normalized := strings.TrimSpace(value)
+		if strings.Contains(normalized, "fakeout_rejection") ||
+			strings.Contains(normalized, "信号标签=假突破回落") {
+			return "假突破回落"
+		}
+		if strings.Contains(normalized, "structure_broken") ||
+			strings.Contains(normalized, "信号标签=结构失效") {
+			return "结构失效"
+		}
+	}
+	return "结构失效/无效"
 }
 
 func orderedNarrativeStages(report DecisionReport) []StageOutput {

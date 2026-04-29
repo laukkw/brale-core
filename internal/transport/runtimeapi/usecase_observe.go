@@ -174,9 +174,9 @@ func emptyObserveReport(symbol, requestID string) observeResponse {
 
 func (u observeUsecase) reportFromHistory(ctx context.Context, symbol string) (observeResponse, bool, *usecaseError) {
 	if u.server == nil || u.server.Store == nil {
-		return observeResponse{}, false, &usecaseError{Status: 500, Code: "store_missing", Message: "Store 未配置"}
+		return observeResponse{}, false, nil
 	}
-	rounds, err := u.server.Store.ListLLMRounds(ctx, symbol, observeHistoryScanLimit)
+	rounds, err := listObserveRounds(ctx, u.server.Store, symbol, observeHistoryScanLimit)
 	if err != nil {
 		return observeResponse{}, false, &usecaseError{Status: 500, Code: "observe_rounds_failed", Message: "observe 历史读取失败", Details: err.Error()}
 	}
@@ -190,6 +190,17 @@ func (u observeUsecase) reportFromHistory(ctx context.Context, symbol string) (o
 		}
 	}
 	return observeResponse{}, false, nil
+}
+
+type llmRoundTypeLister interface {
+	ListLLMRoundsByType(ctx context.Context, symbol string, roundType string, limit int) ([]store.LLMRoundRecord, error)
+}
+
+func listObserveRounds(ctx context.Context, st store.Store, symbol string, limit int) ([]store.LLMRoundRecord, error) {
+	if typed, ok := st.(llmRoundTypeLister); ok {
+		return typed.ListLLMRoundsByType(ctx, symbol, "observe", limit)
+	}
+	return st.ListLLMRounds(ctx, symbol, limit)
 }
 
 func isUsableObserveRound(round store.LLMRoundRecord) bool {

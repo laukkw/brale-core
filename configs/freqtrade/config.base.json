@@ -4,13 +4,13 @@
     "CORS_origins": [],
     "enable_openapi": false,
     "enabled": true,
-    "jwt_secret_key": "fdd3b45b748d0aa84ad0fcab427f8606081f74076baa0c851085b35945cf62f0",
+    "jwt_secret_key": "REPLACE_ME",
     "listen_ip_address": "0.0.0.0",
     "listen_port": 8080,
     "password": "REPLACE_ME",
     "username": "REPLACE_ME",
     "verbosity": "info",
-    "ws_token": "_C_BHNRzaI8LSRRddcvJ4ram4mawCxkksw"
+    "ws_token": "REPLACE_ME"
   },
   "bot_name": "freqtrade",
   "cancel_open_orders_on_exit": false,

@@ -74,6 +74,34 @@ func (s *PGStore) ListLLMRounds(ctx context.Context, symbol string, limit int) (
 	return out, nil
 }
 
+func (s *PGStore) ListLLMRoundsByType(ctx context.Context, symbol string, roundType string, limit int) ([]store.LLMRoundRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	const q = llmRoundSelectSQL + `
+WHERE (CASE WHEN $1::text = '' THEN true ELSE symbol = $1 END)
+  AND round_type = $2
+ORDER BY started_at DESC, id DESC
+LIMIT $3`
+	rows, err := s.query(ctx, q, symbol, roundType, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]store.LLMRoundRecord, 0, limit)
+	for rows.Next() {
+		rec, err := scanLLMRoundRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 const llmRoundSelectSQL = `SELECT id, snapshot_id, symbol, round_type, started_at, finished_at,
 	total_latency_ms, total_token_in, total_token_out, call_count,
 	outcome, prompt_version, error, agent_count, provider_count, gate_action, request_id, created_at

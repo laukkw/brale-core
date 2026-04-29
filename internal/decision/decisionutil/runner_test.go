@@ -1,6 +1,7 @@
 package decisionutil
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -119,5 +120,28 @@ func TestRunAndParseStructuredProviderFallsBackToDecode(t *testing.T) {
 	}
 	if !got.OK {
 		t.Fatalf("ok=%v want true", got.OK)
+	}
+}
+
+func TestRunAndParseStructuredProviderUsesStageDecode(t *testing.T) {
+	provider := staticStructuredProvider{
+		callStructured: func(ctx context.Context, system, user string, schema *llm.JSONSchema) (string, error) {
+			return `{"ok":true,"extra":true}`, nil
+		},
+	}
+
+	decode := func(raw string) (runnerTestPayload, error) {
+		var out runnerTestPayload
+		dec := json.NewDecoder(bytes.NewReader([]byte(raw)))
+		dec.DisallowUnknownFields()
+		err := dec.Decode(&out)
+		return out, err
+	}
+
+	_, err := RunAndParse(context.Background(), func(string) (llm.Provider, error) {
+		return provider, nil
+	}, "stage", "sys", "user", decode, nil)
+	if err == nil {
+		t.Fatalf("expected strict decode error")
 	}
 }
