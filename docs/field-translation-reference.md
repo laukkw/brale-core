@@ -1,6 +1,6 @@
 # 字段翻译参考手册
 
-本文档列出 Brale-Core 决策通知中所有经过中文翻译的字段，帮助用户理解 Telegram 决策卡片中每个指标的含义。
+本文档列出 Brale-Core 决策通知中所有经过中文翻译的字段，帮助用户理解决策卡片中每个指标的含义。
 
 ---
 
@@ -481,4 +481,4 @@ Sieve 在 Gate 允许后进一步细化决策：
 
 ---
 
-> 本文档由 Brale-Core 自动生成逻辑维护。所有业务术语翻译以 `internal/decision/decisionfmt/formatter_translate.go` 为唯一真源。`webui/og-card-demo/render.mjs` 已剥离翻译职责，仅负责排版渲染。如有字段变更，只需更新 Go 翻译文件。
+> 本文档以 `internal/decision/decisionfmt/formatter_translate.go` Go 源码为参考依据，手动维护。所有业务术语翻译以该文件为唯一来源。`webui/og-card-demo/render.mjs` 已剥离翻译职责，仅负责排版渲染。如有字段变更，请同步更新 Go 翻译文件与本文档。

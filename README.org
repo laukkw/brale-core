@@ -1,250 +1,14 @@
 #+begin_quote
-*⚠ Beta* — 项目正处于活跃开发阶段 / This project is under active development.
+*⚠ Beta* — This project is under active development / 项目正处于活跃开发阶段。
 #+end_quote
 
 * Brale — Break a Leg
 
-交易如同一场演出。/Break a leg/ — 祝你好运。
+AI-powered multi-agent quantitative trading engine. /Break a leg/ — good luck.
 
-AI 驱动的多智能体量化交易引擎。
 [[https://brale.club][brale.club]]
 
-*语言 / Language:* [[#中文版][简体中文]] | [[#english-version][English]]
-
------
-
-* 中文版
-:PROPERTIES:
-:CUSTOM_ID: 中文版
-:END:
-
-** 什么是 Brale
-
-Brale 是一个量化交易引擎，通过多个大语言模型智能体（LLM Agent）分析市场行情，并结合确定性的 Go 规则引擎来强制执行风控约束。每个决策周期经过六个阶段：
-
-| 阶段 | 职责 |
-|------+------|
-| *观测（Observe）* | 采集 K 线、指标、市场结构、衍生品与情绪数据 |
-| *决策（Decide）* | 三个独立智能体并行分析；共识规则筛选信号 |
-| *规划（Plan）* | 生成风控计划 — 入场价、止损、止盈、仓位大小 |
-| *执行（Execute）* | 通过 Freqtrade 下单 |
-| *监控（Monitor）* | 实时持仓风险追踪与止损调整 |
-| *对账（Reconcile）* | 通过 Webhook / 轮询同步 Brale 与交易所状态 |
-
-** 设计理念
-
-- *LLM 提议，代码决断* — 模型建议止盈 / 止损位；Go 代码负责校验价格合法性、杠杆上限和爆仓安全。模型可能产生幻觉，代码会将其拦截。
-- *三条独立智能体车道（Agent Lane）* — 指标（Indicator）、结构（Structure）和力学（Mechanics）智能体各自独立运行。共识阈值防止单一模型的误判。
-- *Provider 锚定因子（Grounding Anchors）* — 每个 Provider 不仅接收其 Agent 的摘要，还会收到代码提取的结构化锚定数据（跨时间框架对齐、结构突破、力学冲突），用于交叉验证，降低幻觉风险。
-- *经验驱动的记忆系统* — 三层记忆系统（工作记忆 Working、情景记忆 Episodic、语义记忆 Semantic）将近期上下文、历史交易复盘和长期规则注入 LLM 提示词。
-- *影子指标引擎（Shadow Indicator Engine）* — 默认使用纯 Go 指标引擎（=ta=），可选配影子引擎进行交叉校验，确保指标数据可信。差异检测通过 ~bralectl indicator diff~ 执行。
-- *Gate Replay 回测* — 将历史决策通过当前规则集重放，零 LLM 调用开销，用于快速验证规则调优效果。
-- *全自动调度* — 决策周期、监控和对账由内置调度层统一驱动；默认后端为 River，无需外部 cron。
-- *可插拔执行层* — 当前对接 Freqtrade；接口已解耦，可替换其他执行后端。
-
-** 分支与发布
-
-- =master= 是稳定 / 生产分支；部署与发布默认从此分支进行。
-- =dev= 是日常开发集成分支；功能与修复 PR 默认合并到 =dev=。
-- 功能分支使用 =feat/xxx= 命名，修复分支使用 =fix/xxx= 命名。
-- 发布使用语义化版本标签：=v0.x.y=；标签推送后由 CI 自动构建 Docker 镜像。
-
-** 快速开始
-
-*前置条件：*
-- Docker 与 Docker Compose（v2.20+）
-- 本地开发：Go 1.25+
-- 内存：轻量主栈实测约 0.7–1.0 GB（Freqtrade + TimescaleDB + Brale；启用 MCP 额外约数 MB）。最低建议 2 GB，长期运行 / 多品种建议 4 GB+
-- 磁盘空间：约 5 GB（Docker 镜像 + 数据库 + K 线缓存）
-- 网络：需能访问 Binance API（=api.binance.com=）与 LLM 端点
-
-*** 一键部署
-
-#+begin_src bash
-curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash
-# 或：先执行 setup（可选安装 MCP），再进入 init 向导并自动启动
-curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --setup --setup-lang zh
-# 或：已有可用 .env 时跳过交互式 init，直接启动
-curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --no-init
-# 默认使用浅克隆；如需完整 Git 历史可加 --full-clone
-curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --full-clone
-#+end_src
-
-*** 手动部署
-
-#+begin_src bash
-git clone --depth 1 https://github.com/laukkw/brale-core.git
-cd brale-core
-make install-bralectl                         # 编译当前仓库最新版并安装到 ~/.local/bin/bralectl
-make env-init                                  # 缺失时从 .env.example 创建 .env
-make setup                                     # 初始化本地环境，并可选安装 MCP 客户端配置
-make init                                      # 推荐首次使用：交互式填写 .env 并生成运行时配置
-make start ENABLE_MCP=1                        # 启动 Docker 栈（freqtrade → brale → 可选 mcp）
-#+end_src
-
-默认 Freqtrade 配置为 =dry_run=true=，上述步骤启动的是模拟盘。真实上线前必须检查生成的 =data/freqtrade/user_data/config.json= 并显式关闭 =dry_run=。
-
-*** 启动顺序与快速启动
-
-- *首次部署*：建议先运行 =make init=，在 CLI 向导中完成 =.env= 与运行参数配置，再执行 =make start=。
-- *已有可用配置*：可跳过 init，直接执行 =make start ENABLE_MCP=1=。
-- *组件依赖顺序*：=timescaledb= → =freqtrade=（健康检查通过）→ =brale=（健康检查通过）→ =ctl smoke= → 可选 =mcp=。
-- *启动后校验*：=make start= / =make rebuild= / =make restart= 默认都会执行一次 =ctl= suite；如需跳过可加 =VERIFY_CTL=0=，也可用 =CTL_SYMBOL=BTCUSDT= 覆盖校验币种。
-
-*** 常用命令
-
-| 命令 | 说明 |
-|------+------|
-| =make env-init= | 缺失时复制 =.env.example= 到 =.env= |
-| =make install-bralectl= | 编译当前仓库最新版并安装到 =~/.local/bin/bralectl=；可用 =BRALECTL_INSTALL_DIR= 覆盖目标目录 |
-| =make setup= | 运行本地 setup 向导（=.env= + 可选 MCP 安装） |
-| =make init= | 运行交互式 CLI 向导，填写 =.env= 并生成运行时配置 |
-| =make start= | 启动核心栈；会等待 =freqtrade= / =brale= 健康检查通过，并默认执行一次 =ctl= smoke 校验 |
-| =make ctl-smoke= | 对当前主栈执行一次 =ctl= suite 基础连通性校验 |
-| =make status= | 容器健康检查 |
-| =make logs= | 跟踪服务日志 |
-| =make migrate-up= | 执行数据库 migration；无本地 Go 时自动回退到 Docker |
-| =make mcp-start= | 单独启动 MCP 服务 |
-| =make stop= / =make down= | 停止 / 移除容器 |
-| =make rebuild= | 重新构建 Brale；若 =ENABLE_MCP=1= 同时重建 =mcp=，完成后默认执行一次 =ctl= smoke 校验 |
-
-*** Docker 服务
-
-| 服务 | 端口 | 说明 |
-|------+------+------|
-| timescaledb | =127.0.0.1:5432= | TimescaleDB（PostgreSQL）— 数据存储 |
-| freqtrade | =127.0.0.1:8080= | 交易执行 |
-| brale | =127.0.0.1:9991= | 运行时 API / Webhook |
-| mcp | =127.0.0.1:8765= | MCP HTTP 端点（=make mcp-start= 或 =ENABLE_MCP=1=） |
-
-*** 启动排查
-
-- 若 =make start= 卡在 =wait-freqtrade=，命令会自动打印最近的 =freqtrade= 容器日志；先检查交易所凭证、代理与镜像拉取状态。
-- 若本机需要代理访问外网镜像或 API，可在 =STACK_PROXY_ENV_FILE= 指向的环境文件中设置 =HTTP_PROXY/HTTPS_PROXY/NO_PROXY=，Compose 构建与运行会自动继承。
-- 若首次拉取镜像较慢，=freqtrade= 健康检查已预留更长的 =start_period=，通常无需手工重试。
-
-** 命令行工具 — bralectl
-
-=bralectl= 提供运行时管理、离线分析与本地 setup 三大类功能，共 14 个命令组。
-
-| 命令组 | 说明 |
-|--------+------|
-| =setup= | 初始化 =.env=，并可选安装 MCP 客户端配置 |
-| =add-symbol= | 从现有币种模板生成配置并注册新币种 |
-| =observe= | 触发观测、查看报告 |
-| =decision= | 查询最新及历史决策 |
-| =position= | 查看持仓与已平仓记录 |
-| =schedule= | 启用 / 禁用 / 查看调度器状态 |
-| =config= | 查看 / 校验配置 |
-| =backtest= | Gate Replay — 用当前规则重放历史决策（零 LLM 开销） |
-| =indicator= | 交叉对比不同指标引擎（ta / talib / reference） |
-| =memory= | 管理语义规则、查看交易复盘 |
-| =mcp= | 启动 MCP 服务器或安装到 AI 工具 |
-| =llm= | 测试 LLM 端点连通性 |
-| =test= | E2E 测试运行器 |
-
-详见 [[file:docs/cli-reference.org][CLI 参考手册]]。
-
-** E2E 测试
-
-brale-core 包含一个 suite 化的 E2E 测试框架，在隔离的 Docker 栈中验证完整交易生命周期。
-
-#+begin_src bash
-make e2e-start                                     # 启动隔离的 E2E 栈
-make e2e-test                                      # 快速回归（ctl suite）
-make e2e-test E2E_SUITE=ctl,decision,reconcile     # 运行多个 suite
-make e2e-test E2E_SUITE=ctl,decision,reconcile E2E_TELEGRAM_NOTIFY=1  # 结束后推送 Telegram 报告
-make e2e-test E2E_SUITE=lifecycle-force-close       # 完整生命周期测试
-make e2e-stop                                      # 停止 E2E 栈
-make e2e-reset                                     # 清理所有 E2E 数据
-#+end_src
-
-E2E 栈使用独立端口（PostgreSQL 15432 / Freqtrade 18080 / Brale 19991），不影响主栈运行。
-若设置 =E2E_TELEGRAM_NOTIFY=1=，=make e2e-test= 会默认读取 =.env= 中的 =NOTIFICATION_TELEGRAM_TOKEN= / =NOTIFICATION_TELEGRAM_CHAT_ID=，并在测试结束后推送一条摘要消息到 Telegram；也可通过 =E2E_TELEGRAM_TOKEN= / =E2E_TELEGRAM_CHAT_ID= 覆盖。
-
-可用 suite: =ctl=, =decision=, =open-fast=, =pricing=, =reconcile=, =post-close=, =lifecycle-force-close=, =lifecycle-natural=
-
-** MCP 集成
-
-brale-core 通过 [[https://modelcontextprotocol.io][模型上下文协议（Model Context Protocol）]] 暴露 9 个只读分析工具：
-
-#+begin_src bash
-make setup                                    # 交互式初始化 .env + 可选安装 MCP
-bralectl mcp install --target opencode        # 自动配置 OpenCode
-bralectl mcp serve --mode http --addr 0.0.0.0:8765  # 远程 HTTP 模式
-#+end_src
-
-兼容 Claude Code、Claude Desktop、OpenCode、Codex、Cursor 及任何支持 MCP 的智能体。
-提供 4 个资源 URI 和 2 个提示词模板。
-详见 [[file:docs/mcp-integration.org][MCP 集成指南]]。
-
-** 配置体系
-
-四层 TOML 配置层级：
-
-| 层级 | 路径 | 范围 |
-|------+------+------|
-| 系统 | =configs/system.toml= | 日志、数据库、LLM 端点、Prompt 语言、调度、通知 |
-| 品种索引 | =configs/symbols-index.toml= | 品种名称到配置 / 策略文件的映射 |
-| 品种 | =configs/symbols/*.toml= | 单品种：周期、智能体、指标、记忆、共识 |
-| 策略 | =configs/strategies/*.toml= | 单品种：风控参数、Gate/Sieve 规则、止盈止损策略 |
-
-详见 [[file:docs/configuration.org][配置指南]]。
-
-** 文档
-
-| 文档 | 内容 |
-|------+------|
-| [[file:docs/configuration.org][配置]] | TOML 配置层级、指标参数、添加品种 |
-| [[file:docs/trading-logic.org][交易逻辑]] | 入场模式、Provider 锚定因子、Trace 持久化、仓位管理 |
-| [[file:docs/runtime-api.org][运行时 API]] | REST 端点、Webhook、通知、存储 |
-| [[file:docs/cli-reference.org][CLI 参考]] | 完整的 =bralectl= 命令参考 |
-| [[file:docs/mcp-integration.org][MCP 集成]] | 安装、工具、资源、提示词、Docker 部署 |
-| [[file:docs/subsystem-guide.org][子系统指南]] | 通知系统、执行层、记忆系统等内部组件详解 |
-| [[file:docs/deployment.org][部署指南]] | 系统需求、数据目录、代理、升级与备份 |
-| [[file:docs/troubleshooting.org][故障排查]] | 常见启动、网络、LLM、调度问题的处理步骤 |
-
-** 扩展指引
-
-| 目标 | 从哪里开始 |
-|------+------------|
-| 添加交易品种 | =bralectl add-symbol --symbol XXX= 或 [[file:docs/configuration.org][配置文档]] |
-| 调整风控 | =configs/strategies/*.toml= |
-| 调整智能体 | =configs/symbols/*.toml= + LLM 环境变量 |
-| 对接其他交易所 | =internal/execution= 接口 |
-| 自定义监控 | 运行时 API（=:9991=）与 Webhook 端点 |
-
-** LLM Token 用量参考
-
-单次决策周期 = 所有 Agent + Provider + 风控 LLM 调用的 Token 总和：
-
-| 配置 | 输入 / 周期 | 输出 / 周期 | 日估算 |
-|------+-------------+-------------+--------|
-| 1 品种 × 3 时间框架 × 1 小时周期 | 11 K–12 K | 1.1 K–1.2 K | ≈ 300 K |
-| 1 品种 × 3 时间框架 × 15 分钟周期 | 11 K–12 K | 1.1 K–1.2 K | ≈ 1.1 M–1.2 M |
-
-多品种时按比例线性增长。启用记忆系统后，每周期额外增加约 500–1 K Token（工作记忆 / 情景记忆 / 语义记忆上下文注入）。
-
-** 许可证
-
-GNU Affero 通用公共许可证 v3.0（AGPL-3.0-only）。详见 [[file:LICENSE][LICENSE]]。
-
-** 支持
-
-#+begin_example
-ETH:  0x4b4C8041A8154a5AfB87E5589Ea292123E098267
-BTC:  bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a
-SOL:  G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u
-TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh
-#+end_example
-
-** 免责声明
-
-- 本项目仅用于技术研究与流程验证，不构成任何投资建议。
-- 数字资产交易波动剧烈，可能导致部分或全部资金损失。
-- 用户须自行评估策略、参数及风控措施，并承担全部责任。
-- 历史表现、回测结果或示例配置不代表未来收益。
-- 投入生产前，请务必在隔离环境中完成充分测试。
+*Language / 语言:* [[#english-version][English]] | [[#中文版][简体中文]]
 
 -----
 
@@ -255,241 +19,171 @@ TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh
 
 ** What Is Brale
 
-Brale is a quantitative trading engine that uses multiple LLM Agents to analyze markets and
-a deterministic Go rule engine to enforce risk constraints. Each decision cycle flows through
-six stages:
+Brale is a quantitative trading engine. It uses multiple LLM Agents to analyze markets, then applies a deterministic Go rule engine to enforce risk controls. Models propose trading plans; code validates price levels, leverage, stop-loss, take-profit, sizing, and execution safety.
 
-| Stage | Role |
-|-------+------|
-| *Observe* | Collect candlesticks, indicators, market structure, derivatives and sentiment |
-| *Decide* | Three independent Agents analyze in parallel; consensus rules filter signals |
-| *Plan* | Generate risk plan — entry, stop-loss, take-profit, position size |
-| *Execute* | Place orders via Freqtrade |
-| *Monitor* | Real-time position risk tracking and stop adjustment |
-| *Reconcile* | Sync state between Brale and the exchange via webhooks/polling |
+A full decision cycle runs through observe, decide, plan, execute, monitor, and reconcile. Trade execution currently uses Freqtrade. The runtime API, webhooks, MCP server, and CLI are built around that workflow.
 
-** Design Principles
-
-- *LLM proposes, code disposes* — models suggest TP/SL levels; Go code enforces price validity,
-  leverage caps, and liquidation safety. The model may hallucinate; the code catches it.
-- *Three independent Agent lanes* — indicator, structure, and mechanics Agents run separately.
-  Consensus thresholds prevent single-model misjudgment.
-- *Provider grounding anchors* — each Provider receives its Agent summary *plus* code-extracted
-  structured anchors (cross-timeframe alignment, structure breaks, mechanics conflicts) for
-  cross-verification, reducing hallucination risk.
-- *Experience-driven memory* — three-layer memory system (working, episodic, semantic) feeds
-  recent context, historical trade reflections, and long-term rules into LLM prompts.
-- *Shadow indicator engine* — default pure-Go engine (=ta=) with optional shadow engine for
-  cross-validation, ensuring indicator data integrity. Run ~bralectl indicator diff~ for diff checks.
-- *Gate Replay backtesting* — replay historical decisions through the current rule set with zero
-  LLM calls, enabling rapid rule-tuning validation.
-- *Fully automated scheduling* — decision cycles, monitoring, and reconciliation run through the
-  built-in scheduler layer (River by default). No external cron required.
-- *Swappable execution* — currently wired to Freqtrade; the interface is decoupled.
-
-** Branch & Release
-
-- =master= is the stable / production branch; deployments and releases default to this branch.
-- =dev= is the day-to-day integration branch; feature and bug-fix PRs should normally merge into =dev=.
-- Feature branches follow =feat/xxx=; bug-fix branches follow =fix/xxx=.
-- Releases are tagged with semantic versioning (=v0.x.y=); pushing a tag triggers CI to build Docker images automatically.
+The default setup favors safe validation: Freqtrade runs with =dry_run=true=. Before live trading, inspect =data/freqtrade/user_data/config.json= and verify your strategy, risk limits, and exchange settings.
 
 ** Quick Start
 
 *Prerequisites:*
-- Docker and Docker Compose (v2.20+)
-- Local development: Go 1.25+
-- Memory: the lightweight main stack measures ~0.7–1.0 GB in practice (Freqtrade + TimescaleDB + Brale; MCP adds only a few MB). Minimum recommended: 2 GB; long-running / multi-symbol deployments: 4 GB+
-- Disk space: ~5 GB (Docker images + database + kline cache)
-- Network: access to Binance API (=api.binance.com=) and LLM endpoints
+- Linux server or local development machine
+- Docker and Docker Compose v2.20+
+- 2 GB memory recommended, 4 GB+ for long-running or multi-symbol deployments
+- Network access to Binance API and your selected LLM endpoint
 
-*** One-Click
+One-click deployment:
 
 #+begin_src bash
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash
-# or: run setup first (optional MCP install), then continue with init + start
+#+end_src
+
+Run setup first, optionally install MCP, then continue with init and start:
+
+#+begin_src bash
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --setup --setup-lang en
-# or: skip the interactive init step when .env is already ready
+#+end_src
+
+Skip interactive init when =.env= is already ready:
+
+#+begin_src bash
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --no-init
-# The default checkout is shallow; add --full-clone when full Git history is needed
+#+end_src
+
+The default checkout is shallow. Add =--full-clone= when you need full Git history:
+
+#+begin_src bash
 curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --full-clone
 #+end_src
 
-*** Manual
+For first-time deployment, proxy setup, upgrades, backups, and manual steps, see the [[file:docs/deployment.org][Deployment Guide]].
 
-#+begin_src bash
-git clone --depth 1 https://github.com/laukkw/brale-core.git
-cd brale-core
-make install-bralectl                         # build the latest repo version into ~/.local/bin/bralectl
-make env-init                                  # create .env from .env.example when missing
-make setup                                     # initialize local setup and optionally install MCP client config
-make init                                      # recommended for first-time setup: interactive CLI wizard + runtime config generation
-make start ENABLE_MCP=1                        # start the Docker stack
-#+end_src
+** Main Docs
 
-The default Freqtrade config uses =dry_run=true=. These steps start simulated trading until you inspect =data/freqtrade/user_data/config.json= and explicitly disable =dry_run= for production.
+| Goal | Document |
+|------+----------|
+| Deploy, upgrade, back up, configure proxy | [[file:docs/deployment.org][Deployment Guide]] |
+| Configure =.env=, system, symbols, strategies | [[file:docs/configuration.org][Configuration Guide]] |
+| Use =bralectl= | [[file:docs/cli-reference.org][CLI Reference]] |
+| Connect Claude, Codex, OpenCode, Cursor, and other MCP clients | [[file:docs/mcp-integration.org][MCP Integration]] |
+| Understand decisions, risk controls, Provider anchors | [[file:docs/trading-logic.org][Trading Logic]] |
+| Runtime API, webhooks, notifications, storage | [[file:docs/runtime-api.org][Runtime API]] |
+| Database, memory, notification, execution internals | [[file:docs/subsystem-guide.org][Subsystem Guide]] |
+| Startup, network, LLM, and scheduler issues | [[file:docs/troubleshooting.org][Troubleshooting]] |
 
-*** Startup Order and Fast Path
+** Configuration and Tools
 
-- *First-time setup*: run =make init=, complete the interactive CLI wizard, then start the stack with =make start=.
-- *Existing working config*: skip init and launch directly with =make start ENABLE_MCP=1=.
-- *Dependency order*: =timescaledb= → =freqtrade= (must become healthy) → =brale= (must become healthy) → =ctl smoke= → optional =mcp=.
-- *Post-start validation*: =make start= / =make rebuild= / =make restart= now run the =ctl= suite by default; use =VERIFY_CTL=0= to skip or =CTL_SYMBOL=BTCUSDT= to override the validation symbol.
+Main configuration lives under =configs/=. Runtime data lives under =data/=. For a first deployment, use =make init= or the bootstrap init wizard to generate local configuration instead of copying production files by hand.
 
-*** Common Commands
+=bralectl= is the main CLI for local setup, config checks, observations, decision queries, position views, MCP service management, and E2E tests. See [[file:docs/cli-reference.org][CLI Reference]] for full usage.
 
-| Command | Description |
-|---------+-------------|
-| =make env-init= | Copy =.env.example= to =.env= when missing |
-| =make install-bralectl= | Build the latest repo version and install it to =~/.local/bin/bralectl=; override the target with =BRALECTL_INSTALL_DIR= |
-| =make setup= | Run the local setup wizard (=.env= + optional MCP install) |
-| =make init= | Run the interactive CLI wizard and generate runtime configs |
-| =make start= | Start the core stack; waits for =freqtrade= and =brale= health, then runs the =ctl= smoke suite by default |
-| =make ctl-smoke= | Run the =ctl= suite against the current main stack for basic connectivity validation |
-| =make status= | Container health check |
-| =make logs= | Tail service logs |
-| =make migrate-up= | Run DB migrations; falls back to Docker when local Go is unavailable |
-| =make mcp-start= | Start only the MCP service |
-| =make stop= / =make down= | Stop / remove containers |
-| =make rebuild= | Rebuild Brale; also rebuild =mcp= when =ENABLE_MCP=1=, then run the =ctl= smoke suite by default |
+LLM token usage grows linearly with symbol count and decision frequency. One symbol, three timeframes, and a 1-hour cycle usually costs about 300K tokens/day. A 15-minute cycle costs about 1.1M to 1.2M tokens/day.
 
-*** Docker Services
+** Branch and Release
 
-| Service | Port | Role |
-|---------+------+------|
-| timescaledb | =127.0.0.1:5432= | TimescaleDB (PostgreSQL) — data store |
-| freqtrade | =127.0.0.1:8080= | Trade execution |
-| brale | =127.0.0.1:9991= | Runtime API / webhook |
-| mcp | =127.0.0.1:8765= | MCP HTTP endpoint (=make mcp-start= or =ENABLE_MCP=1=) |
-
-*** Startup Troubleshooting
-
-- If =make start= stalls in =wait-freqtrade=, it now prints recent =freqtrade= container logs automatically; check exchange credentials, proxy settings, and image pull failures first.
-- If your host needs an outbound proxy, define =HTTP_PROXY/HTTPS_PROXY/NO_PROXY= in the file pointed to by =STACK_PROXY_ENV_FILE= so Compose build and runtime inherit the same settings.
-- Initial image pulls may be slow; the =freqtrade= health check now uses a longer =start_period=, so allow the first boot extra time before retrying.
-
-** CLI Tool — bralectl
-
-=bralectl= covers live runtime management, offline analysis, and local setup across 14 command groups.
-
-| Group | Description |
-|-------+-------------|
-| =setup= | Initialize =.env= and optionally install MCP client config |
-| =add-symbol= | Generate configs from an existing symbol template |
-| =observe= | Trigger observations, view reports |
-| =decision= | Query latest and historical decisions |
-| =position= | View open and closed positions |
-| =schedule= | Enable / disable / status of the scheduler |
-| =config= | View / validate configuration |
-| =backtest= | Gate Replay — replay decisions through current rules (zero LLM cost) |
-| =indicator= | Cross-check different indicator engines (ta / talib / reference) |
-| =memory= | Manage semantic rules and view trade reflections |
-| =mcp= | Start MCP server or install into AI tools |
-| =llm= | Test LLM endpoint connectivity |
-| =test= | E2E test runner |
-
-See [[file:docs/cli-reference.org][CLI Reference]] for complete usage.
-
-** E2E Testing
-
-brale-core includes a suite-based E2E testing framework that runs against an isolated Docker stack.
-
-#+begin_src bash
-make e2e-start                                     # Start isolated E2E stack
-make e2e-test                                      # Quick regression (ctl suite)
-make e2e-test E2E_SUITE=ctl,decision,reconcile     # Run multiple suites
-make e2e-test E2E_SUITE=ctl,decision,reconcile E2E_TELEGRAM_NOTIFY=1  # Push Telegram summary after the run
-make e2e-test E2E_SUITE=lifecycle-force-close       # Full lifecycle test
-make e2e-stop                                      # Stop E2E stack
-make e2e-reset                                     # Clean all E2E data
-#+end_src
-
-The E2E stack uses separate ports (PostgreSQL 15432 / Freqtrade 18080 / Brale 19991) and does not interfere with the main stack.
-Set =E2E_TELEGRAM_NOTIFY=1= to have =make e2e-test= send a Telegram summary after the run. It reads =NOTIFICATION_TELEGRAM_TOKEN= and =NOTIFICATION_TELEGRAM_CHAT_ID= from =.env= by default, and you can override them with =E2E_TELEGRAM_TOKEN= / =E2E_TELEGRAM_CHAT_ID=.
-
-Available suites: =ctl=, =decision=, =open-fast=, =pricing=, =reconcile=, =post-close=, =lifecycle-force-close=, =lifecycle-natural=
-
-** MCP Integration
-
-brale-core exposes 9 read-only analysis tools via the
-[[https://modelcontextprotocol.io][Model Context Protocol]]:
-
-#+begin_src bash
-make setup                                    # interactive .env + MCP bootstrap
-bralectl mcp install --target opencode        # auto-configure OpenCode
-bralectl mcp serve --mode http --addr 0.0.0.0:8765  # remote HTTP mode
-#+end_src
-
-Compatible with Claude Code, Claude Desktop, OpenCode, Codex, Cursor, and any MCP-capable Agent.
-Provides 4 resource URIs and 2 prompt templates.
-See [[file:docs/mcp-integration.org][MCP Integration Guide]].
-
-** Configuration
-
-Four-layer TOML hierarchy:
-
-| Layer | Path | Scope |
-|-------+------+-------|
-| System | =configs/system.toml= | Logging, DB, LLM endpoints, prompt locale, scheduling, notifications |
-| Symbol Index | =configs/symbols-index.toml= | Maps symbols to config/strategy files |
-| Symbol | =configs/symbols/*.toml= | Per-symbol: intervals, agents, indicators, memory, consensus |
-| Strategy | =configs/strategies/*.toml= | Per-symbol: risk params, gate/sieve rules, TP/SL policy |
-
-See [[file:docs/configuration.org][Configuration Guide]] for details.
-
-** Documentation
-
-| Document | Content |
-|----------+---------|
-| [[file:docs/configuration.org][Configuration]] | TOML config layers, indicator parameters, adding symbols |
-| [[file:docs/trading-logic.org][Trading Logic]] | Entry modes, Provider anchors, trace persistence, position sizing |
-| [[file:docs/runtime-api.org][Runtime API]] | REST endpoints, webhooks, notifications, storage |
-| [[file:docs/cli-reference.org][CLI Reference]] | Complete =bralectl= command reference |
-| [[file:docs/mcp-integration.org][MCP Integration]] | Setup, tools, resources, prompts, Docker deployment |
-| [[file:docs/subsystem-guide.org][Subsystem Guide]] | Notifications, execution, memory, and other internals |
-| [[file:docs/deployment.org][Deployment Guide]] | System requirements, data paths, proxying, upgrades, and backups |
-| [[file:docs/troubleshooting.org][Troubleshooting]] | Steps for common startup, network, LLM, and scheduler issues |
-
-** Extension Points
-
-| Goal | Where to Start |
-|------+----------------|
-| Add a symbol | =bralectl add-symbol --symbol XXX= or [[file:docs/configuration.org][config docs]] |
-| Tune risk | =configs/strategies/*.toml= |
-| Adjust Agents | =configs/symbols/*.toml= + LLM env vars |
-| Another exchange | =internal/execution= interface |
-| Custom monitoring | Runtime API (=:9991=) and webhook endpoints |
-
-** LLM Token Usage
-
-Single decision cycle = all Agent + Provider + risk LLM calls combined:
-
-| Configuration | Input / cycle | Output / cycle | Daily estimate |
-|---------------+---------------+----------------+----------------|
-| 1 symbol × 3 tf × 1 h interval | 11 K–12 K | 1.1 K–1.2 K | ≈ 300 K |
-| 1 symbol × 3 tf × 15 min interval | 11 K–12 K | 1.1 K–1.2 K | ≈ 1.1 M–1.2 M |
-
-Scale linearly for multiple symbols. With memory enabled, add ~500–1 K tokens/cycle for
-working/episodic/semantic context injection.
+- =master= is the stable / production branch.
+- =dev= is the daily integration branch.
+- Feature branches use =feat/xxx=; bug-fix branches use =fix/xxx=.
+- Releases use semantic version tags such as =v0.x.y=.
 
 ** License
 
 GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [[file:LICENSE][LICENSE]].
 
-** Support
-
-#+begin_example
-ETH:  0x4b4C8041A8154a5AfB87E5589Ea292123E098267
-BTC:  bc1q6ztlu88dljsn07l6x3xydfa64n0n8pjc38v75a
-SOL:  G6vjnENdVoZQv2k9Tx97Z1MqPEEPxNeyuJ1Z8NqSgC9u
-TRON: TTUzmkqSSjuXrwUkFFmaoNbnQC4gSCNnvh
-#+end_example
-
 ** Disclaimer
 
-- This project is for technical research and workflow validation only; it does not constitute
-  investment advice.
-- Digital asset trading is highly volatile and may result in partial or total loss of funds.
-- Users bear full responsibility for evaluating strategies, parameters, and risk controls.
-- Historical performance, backtest results, or sample configurations do not guarantee future returns.
-- Complete thorough testing in an isolated environment before enabling in production.
+- This project is for technical research and workflow validation only. It is not investment advice.
+- Digital asset trading is volatile and may result in partial or total loss of funds.
+- Users are responsible for evaluating strategies, parameters, and risk controls.
+- Historical performance, backtest results, and sample configs do not guarantee future returns.
+- Test thoroughly in an isolated environment before production use.
+
+-----
+
+* 中文版
+:PROPERTIES:
+:CUSTOM_ID: 中文版
+:END:
+
+** 什么是 Brale
+
+Brale 是一个量化交易引擎。它用多个大语言模型智能体分析行情，再用确定性的 Go 规则引擎执行风控约束。模型负责提出交易计划，代码负责校验价格、杠杆、止损、止盈、仓位和执行安全。
+
+一个完整决策周期会经过观测、决策、规划、执行、监控和对账。交易执行目前对接 Freqtrade，运行状态、Webhook、MCP 和 CLI 工具都围绕这条主链路设计。
+
+默认配置偏向安全验证：Freqtrade 使用模拟盘 =dry_run=true=。真实上线前必须检查生成的 =data/freqtrade/user_data/config.json=，并自行确认策略、风控和交易所配置。
+
+** 快速开始
+
+*前置条件：*
+- Linux 服务器或本地开发机
+- Docker 与 Docker Compose v2.20+
+- 建议内存 2 GB 起，长期运行或多品种建议 4 GB+
+- 需要能访问 Binance API 与所选 LLM 端点
+
+一键部署：
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash
+#+end_src
+
+先执行 setup，可选安装 MCP，再进入 init 向导并自动启动：
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --setup --setup-lang zh
+#+end_src
+
+已有可用 =.env= 时跳过交互式 init，直接启动：
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --no-init
+#+end_src
+
+默认使用浅克隆；如需完整 Git 历史可加 =--full-clone=：
+
+#+begin_src bash
+curl -fsSL https://raw.githubusercontent.com/laukkw/brale-core/master/scripts/bootstrap.sh | bash -s -- --full-clone
+#+end_src
+
+首次部署、代理配置、升级、备份和手动部署步骤见 [[file:docs/deployment.org][部署指南]]。
+
+** 常用入口
+
+| 目标 | 文档 |
+|------+------|
+| 部署、升级、备份、代理 | [[file:docs/deployment.org][部署指南]] |
+| 配置 =.env=、系统、品种、策略 | [[file:docs/configuration.org][配置指南]] |
+| 使用 =bralectl= | [[file:docs/cli-reference.org][CLI 参考]] |
+| 接入 Claude、Codex、OpenCode、Cursor 等 MCP 客户端 | [[file:docs/mcp-integration.org][MCP 集成]] |
+| 理解交易决策、风控、Provider 锚定因子 | [[file:docs/trading-logic.org][交易逻辑]] |
+| Runtime API、Webhook、通知、存储 | [[file:docs/runtime-api.org][运行时 API]] |
+| 数据库、记忆、通知、执行层等内部组件 | [[file:docs/subsystem-guide.org][子系统指南]] |
+| 启动失败、网络、LLM、调度问题 | [[file:docs/troubleshooting.org][故障排查]] |
+
+** 配置与工具
+
+主要配置在 =configs/= 下，运行时数据在 =data/= 下。首次部署建议用 =make init= 或一键脚本里的 init 向导生成配置，不建议直接复制生产环境配置。
+
+=bralectl= 是本项目的主要命令行工具，用来完成本地初始化、配置检查、观测、决策查询、持仓查看、MCP 服务和 E2E 测试。完整命令见 [[file:docs/cli-reference.org][CLI 参考]]。
+
+LLM Token 用量会随品种数和决策频率线性增长。单品种、三时间框架、1 小时周期通常约 30 万 Token / 日；15 分钟周期约 110 万到 120 万 Token / 日。
+
+** 分支与发布
+
+- =master= 是稳定 / 生产分支，部署和发布默认从此分支进行。
+- =dev= 是日常开发集成分支。
+- 功能分支使用 =feat/xxx=，修复分支使用 =fix/xxx=。
+- 发布使用语义化版本标签 =v0.x.y=。
+
+** 许可证
+
+GNU Affero 通用公共许可证 v3.0（AGPL-3.0-only）。详见 [[file:LICENSE][LICENSE]]。
+
+** 免责声明
+
+- 本项目仅用于技术研究与流程验证，不构成任何投资建议。
+- 数字资产交易波动剧烈，可能导致部分或全部资金损失。
+- 用户须自行评估策略、参数及风控措施，并承担全部责任。
+- 历史表现、回测结果或示例配置不代表未来收益。
+- 投入生产前，请务必在隔离环境中完成充分测试。

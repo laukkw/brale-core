@@ -1,4 +1,4 @@
-# brale-core 币种清单（由 bralectl init 维护）
+# brale-core 币种清单（由 bralectl init / bralectl add-symbol 维护）
 # - symbol: 币种名（必须大写）
 # - config: 币种配置文件路径
 # - strategy: 币种策略文件路径

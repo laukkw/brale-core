@@ -33,6 +33,47 @@ func TestRewriteSymbolConfigReplacesOnlySymbolField(t *testing.T) {
 	}
 }
 
+func TestRewriteSymbolConfigRewritesHeaderCommentAndSymbol(t *testing.T) {
+	base := strings.Join([]string{
+		`# SOLUSDT 币种配置 / SOLUSDT Symbol Configuration`,
+		`# 每个活跃交易品种需要独立的配置文件。`,
+		`symbol = "SOLUSDT"`,
+		`intervals = ["30m", "1h"]`,
+	}, "\n")
+
+	got, err := RewriteSymbolConfig(base, "XAGUSDT")
+	if err != nil {
+		t.Fatalf("RewriteSymbolConfig() error = %v", err)
+	}
+	if !strings.Contains(got, `# XAGUSDT 币种配置 / XAGUSDT Symbol Configuration`) {
+		t.Fatalf("rewritten symbol config missing target header:\n%s", got)
+	}
+	if strings.Contains(got, `# SOLUSDT 币种配置 / SOLUSDT Symbol Configuration`) {
+		t.Fatalf("rewritten symbol config still contains template header:\n%s", got)
+	}
+	if !strings.Contains(got, `symbol = "XAGUSDT"`) {
+		t.Fatalf("rewritten symbol config missing target symbol:\n%s", got)
+	}
+	if !strings.Contains(got, `# 每个活跃交易品种需要独立的配置文件。`) {
+		t.Fatalf("rewritten symbol config should preserve unrelated comments:\n%s", got)
+	}
+}
+
+func TestRewriteSymbolConfigPreservesNonHeaderComment(t *testing.T) {
+	base := strings.Join([]string{
+		`# 自定义模板说明`,
+		`symbol = "SOLUSDT"`,
+	}, "\n")
+
+	got, err := RewriteSymbolConfig(base, "XAGUSDT")
+	if err != nil {
+		t.Fatalf("RewriteSymbolConfig() error = %v", err)
+	}
+	if !strings.Contains(got, `# 自定义模板说明`) {
+		t.Fatalf("rewritten symbol config should preserve custom header:\n%s", got)
+	}
+}
+
 func TestRewriteStrategyConfigRewritesSymbolAndDefaultID(t *testing.T) {
 	base := strings.Join([]string{
 		`symbol = "ETHUSDT"`,

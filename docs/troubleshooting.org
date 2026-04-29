@@ -152,7 +152,7 @@ make start
 
 *解决方案：*
 - 验证 API Key 有效性与余额
-- 若遇 429 限流，调大 =[scheduler] min_llm_interval= 增加调用间隔
+- 若遇 429 限流，调大顶级配置项 =llm_min_interval= 增加调用间隔
 - 若超时，检查 =endpoint= 配置与网络代理
 - 若 token 超限，检查品种配置的 =kline_limit= 与 =intervals= 是否过大
 
@@ -308,6 +308,6 @@ If the retry still fails, manually correct the =dirty= flag in =schema_migration
 
 *Resolution:*
 - Verify API key validity and remaining balance
-- For 429 rate limits, increase =[scheduler] min_llm_interval= to add delay between calls
+- For 429 rate limits, increase the top-level =llm_min_interval= in =configs/system.toml= to add delay between calls
 - For timeouts, check =endpoint= config and network proxy settings
 - For token budget issues, review the symbol's =kline_limit= and =intervals= settings

@@ -40,10 +40,35 @@ func RewriteSymbolConfig(base, targetSymbol string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	out = rewriteSymbolHeaderComment(out, targetSymbol)
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
 	return out, nil
+}
+
+func rewriteSymbolHeaderComment(content, targetSymbol string) string {
+	target := strings.ToUpper(strings.TrimSpace(targetSymbol))
+	if target == "" {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return content
+	}
+	first := strings.TrimSpace(lines[0])
+	if !strings.HasPrefix(first, "#") {
+		return content
+	}
+	fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(first, "#")))
+	if len(fields) < 6 || fields[1] != "币种配置" || fields[2] != "/" || fields[4] != "Symbol" || fields[5] != "Configuration" {
+		return content
+	}
+	if !strings.HasSuffix(fields[0], "USDT") || !strings.HasSuffix(fields[3], "USDT") {
+		return content
+	}
+	lines[0] = "# " + target + " 币种配置 / " + target + " Symbol Configuration"
+	return strings.Join(lines, "\n")
 }
 
 func RewriteStrategyConfig(base, targetSymbol string) (string, error) {

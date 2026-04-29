@@ -106,21 +106,26 @@ model = '${LLM_MODEL_INDICATOR}'
 temperature = 0.2
 
 [llm.agent.structure]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_STRUCTURE}'
 temperature = 0.2
 
 [llm.agent.mechanics]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_MECHANICS}'
 temperature = 0.2
 
 [llm.provider.indicator]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_INDICATOR}'
 temperature = 0.2
 
 [llm.provider.structure]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_STRUCTURE}'
 temperature = 0.2
 
 [llm.provider.mechanics]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_MECHANICS}'
 temperature = 0.2

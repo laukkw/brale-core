@@ -830,7 +830,7 @@ func writeSymbolIndex(indexPath string, choices []symbolChoice) error {
 		return err
 	}
 	var builder strings.Builder
-	builder.WriteString("# brale-core 币种清单（由 bralectl init 维护）\n")
+	builder.WriteString("# brale-core 币种清单（由 bralectl init / bralectl add-symbol 维护）\n")
 	builder.WriteString("# - symbol: 币种名（必须大写）\n")
 	builder.WriteString("# - config: 币种配置文件路径\n")
 	builder.WriteString("# - strategy: 币种策略文件路径\n\n")

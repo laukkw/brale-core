@@ -78,7 +78,7 @@ close_recover_after = "10m"   # 平仓状态回收超时，默认 10 分钟
 
 - =TD Sequential= 当前没有对外暴露参数，仍使用代码内固定计算逻辑。
 - =SuperTrend= 不属于 =IndicatorConfig=，它来自结构侧的 =TrendPreset=。
-- =kline_limit= 必须覆盖最长指标 warmup；拉长 =stoch_rsi_period=、=aroon_period= 等参数时，配置校验也会同步提高最低要求。
+- =kline_limit= 必须覆盖已启用特性的最长 warmup；拉长 =stoch_rsi_period=、=aroon_period= 等参数时，配置校验会按最长 warmup 提高最低要求。
 
 *** 记忆系统配置：[memory]
 
@@ -95,9 +95,9 @@ close_recover_after = "10m"   # 平仓状态回收超时，默认 10 分钟
 | =semantic_max_rules= | int | 10 | 每个币种最多保留的语义规则条数 |
 
 记忆系统在决策周期中提供上下文注入：
-- *工作记忆*：将最近 N 条决策摘要注入 Agent prompt，提供短期趋势延续
-- *情景记忆*：将历史交易复盘注入 Provider prompt，帮助识别重复模式
-- *语义记忆*：将长期提炼的规则注入全局上下文，约束 LLM 行为
+- *工作记忆*：将最近 N 条决策摘要注入 Agent 与 Provider 的 prompt，提供短期趋势延续
+- *情景记忆*：将历史交易复盘注入 Agent 与 Provider 的 prompt，帮助识别重复模式
+- *语义记忆*：将长期提炼的规则注入 Agent 与 Provider 的 system prompt，约束 LLM 行为
 
 启用记忆后，每个决策周期额外增加约 500–1K Token。
 
@@ -180,7 +180,7 @@ edge_threshold = 0.10
 推荐使用 =bralectl= 工具一键添加：
 
 #+begin_src bash
-# 交互式：从已有币种中选择模板
+# 未指定 TEMPLATE_SYMBOL 时进入交互模式，从已有币种中选择模板
 make add-symbol SYMBOL=XAGUSDT
 
 # 指定模板币种（适合脚本 / CI）
@@ -284,7 +284,7 @@ Boundary notes:
 
 - =TD Sequential= does not expose tunable config yet and still uses code-level defaults.
 - =SuperTrend= is not part of =IndicatorConfig=; it comes from structure-side =TrendPreset= values.
-- =kline_limit= must cover the longest indicator warmup. If you increase =stoch_rsi_period=, =aroon_period=, or similar values, validation raises the minimum required history accordingly.
+- =kline_limit= must cover the longest enabled feature warmup. If you increase =stoch_rsi_period=, =aroon_period=, or similar values, validation derives the minimum required history from the longest warmup requirement and raises an error if the configured value falls short.
 
 *** Memory System: [memory]
 
@@ -301,9 +301,9 @@ The =[memory]= section in per-symbol config controls the three-layer memory syst
 | =semantic_max_rules= | int | 10 | Max semantic rules per symbol |
 
 Memory provides context injection during decision cycles:
-- *Working memory*: injects recent N decision summaries into Agent prompts for short-term trend context
-- *Episodic memory*: injects trade reflections into Provider prompts for pattern recognition
-- *Semantic memory*: injects long-term rules into global context to constrain LLM behaviour
+- *Working memory*: injects recent N decision summaries into both Agent and Provider prompts for short-term trend context
+- *Episodic memory*: injects trade reflections into both Agent and Provider prompts for pattern recognition
+- *Semantic memory*: injects long-term rules into both Agent and Provider system prompts to constrain LLM behaviour
 
 Enabling memory adds roughly 500–1K tokens per decision cycle.
 
@@ -386,7 +386,7 @@ edge_threshold = 0.10
 Use the =bralectl= tool for one-step setup:
 
 #+begin_src bash
-# Interactive: select an existing symbol as template
+# Interactive when TEMPLATE_SYMBOL is omitted: select an existing symbol as template
 make add-symbol SYMBOL=XAGUSDT
 
 # Specify template symbol (for scripts / CI)

@@ -6,7 +6,7 @@
 
 - 启动时会把代码内置 prompt defaults seed 到 `prompt_registry`
 - 运行时读取顺序是：数据库中的 active prompt -> 代码内置默认值
-- prompt loader 带进程内缓存；更新数据库后，当前进程需要重启才能稳定看到新版本
+- prompt loader 带进程内缓存；更新数据库后需重启进程方可生效（进程内缓存不支持热重载）
 
 ## 查询
 

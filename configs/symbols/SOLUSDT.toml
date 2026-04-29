@@ -1,4 +1,4 @@
-# ETHUSDT 币种配置 / ETHUSDT Symbol Configuration
+# SOLUSDT 币种配置 / SOLUSDT Symbol Configuration
 # 每个活跃交易品种需要独立的配置文件。
 
 # 交易对标识（必须与交易所数据源完全一致）。
@@ -83,7 +83,7 @@ episodic_ttl_days = 90
 # 每个币种最大情景记忆条数（超出后裁剪最旧的）。
 episodic_max_per_symbol = 3
 # 语义记忆开关（长期交易规则）。
-# 通过 'bralectl memory add-rule' 管理，注入系统 prompt。
+# 通过 'bralectl memory add' 管理，注入系统 prompt。
 semantic_enabled = true
 # 每个币种最大语义规则条数。
 semantic_max_rules = 10
@@ -110,21 +110,26 @@ model = '${LLM_MODEL_INDICATOR}'
 temperature = 0.2
 
 [llm.agent.structure]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_STRUCTURE}'
 temperature = 0.2
 
 [llm.agent.mechanics]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_MECHANICS}'
 temperature = 0.2
 
 [llm.provider.indicator]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_INDICATOR}'
 temperature = 0.2
 
 [llm.provider.structure]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_STRUCTURE}'
 temperature = 0.2
 
 [llm.provider.mechanics]
+# 模型路由名称，通常为 "provider/model" 格式。
 model = '${LLM_MODEL_MECHANICS}'
 temperature = 0.2
