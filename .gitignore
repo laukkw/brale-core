@@ -12,7 +12,7 @@
 running_log/
 log.txt
 desc.org
-
+.docs/*
 config.yaml
 configs/config.yaml
 configs/user_data/freqtrade-config.json

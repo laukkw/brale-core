@@ -198,8 +198,16 @@ const defaultRiskFlatInitPrompt = "" +
 	"- 结构锚点摘要中的 nearest_below_entry / nearest_above_entry 是相对 entry 的方向中性锚点：direction=long 时通常分别更接近止损/止盈参考；direction=short 时通常分别更接近止盈/止损参考。\n" +
 	"- direction=long：stop_loss 必须 < entry，take_profits 必须严格递增且全部 > entry。\n" +
 	"- direction=short：stop_loss 必须 > entry，take_profits 必须严格递减且全部 < entry。\n" +
-	"- stop_loss 距 entry 的距离建议在 0.5~3.0 倍 ATR 范围内（ATR 从计划摘要中获取）；若超出需在 reason 中说明。\n" +
-	"- 首个 take_profit 与 entry 的距离应 >= stop_loss 与 entry 的距离（即首档风险回报比 >= 1:1）。\n" +
+	"- stop_loss 优先定义交易假设失效位置，不要为了凑首档盈亏比而压到小级别噪音区。\n" +
+	"- 初始 stop_loss 应优先参考 1h/4h 结构位：swing high/low、supertrend.level、latest_break.level_price 或 order_block 边界；30m 结构只能辅助，不能单独作为止损依据。\n" +
+	"- 设置 stop_loss 前，先检查 1h/4h 的 last_swing_by_interval、latest_break 和 supertrend；这些不可用时再退回 nearest_above_entry / nearest_below_entry。\n" +
+	"- stop_loss 距 entry 建议在 1.2~3.0 倍 ATR 范围内；若低于 1.2 倍 ATR，reason 必须说明使用了哪个 1h/4h 结构位。\n" +
+	"- 默认使用 3 段 take_profits，比例优先为 [0.4,0.4,0.2]；若趋势质量高且结构目标清晰，可用 [0.3,0.4,0.3]。\n" +
+	"- TP1 优先选择近端现实可达目标以降低持仓风险；TP2/TP3 再参考 1h/4h 结构目标或 2R/3R 延伸。\n" +
+	"- 设置 TP2/TP3 前，优先从 1h/4h 的 last_swing_by_interval 选择主要结构目标；nearest_above_entry / nearest_below_entry 主要用于 TP1。\n" +
+	"- 对结构目标使用缓冲：止盈应略提前于目标位，止损应略越过失效位；long 的 TP 低于压力位、SL 低于支撑位，short 的 TP 高于支撑位、SL 高于压力位。\n" +
+	"- 缓冲幅度参考 ATR、结构距离和近期波动，避免把 stop_loss 或 take_profits 精确压在明显结构线上。\n" +
+	"- 若结构目标不足，只允许输出 2 段 take_profits，并必须在 reason 中说明为什么没有 TP3。\n" +
 	"- 计划摘要中的预设 stop_loss 与 take_profits 仅供参考；必须基于当前 Agent 摘要与结构锚点独立判断，不得原样照搬。\n" +
 	"- 必须从输入上下文独立生成完整 entry/stop_loss/take_profits/take_profit_ratios；禁止依赖或引用任何既有 TP/SL 基线。\n" +
 	"- take_profit_ratios 长度必须与 take_profits 完全一致。\n" +

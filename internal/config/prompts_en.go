@@ -167,7 +167,16 @@ const defaultRiskFlatInitPromptEN = "" +
 	"- `direction` is an input condition and must not appear in the output.\n" +
 	"- For `direction=long`, `stop_loss < entry` and all take profits must be strictly increasing and above entry.\n" +
 	"- For `direction=short`, `stop_loss > entry` and all take profits must be strictly decreasing and below entry.\n" +
-	"- The first take profit should imply at least 1:1 reward-to-risk.\n" +
+	"- `stop_loss` should define where the trade thesis is invalidated. Do not compress it into lower-timeframe noise just to improve first-target reward-to-risk.\n" +
+	"- Prefer 1h/4h structure for the initial stop: swing high/low, `supertrend.level`, `latest_break.level_price`, or order-block boundaries. 30m structure is only supporting context and must not be the sole stop reference.\n" +
+	"- Before setting `stop_loss`, first check 1h/4h `last_swing_by_interval`, `latest_break`, and `supertrend`; fall back to `nearest_above_entry` / `nearest_below_entry` only when they are unavailable.\n" +
+	"- The stop distance should usually be 1.2-3.0 ATR. If it is below 1.2 ATR, `reason` must name the 1h/4h structure level used.\n" +
+	"- Default to 3 take-profit levels with ratios [0.4,0.4,0.2]; use [0.3,0.4,0.3] only when trend quality and structure targets are clear.\n" +
+	"- TP1 should be a nearby realistic target to reduce risk; TP2/TP3 should use 1h/4h structure targets or 2R/3R extensions.\n" +
+	"- Before setting TP2/TP3, prefer main targets from 1h/4h `last_swing_by_interval`; reserve `nearest_above_entry` / `nearest_below_entry` mostly for TP1.\n" +
+	"- Apply a structure buffer: take profits should front-run target levels, while stop loss should sit beyond invalidation. For longs, TP below resistance and SL below support; for shorts, TP above support and SL above resistance.\n" +
+	"- Size the buffer using ATR, structure distance, and recent volatility. Avoid placing `stop_loss` or `take_profits` exactly on obvious structure levels.\n" +
+	"- Use only 2 take-profit levels when reliable structure targets are insufficient, and explain why TP3 is missing in `reason`.\n" +
 	"- `take_profit_ratios` must align one-to-one with `take_profits`, each value must be > 0, and the sum must be exactly 1.0."
 
 const defaultRiskTightenUpdatePromptEN = "" +
